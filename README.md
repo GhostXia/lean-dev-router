@@ -67,6 +67,35 @@ For Codex, copy `.agents/skills/lean-dev-router/` to `~/.codex/skills/lean-dev-r
 
 Use `$lean-dev-router` when a task benefits from this routing policy. The Skill deliberately avoids invoking all agents by default and passes only compact handoff information.
 
+### Final L3 test result
+
+This is a recorded run of the L3 idempotent `POST /orders` task from `lean-dev-router-l3-idempotent-orders-task.md`, using a Luna High controller with `$lean-dev-router`. The figures below are transcribed from the supplied run screenshots; they are not a rerun in this repository.
+
+```mermaid
+pie title Token volume by model
+    "gpt-5.6-luna" : 4332286
+    "gpt-5.6-terra" : 342648
+    "gpt-5.6-sol" : 63260
+```
+
+| Model | Total tokens | Share | Input | Cached input (included in input) | Output | Events |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `gpt-5.6-luna` | 4,332,286 | 91.4% | 4,304,634 | 4,156,160 | 27,652 | 105 |
+| `gpt-5.6-terra` | 342,648 | 7.2% | 335,741 | 301,312 | 6,907 | 11 |
+| `gpt-5.6-sol` | 63,260 | 1.3% | 61,736 | 47,360 | 1,524 | 3 |
+| **Total** | **4,738,194** | **100%** | **4,702,111** | **4,504,832** | **36,083** | **119** |
+
+| Check | Recorded result |
+| --- | --- |
+| Duration | 12m 15s |
+| Required behavior | First create `201`; replay `200`; conflicting key `409`; invalid input `400` |
+| Concurrency | `RLock` protects same-key creation; one order is created for concurrent duplicate submissions |
+| Tests | `python -m pytest tests/ -q` → **9 passed** |
+| Scope | `git diff --stat` touches only `handlers/orders.py`, `service/order.py`, `service/store.py`, and `tests/test_order.py` |
+| Baseline | `92ea4575174a163657005711057c97db97776845` |
+
+The run used 405,908 tokens outside Luna, approximately 8.6% of the total. This is a routed-run cost profile, not a standalone savings rate; a savings claim still requires the same-packet Sol and direct-Luna control runs described in the self-test guide.
+
 ---
 
 ## 中文
@@ -131,5 +160,34 @@ sol_planner → luna_worker → terra_auditor
 - `sol_planner`：负责初始规划，以及无法解决或涉及重大变动的决策。
 - `luna_worker`：负责全部获授权的代码、测试、文档和配置编写与修改。
 - `terra_auditor`：负责代码审计、技术诊断和验证；只有无法解决问题或需要重大决策时才升级给 Sol。
+
+### 最终 L3 测试结果
+
+这是一次 L3 幂等 `POST /orders` 测试记录，测试题来自 `lean-dev-router-l3-idempotent-orders-task.md`，使用 Luna High 主控与 `$lean-dev-router`。下列数据根据用户提供的测试截图整理，未在本仓库重新运行。
+
+```mermaid
+pie title 按模型统计的 Token 总量
+    "gpt-5.6-luna" : 4332286
+    "gpt-5.6-terra" : 342648
+    "gpt-5.6-sol" : 63260
+```
+
+| 模型 | 总 token | 占比 | input | cached input（包含在 input 内） | output | 事件数 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `gpt-5.6-luna` | 4,332,286 | 91.4% | 4,304,634 | 4,156,160 | 27,652 | 105 |
+| `gpt-5.6-terra` | 342,648 | 7.2% | 335,741 | 301,312 | 6,907 | 11 |
+| `gpt-5.6-sol` | 63,260 | 1.3% | 61,736 | 47,360 | 1,524 | 3 |
+| **合计** | **4,738,194** | **100%** | **4,702,111** | **4,504,832** | **36,083** | **119** |
+
+| 检查项 | 记录结果 |
+| --- | --- |
+| 耗时 | 12 分 15 秒 |
+| 必需行为 | 首次创建 `201`；重放 `200`；冲突 key `409`；无效输入 `400` |
+| 并发 | 使用 `RLock` 保护同 key 创建；并发重复提交最终只创建一个订单 |
+| 测试 | `python -m pytest tests/ -q` → **9 passed** |
+| 范围 | `git diff --stat` 仅涉及 `handlers/orders.py`、`service/order.py`、`service/store.py`、`tests/test_order.py` |
+| 基线 | `92ea4575174a163657005711057c97db97776845` |
+
+本次运行中，Luna 之外的模型合计消耗 405,908 tokens，约占总量 8.6%。这表示本次调度运行的成本构成，不等同于独立的节省率；若要得出节省结论，仍需按照测试指南使用相同题包进行 Direct Sol 和 Direct Luna 对照测试。
 
 当任务适合采用这套路由策略时，可以使用 `$lean-dev-router`。该 Skill 不会默认调用全部 Agent，只传递精简的交接信息。
