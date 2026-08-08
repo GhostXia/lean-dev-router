@@ -38,6 +38,8 @@ When available, check `codex --version` before relying on native routing. In the
 
 The native Codex background-agent UI is part of the native subagent workflow. Unrelated background processes or independent sessions are fallback mechanisms, not equivalent parent-child routing. See the [official Codex subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) for current client and custom-agent behavior.
 
+From personal experience, worktrees are recommended for batching independent tasks in parallel, especially when handling multiple pull requests at the same time. Give each task its own worktree and branch; avoid parallel worktrees for tightly dependent tasks or changes that must share the same working state.
+
 Example routing chain:
 
 ```text
@@ -102,6 +104,8 @@ SUMMARY: one concise sentence
 条件允许时，在依赖原生路由前检查 `codex --version`；在 Codex CLI 中使用 `/agent` 检查 Agent 线程。如果客户端无法启动或无法提供预期的原生流程，应使用 fallback，不要静默替换为默认 Agent 或模型。
 
 Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进程或独立 session 只能作为 fallback，不能视为等价的父子路由。当前 Codex 自定义 Agent 的行为以[官方 Subagents 文档](https://learn.chatgpt.com/docs/agent-configuration/subagents)为准。
+
+个人经验：推荐使用 worktree 批量并行处理相互独立的任务，尤其适合同时推进多个 PR。为每个任务分配独立的 worktree 和分支；对于强依赖任务，或必须共享同一工作状态的改动，不建议并行处理。
 
 示例调度链：
 
