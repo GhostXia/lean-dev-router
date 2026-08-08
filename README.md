@@ -49,6 +49,7 @@ sol_planner → luna_worker → terra_auditor
 
 - `.agents/skills/lean-dev-router/`: the lightweight routing Skill.
 - `agents/`: example Agent configuration files for `luna_worker`, `sol_planner`, and `terra_auditor`.
+- `lean-dev-router-self-test-guide.md`: a controlled guide for measuring token savings, quality, and routing overhead on your own codebase.
 
 ### Install
 
@@ -113,6 +114,7 @@ sol_planner → luna_worker → terra_auditor
 
 - `.agents/skills/lean-dev-router/`：轻量级调度 Skill。
 - `agents/`：`luna_worker`、`sol_planner` 和 `terra_auditor` 的示例 Agent 配置文件。
+- `lean-dev-router-self-test-guide.md`：用于在自己的代码库中对比 Token 节省、质量和调度开销的受控测试指南。
 
 ### 安装
 
