@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lean Dev Router"
+  short_description: "Route Luna, Terra, and Sol with minimal token use"
+  default_prompt: "Use $lean-dev-router to complete this development task with the minimum necessary agent calls."
