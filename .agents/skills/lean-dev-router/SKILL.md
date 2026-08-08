@@ -13,6 +13,36 @@ Use the fewest agents needed. Keep routing sequential; the orchestrator owns eve
 - If the parent task is bilingual, use the language requested for the current output; if unspecified, use the dominant language. / 如果父任务是双语，按当前输出要求选择语言；未指定时使用占主导地位的语言。
 - Keep code, commands, file paths, model IDs, agent names, and other technical identifiers unchanged. / 代码、命令、文件路径、模型 ID、Agent 名称及其他技术标识保持不变。
 
+## Handoff protocol / 交接协议
+
+Every delegated result must use this compact protocol; do not invent role-specific output schemas. / 每次委派结果都必须使用以下紧凑协议，不得继续使用角色专属的输出格式。
+
+```text
+PROTOCOL: lean-dev-router/v1
+AGENT: luna_worker | terra_auditor | sol_planner
+STATUS: PASS | BLOCKED | ESCALATE
+FAILURE: none | scope | verification | dependency | ambiguity | major-decision
+EVIDENCE:
+- path: relative/path/to/file
+  proof: short diff summary or `command` -> PASS/FAIL
+NEXT: parent | luna_worker | terra_auditor | sol_planner | none
+SUMMARY: one concise sentence
+```
+
+- `PASS` means the current role's stage is complete; `BLOCKED` means required information, authority, or dependency is unavailable; `ESCALATE` means another role must act. / `PASS` 表示当前角色阶段完成；`BLOCKED` 表示缺少必要信息、权限或依赖；`ESCALATE` 表示需要其他角色继续处理。
+- `FAILURE` is `none` for `PASS`; otherwise choose one primary category. / `PASS` 时 `FAILURE` 必须为 `none`；其他状态只选择一个主要失败类别。
+- Every repository claim must bind to a concrete relative path and include a short diff summary or command result. For planning-only work with no repository artifact, use `path: N/A (planning-only)` and explain why; never invent a path. / 每个仓库结论都必须绑定具体相对路径，并附简短 diff 摘要或命令结果。纯规划且没有仓库文件时使用 `path: N/A (planning-only)` 并解释原因，不得伪造路径。
+- `NEXT` is mandatory and must name the exact next owner. If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`. / `NEXT` 必须填写并明确下一个负责人。交接缺字段或证据时不得自行推断成功，应返回一次紧凑的修正请求，并使用 `STATUS: BLOCKED`、`FAILURE: verification`。
+
+## Codex execution mode / Codex 执行方式
+
+- Default to native Codex subagents using the configured custom Agent TOML files. Ask the parent session to spawn the named role; route dependent work sequentially. / 默认使用 Codex 原生 subagent 和已配置的 Agent TOML 文件，由父会话直接调用指定角色；有依赖的工作按顺序执行。
+- Use parallel agents only for independent read-only work. Do not run parallel write agents against the same worktree. / 仅对相互独立的只读任务并行；不得让并行写入 Agent 同时修改同一工作区。
+- Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v1`. / 在有依赖或写入的交接前，确认目标 Agent 已加载、模型和思考强度生效，且首次结果遵循 `lean-dev-router/v1`。
+- When available, check `codex --version` before relying on native routing; in the CLI use `/agent` to inspect agent threads. / 条件允许时，在依赖原生路由前检查 `codex --version`；CLI 中使用 `/agent` 检查 Agent 线程。
+- If native spawning is unavailable or the Agent configuration is not honored, use an independent Codex session one role at a time. Pass only the compact handoff, relevant paths, constraints, and evidence; use an isolated worktree or branch for writes. / 如果原生调用不可用或 Agent 配置未生效，则按角色逐个使用独立 Codex session；只传递紧凑交接、相关路径、约束和证据，写入时使用隔离 worktree 或分支。
+- Codex's native background-agent UI is still a native subagent workflow. Treat unrelated background processes or sessions as fallback, not as equivalent parent-child routing. / Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进程或独立 session 只能作为 fallback，不能视为等价的父子路由。
+
 ## Route
 
 - Send a clear, bounded implementation task directly to `luna_worker`.
