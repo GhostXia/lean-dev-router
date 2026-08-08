@@ -6,6 +6,8 @@ Lean Dev Router is a general theory for coordinating and escalating multi-agent 
 
 I currently use Codex, so this repository uses GPT model identifiers as concrete examples. The routing theory is not tied to Codex or GPT and can be adapted to other agent runtimes and models.
 
+For further token savings, this router can be combined with projects such as [Caveman](https://github.com/juliusbrussee/caveman), which reduce unnecessary verbosity in engineering workflows. Lean Dev Router reduces unnecessary agent calls and handoff context; Caveman reduces unnecessary prose in agent responses. Together, they can help maximize token efficiency while preserving the technical content that matters.
+
 Example routing chain:
 
 ```text
@@ -37,6 +39,8 @@ Use `$lean-dev-router` when a task benefits from this routing policy. The Skill 
 Lean Dev Router 是一套用于协调和升级多 Agent 软件开发任务的通用理论。它让不同职责和成本层级的 Agent 分别负责规划、实施、诊断和验证，并且只在必要时向上升级。
 
 我本人目前正在使用 Codex，因此本仓库使用 GPT 模型标识作为具体示例。这套路由理论不依赖 Codex 或 GPT，也可以迁移到其他 Agent 运行时和模型。
+
+为了进一步节省 Token，可以配合 [Caveman](https://github.com/juliusbrussee/caveman) 这类减少工程中冗余表达的项目使用。Lean Dev Router 负责减少不必要的 Agent 调用和交接上下文，Caveman 负责减少 Agent 回复中的冗余措辞；两者结合可以在保留关键技术内容的同时，进一步提高 Token 使用效率。
 
 示例调度链：
 
