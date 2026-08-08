@@ -7,6 +7,12 @@ description: Route project development through sol_planner, luna_worker, and ter
 
 Use the fewest agents needed. Keep routing sequential; the orchestrator owns every handoff.
 
+## Language / 语言
+
+- Follow the parent task's primary language in analysis, handoffs, and final responses. / 分析、交接和最终回复跟随父任务的主要语言。
+- If the parent task is bilingual, use the language requested for the current output; if unspecified, use the dominant language. / 如果父任务是双语，按当前输出要求选择语言；未指定时使用占主导地位的语言。
+- Keep code, commands, file paths, model IDs, agent names, and other technical identifiers unchanged. / 代码、命令、文件路径、模型 ID、Agent 名称及其他技术标识保持不变。
+
 ## Route
 
 - Send a clear, bounded implementation task directly to `luna_worker`.
