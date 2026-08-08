@@ -69,7 +69,7 @@ Use `$lean-dev-router` when a task benefits from this routing policy. The Skill 
 
 ### Final L3 test result
 
-This is a recorded run of the L3 idempotent `POST /orders` task from `lean-dev-router-l3-idempotent-orders-task.md`, using a Luna High controller with `$lean-dev-router`. The figures below are transcribed from the supplied run screenshots; they are not a rerun in this repository.
+This is a recorded run of the L3 idempotent `POST /orders` task from [`lean-dev-router-l3-idempotent-orders-task.md`](lean-dev-router-l3-idempotent-orders-task.md), using a Luna High controller with `$lean-dev-router`. The figures below are transcribed from the supplied run screenshots; they are not a rerun in this repository.
 
 ```mermaid
 pie title Token volume by model
@@ -163,7 +163,7 @@ sol_planner → luna_worker → terra_auditor
 
 ### 最终 L3 测试结果
 
-这是一次 L3 幂等 `POST /orders` 测试记录，测试题来自 `lean-dev-router-l3-idempotent-orders-task.md`，使用 Luna High 主控与 `$lean-dev-router`。下列数据根据用户提供的测试截图整理，未在本仓库重新运行。
+这是一次 L3 幂等 `POST /orders` 测试记录，测试题来自 [`lean-dev-router-l3-idempotent-orders-task.md`](lean-dev-router-l3-idempotent-orders-task.md)，使用 Luna High 主控与 `$lean-dev-router`。下列数据根据用户提供的测试截图整理，未在本仓库重新运行。
 
 ```mermaid
 pie title 按模型统计的 Token 总量
