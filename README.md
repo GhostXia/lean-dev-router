@@ -8,6 +8,8 @@ I currently use Codex, so this repository uses GPT model identifiers as concrete
 
 For further token savings, this router can be combined with projects such as [Caveman](https://github.com/juliusbrussee/caveman), which reduce unnecessary verbosity in engineering workflows. Lean Dev Router reduces unnecessary agent calls and handoff context; Caveman reduces unnecessary prose in agent responses. Together, they can help maximize token efficiency while preserving the technical content that matters. This project currently does not plan to duplicate response-compression features already provided by such projects.
 
+Because the subagents use explicitly selected models and follow detailed work assignments, the main controller can often use Luna High or an even lower-cost model. This is a cost-optimization guideline rather than a strict requirement; use a more capable controller model when the task involves complex planning, major architectural decisions, or cross-task coordination.
+
 Example routing chain:
 
 ```text
@@ -41,6 +43,8 @@ Lean Dev Router 是一套用于协调和升级多 Agent 软件开发任务的通
 我本人目前正在使用 Codex，因此本仓库使用 GPT 模型标识作为具体示例。这套路由理论不依赖 Codex 或 GPT，也可以迁移到其他 Agent 运行时和模型。
 
 为了进一步节省 Token，可以配合 [Caveman](https://github.com/juliusbrussee/caveman) 这类减少工程中冗余表达的项目使用。Lean Dev Router 负责减少不必要的 Agent 调用和交接上下文，Caveman 负责减少 Agent 回复中的冗余措辞；两者结合可以在保留关键技术内容的同时，进一步提高 Token 使用效率。本项目目前暂不考虑重复实现这类项目已经提供的回复压缩功能。
+
+由于各 Subagent 使用的模型明确、职责边界清晰且工作安排详细，主控对话通常可以使用 Luna High 或更低成本的模型。这是一条成本优化建议，而非硬性要求；当任务涉及复杂规划、重大架构决策或跨任务协调时，仍应使用更强的主控模型。
 
 示例调度链：
 
