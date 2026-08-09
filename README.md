@@ -48,7 +48,7 @@ The native Codex background-agent UI is part of the native subagent workflow. Un
 
 ### Single-Sol worker scheduling
 
-Use exactly one Sol coordinator for each routed task. Sol chooses the number and mix of Luna and Terra workers from task size, independence, dependency depth, and risk. It assigns bounded work, manages ordering and concurrency, waits for workers, verifies coverage, and consolidates their compact results. Luna and Terra never create additional agents or expand their own assignments.
+Use one Sol coordinator for each routed task by default. Sol chooses the number and mix of Luna and Terra workers from task size, volume, independence, dependency depth, and risk. It assigns bounded work, manages ordering and concurrency, waits for workers, verifies coverage, and consolidates their compact results. Luna and Terra never create additional agents or expand their own assignments. Use multiple Sol coordinators only when the user explicitly requests them, and give each Sol a non-overlapping orchestration scope.
 
 | Mode | Requested cap | Priority |
 | --- | ---: | --- |
@@ -165,7 +165,7 @@ Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进
 
 ### 单 Sol Worker 调度
 
-每个路由任务只使用一个 Sol 协调者。Sol 根据任务规模、独立性、依赖深度和风险决定 Luna/Terra 的数量及组合，负责分配边界明确的任务、管理顺序与并发、等待 worker、检查覆盖范围并归并紧凑结果。Luna 和 Terra 不得自行创建 Agent 或扩大任务范围。
+每个路由任务默认只使用一个 Sol 协调者。Sol 根据任务规模、数量、独立性、依赖深度和风险决定 Luna/Terra 的数量及组合，负责通过独立 worktree 或明确隔离的任务范围进行分配、管理顺序与并发、等待 worker、检查覆盖范围并归并紧凑结果。Luna 和 Terra 不得自行创建 Agent 或扩大任务范围。只有用户明确要求时才使用多个 Sol，并必须为每个 Sol 分配互不重叠的调度范围。
 
 | 模式 | 请求上限 | 优先目标 |
 | --- | ---: | --- |
