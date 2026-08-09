@@ -1,11 +1,11 @@
 ---
 name: lean-dev-router
-description: Route project development through sol_planner, luna_worker, and terra_auditor with compact handoffs and parent-led parallel fan-out for large independent read-only workloads. Use for implementation, fixes, refactors, planning, audits, or code review when token- or latency-efficient subagent coordination is desired.
+description: Route project development through one sol_planner coordinator and complexity-scaled pools of luna_worker and terra_auditor agents, with compact handoffs and parallel execution for independent work. Use for implementation, fixes, refactors, planning, audits, or code review when token- or latency-efficient subagent coordination is desired.
 ---
 
 # Lean Dev Router
 
-Use the fewest agents that satisfy the selected token-versus-latency priority. Keep dependent work sequential; the parent orchestrator owns every handoff.
+Use the fewest agents that satisfy the selected token-versus-latency priority. For complex routed work, use exactly one `sol_planner` to coordinate as many `luna_worker` and `terra_auditor` instances as task complexity justifies.
 
 ## Language / 语言
 
@@ -36,28 +36,28 @@ SUMMARY: one concise sentence
 
 ## Codex execution mode / Codex 执行方式
 
-- Default to native Codex subagents using the configured custom Agent TOML files. Ask the parent session to spawn the named role; route dependent work sequentially. / 默认使用 Codex 原生 subagent 和已配置的 Agent TOML 文件，由父会话直接调用指定角色；有依赖的工作按顺序执行。
-- Use parallel agents only for independent read-only work and follow the fan-out rules below. Do not run parallel write agents against the same worktree. / 仅对相互独立的只读任务按下述规则并行；不得让并行写入 Agent 同时修改同一工作区。
+- Default to native Codex subagents using the configured custom Agent TOML files. For a clear bounded task, call one `luna_worker` directly. For complex, ambiguous, or decomposable work, call exactly one `sol_planner` and let it partition, delegate, wait, and consolidate. / 默认使用 Codex 原生 subagent 和已配置的 Agent TOML 文件。明确且边界清晰的任务直接调用一个 `luna_worker`；复杂、模糊或可拆分任务只调用一个 `sol_planner`，由其分解、委派、等待和归并。
+- Let the single Sol coordinator run multiple Luna and Terra workers in parallel when their assignments are independent. Parallel Luna writes require separate worktrees or otherwise isolated branches; never let multiple writers modify the same worktree. / 当任务相互独立时，由单个 Sol 协调者并行运行多个 Luna 和 Terra。并行 Luna 写入必须使用独立 worktree 或其他隔离分支；不得让多个写入者修改同一工作区。
 - Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v1`. / 在有依赖或写入的交接前，确认目标 Agent 已加载、模型和思考强度生效，且首次结果遵循 `lean-dev-router/v1`。
 - When available, check `codex --version` before relying on native routing; in the CLI use `/agent` to inspect agent threads. / 条件允许时，在依赖原生路由前检查 `codex --version`；CLI 中使用 `/agent` 检查 Agent 线程。
-- If native spawning is unavailable or the Agent configuration is not honored, use an independent Codex session one role at a time. Pass only the compact handoff, relevant paths, constraints, and evidence; use an isolated worktree or branch for writes. / 如果原生调用不可用或 Agent 配置未生效，则按角色逐个使用独立 Codex session；只传递紧凑交接、相关路径、约束和证据，写入时使用隔离 worktree 或分支。
+- If a Sol session cannot spawn nested workers, the parent acts only as a mechanical relay: execute Sol's exact worker manifest, return compact worker results to the same Sol, and let Sol make all routing and consolidation decisions. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest and isolated worktrees for writes. / 如果 Sol 会话不能嵌套启动 worker，父会话只做机械中继：严格执行 Sol 的 worker 清单，将紧凑结果送回同一个 Sol，并由 Sol 完成所有路由与归并决策。原生调用完全不可用时，使用相同清单启动独立 Codex session，写入任务使用隔离 worktree。
 - Codex's native background-agent UI is still a native subagent workflow. Treat unrelated background processes or sessions as fallback, not as equivalent parent-child routing. / Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进程或独立 session 只能作为 fallback，不能视为等价的父子路由。
 
-## Parallel read fan-out / 并行只读分发
+## Worker scaling and fan-out / Worker 扩缩与分发
 
-- Keep the parent session as the only runtime orchestrator: it partitions, spawns, steers, waits, verifies coverage, and merges results. Subagents never orchestrate other subagents; `sol_planner` may only propose a partition when partitioning itself requires a real decision. / 父会话是唯一运行时调度者，负责分批、启动、调整、等待、覆盖检查和结果归并。子代理不得编排其他子代理；只有分批本身需要真实决策时，`sol_planner` 才可提出分批方案。
-- Default to `token-first` unless the user prioritizes elapsed time. Use requested fan-out caps of 3 for `token-first`, 6 for `balanced`, and 10 for `latency-first`; these are routing heuristics, not runtime guarantees. / 用户未强调耗时时默认 `token-first`。请求的并发上限为：`token-first` 3 个、`balanced` 6 个、`latency-first` 10 个；这些是调度启发式，不是运行时保证。
-- Fan out only when the scope contains at least two independent read-only batches. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then balance batches by estimated size and risk rather than count alone. If fewer agents start, run disjoint waves. / 仅当范围可拆成至少两个相互独立的只读批次时并行。对相对均匀的项目集合，先使用 `min(模式上限, ceil(项目数 / 30))`，再按预计规模和风险平衡负载，而非只看数量；可用 Agent 较少时使用互不重叠的波次。
-- Give every worker an exact disjoint item list, identical rubric and output schema, and a batch identifier. Require a first `EVIDENCE` item with `path: N/A (batch coverage)` and assigned versus processed identifiers; the parent must verify that batch unions equal the full scope and intersections are empty. / 为每个 worker 提供精确且互不重叠的项目清单、相同判定标准和输出结构，以及批次标识。首条 `EVIDENCE` 必须使用 `path: N/A (batch coverage)` 并记录已分配与已处理标识；父会话必须确认批次并集等于完整范围、交集为空。
-- Let the parent mechanically merge and deduplicate compact results. Use a different `terra_auditor` to verify only high-risk or conflicting findings; never let an auditor verify its own finding. Call `sol_planner` only after this reduction when a neutral unresolved decision truly needs planning, never to manage workers or adjudicate an audit of Sol itself. / 由父会话机械归并并去重紧凑结果；仅让不同的 `terra_auditor` 复核高风险或冲突发现，不得自审。只有归并后仍存在需要规划的中立未决事项时才调用 `sol_planner`，不得让其管理 worker，也不得让其裁定针对 Sol 自身的审计。
+- Use exactly one `sol_planner` per routed task. Sol chooses worker count, role mix, ordering, and concurrency from task size, independence, dependency depth, and risk; never create multiple Sol coordinators for the same task. / 每个路由任务只使用一个 `sol_planner`。Sol 根据任务规模、独立性、依赖深度和风险决定 worker 数量、角色组合、顺序及并发；同一任务不得创建多个 Sol 协调者。
+- Default to `token-first` unless the user prioritizes elapsed time. Use requested concurrent worker caps of 3 for `token-first`, 6 for `balanced`, and 10 for `latency-first`; the cap covers Luna and Terra combined and is a routing heuristic, not a runtime guarantee. / 用户未强调耗时时默认 `token-first`。并发 worker 请求上限为：`token-first` 3 个、`balanced` 6 个、`latency-first` 10 个；上限包含 Luna 与 Terra 总数，属于调度启发式，不是运行时保证。
+- Parallelize independent read, implementation, test, or review batches. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then adjust for complexity and risk. Keep dependent stages sequential; use disjoint waves when fewer workers start. / 对相互独立的读取、实现、测试或审查批次进行并行。对相对均匀的项目集合，先使用 `min(模式上限, ceil(项目数 / 30))`，再按复杂度和风险调整。有依赖的阶段保持串行；可用 worker 较少时使用互不重叠的波次。
+- Give every worker an exact disjoint assignment, fixed constraints, acceptance criteria, relevant paths, a batch identifier, and the same output schema. For item batches, require first `EVIDENCE` as `path: N/A (batch coverage)` with assigned versus processed identifiers. / 为每个 worker 提供精确且互不重叠的任务、固定约束、验收标准、相关路径、批次标识和统一输出结构。项目批次的首条 `EVIDENCE` 必须使用 `path: N/A (batch coverage)` 并记录已分配与已处理标识。
+- Sol waits for all required workers, verifies complete non-overlapping coverage, merges and deduplicates results, and decides follow-up routing. Use a different Terra to verify high-risk or conflicting findings; never let an auditor verify its own finding. / Sol 等待所有必要 worker，检查覆盖完整且互不重叠，归并去重结果并决定后续路由。高风险或冲突发现交给不同的 Terra 复核，不得自审。
 
 ## Route
 
 - Send a clear, bounded implementation task directly to `luna_worker`.
-- Send an initially ambiguous task or a task requiring major architectural, scope, interface, data-model, compatibility, security-boundary, dependency, or acceptance decisions to `sol_planner`, then send its plan to `luna_worker`.
-- When `luna_worker` cannot resolve an implementation, debugging, testing, or local technical-choice problem, send its compact escalation to `terra_auditor`; never send it directly to `sol_planner`.
-- Send `terra_auditor`'s actionable technical resolution back to `luna_worker` for all edits and validation.
-- Send a problem to `sol_planner` only when `terra_auditor` cannot establish a supported solution or identifies a major decision. Send Sol's in-scope technical decision back to `luna_worker`; use the human decision gate below for user-owned decisions.
+- Send an initially ambiguous, decomposable, or cross-task request, or one requiring major architectural, scope, interface, data-model, compatibility, security-boundary, dependency, or acceptance decisions, to one `sol_planner`. Let Sol coordinate all Luna and Terra work until completion.
+- When a `luna_worker` cannot resolve an implementation, debugging, testing, or local technical-choice problem, it returns a compact Terra escalation to the Sol coordinator; it never resolves the major decision itself.
+- Sol sends `terra_auditor`'s actionable technical resolution to the relevant `luna_worker` for edits and validation.
+- In a standalone Luna fast path, invoke one Sol only if Terra cannot establish a supported solution or identifies a major decision. In a Sol-coordinated task, Terra returns that escalation to the existing Sol; never create another Sol. Sol sends an in-scope technical decision back to the relevant Luna and uses the human decision gate below for user-owned decisions.
 - Use `terra_auditor` after implementation only for explicit review requests or material correctness, security, migration, compatibility, or regression risk.
 
 ## Human decision gate / 用户决策门
@@ -65,7 +65,7 @@ SUMMARY: one concise sentence
 - Let `sol_planner` decide reversible technical trade-offs that stay within the fixed objective, scope, acceptance criteria, and user-authorized policy. / `sol_planner` 可以裁定不改变既定目标、范围、验收标准和用户授权策略的可逆技术取舍。
 - Require user authority for changes to the objective, scope, acceptance criteria, direction, philosophy, or product priority; conflicts with explicit user intent; and irreversible or material compatibility, security, privacy, license, migration, or cost commitments. / 修改目标、范围、验收标准、方向、理念或产品优先级，违背用户明确意图，以及不可逆或重大的兼容性、安全、隐私、许可、迁移或成本承诺，必须交由用户决定。
 - For a user-owned decision, return `STATUS: BLOCKED`, `FAILURE: major-decision`, and `NEXT: parent`. Put up to three viable options, decisive trade-offs, affected paths, and one recommendation in `EVIDENCE`; make `SUMMARY` the single question for the user. Do not add `NEXT: user`: the route is `sol_planner → parent → user`. / 对属于用户的决策，返回 `STATUS: BLOCKED`、`FAILURE: major-decision`、`NEXT: parent`；在 `EVIDENCE` 中列出最多三个可行方案、关键取舍、受影响路径和一个推荐，并让 `SUMMARY` 成为需要询问用户的唯一问题。不要增加 `NEXT: user`；正确路径是 `sol_planner → parent → user`。
-- Pause implementation until the user answers. Route directly to `luna_worker` when the answer fully fixes the constraints; return to `sol_planner` once only when the plan must be revised. / 用户答复前暂停实施；答复已完整确定约束时直接交给 `luna_worker`，只有需要重整方案时才返回 `sol_planner` 一次。
+- Pause implementation until the user answers. Resume through the existing Sol coordinator when one exists; otherwise route directly to `luna_worker` when the answer fully fixes the constraints, invoking one Sol only when the plan must be revised. / 用户答复前暂停实施；已有 Sol 协调者时由同一个 Sol 恢复调度；否则在答复已完整确定约束时直接交给 `luna_worker`，只有需要重整方案时才调用一个 Sol。
 
 ## Handoff
 
@@ -78,7 +78,7 @@ Pass only:
 - attempted fixes, if any;
 - the single decision or action needed next.
 
-Do not forward full transcripts, repeated context, complete logs, or broad repository dumps. Do not ask subagents to orchestrate other subagents.
+Do not forward full transcripts, repeated context, complete logs, or broad repository dumps. Only the single `sol_planner` may orchestrate Luna and Terra workers.
 
 ## Stop
 
