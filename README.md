@@ -30,6 +30,12 @@ SUMMARY: one concise sentence
 
 `EVIDENCE` must bind repository claims to a concrete path and a short diff summary or command result. `PASS` means the current stage is complete; `BLOCKED` means required information, authority, or dependency is unavailable; `ESCALATE` means another role must act. The parent should not infer success from an incomplete handoff.
 
+### User decision gate
+
+Sol may decide reversible technical trade-offs that preserve the fixed objective, scope, acceptance criteria, and user-authorized policy. Sol must return decisions about objectives, direction, philosophy, product priority, explicit user intent, or irreversible and material commitments to the user through the parent session.
+
+For such a decision, Sol returns `STATUS: BLOCKED`, `FAILURE: major-decision`, and `NEXT: parent`, with up to three viable options, decisive trade-offs, affected paths, one recommendation, and a single question for the user. The protocol intentionally does not add `NEXT: user`: the route is `sol_planner → parent → user`. Implementation resumes directly with Luna when the answer fixes all constraints, or returns to Sol once when the plan must be revised.
+
 ### Codex execution mode
 
 Native Codex subagents are the default. Ask the parent Codex session to spawn the configured role and keep dependent work sequential. Use parallel agents only for independent read-only work; do not let multiple agents write to the same worktree.
@@ -47,6 +53,7 @@ Example routing chain:
 ```text
 sol_planner → luna_worker → terra_auditor
                          ↘ sol_planner (only for unresolved or major decisions)
+                              ↘ parent → user (only for user-owned decisions)
 ```
 
 ### Contents
@@ -61,7 +68,7 @@ For Codex, copy `.agents/skills/lean-dev-router/` to `~/.codex/skills/lean-dev-r
 
 ### Roles
 
-- `sol_planner`: initial planning and unresolved or major decisions.
+- `sol_planner`: initial planning and unresolved or major technical decisions; returns user-owned decisions to the parent.
 - `luna_worker`: all authorized code, test, documentation, and configuration edits.
 - `terra_auditor`: code audit, technical diagnosis, and validation; escalate only when it cannot resolve the issue or a major decision is required.
 
@@ -126,6 +133,12 @@ SUMMARY: one concise sentence
 
 `EVIDENCE` 必须将仓库结论绑定到具体路径，并附简短 diff 摘要或命令结果。`PASS` 表示当前阶段完成；`BLOCKED` 表示缺少必要信息、权限或依赖；`ESCALATE` 表示需要其他角色继续处理。主控不得从缺少字段或证据的交接中自行推断成功。
 
+### 用户决策门
+
+Sol 可以裁定不改变既定目标、范围、验收标准和用户授权策略的可逆技术取舍。涉及目标、方向、理念、产品优先级、用户明确意图，或不可逆及重大的承诺时，Sol 必须通过父会话将决断权交还用户。
+
+此时 Sol 返回 `STATUS: BLOCKED`、`FAILURE: major-decision`、`NEXT: parent`，并提供最多三个可行方案、关键取舍、受影响路径、一个推荐和需要询问用户的唯一问题。协议不增加 `NEXT: user`：正确路径是 `sol_planner → parent → user`。用户答复已完整确定约束时直接交给 Luna；只有需要重整方案时才返回 Sol 一次。
+
 ### Codex 执行方式
 
 默认使用 Codex 原生 subagent，由父 Codex 会话调用已配置的角色，并让有依赖的工作按顺序执行。只有相互独立的只读任务才使用并行 Agent；不得让多个 Agent 同时写入同一工作区。
@@ -143,6 +156,7 @@ Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进
 ```text
 sol_planner → luna_worker → terra_auditor
                          ↘ sol_planner（仅用于无法解决或涉及重大决策的问题）
+                              ↘ parent → user（仅用于属于用户的决策）
 ```
 
 ### 内容
@@ -157,7 +171,7 @@ sol_planner → luna_worker → terra_auditor
 
 ### 角色
 
-- `sol_planner`：负责初始规划，以及无法解决或涉及重大变动的决策。
+- `sol_planner`：负责初始规划，以及无法解决或涉及重大变动的技术决策；属于用户的决策交还父会话。
 - `luna_worker`：负责全部获授权的代码、测试、文档和配置编写与修改。
 - `terra_auditor`：负责代码审计、技术诊断和验证；只有无法解决问题或需要重大决策时才升级给 Sol。
 

@@ -49,8 +49,15 @@ SUMMARY: one concise sentence
 - Send an initially ambiguous task or a task requiring major architectural, scope, interface, data-model, compatibility, security-boundary, dependency, or acceptance decisions to `sol_planner`, then send its plan to `luna_worker`.
 - When `luna_worker` cannot resolve an implementation, debugging, testing, or local technical-choice problem, send its compact escalation to `terra_auditor`; never send it directly to `sol_planner`.
 - Send `terra_auditor`'s actionable technical resolution back to `luna_worker` for all edits and validation.
-- Send a problem to `sol_planner` only when `terra_auditor` cannot establish a supported solution or identifies a major decision. Send Sol's decision back to `luna_worker`.
+- Send a problem to `sol_planner` only when `terra_auditor` cannot establish a supported solution or identifies a major decision. Send Sol's in-scope technical decision back to `luna_worker`; use the human decision gate below for user-owned decisions.
 - Use `terra_auditor` after implementation only for explicit review requests or material correctness, security, migration, compatibility, or regression risk.
+
+## Human decision gate / 用户决策门
+
+- Let `sol_planner` decide reversible technical trade-offs that stay within the fixed objective, scope, acceptance criteria, and user-authorized policy. / `sol_planner` 可以裁定不改变既定目标、范围、验收标准和用户授权策略的可逆技术取舍。
+- Require user authority for changes to the objective, scope, acceptance criteria, direction, philosophy, or product priority; conflicts with explicit user intent; and irreversible or material compatibility, security, privacy, license, migration, or cost commitments. / 修改目标、范围、验收标准、方向、理念或产品优先级，违背用户明确意图，以及不可逆或重大的兼容性、安全、隐私、许可、迁移或成本承诺，必须交由用户决定。
+- For a user-owned decision, return `STATUS: BLOCKED`, `FAILURE: major-decision`, and `NEXT: parent`. Put up to three viable options, decisive trade-offs, affected paths, and one recommendation in `EVIDENCE`; make `SUMMARY` the single question for the user. Do not add `NEXT: user`: the route is `sol_planner → parent → user`. / 对属于用户的决策，返回 `STATUS: BLOCKED`、`FAILURE: major-decision`、`NEXT: parent`；在 `EVIDENCE` 中列出最多三个可行方案、关键取舍、受影响路径和一个推荐，并让 `SUMMARY` 成为需要询问用户的唯一问题。不要增加 `NEXT: user`；正确路径是 `sol_planner → parent → user`。
+- Pause implementation until the user answers. Route directly to `luna_worker` when the answer fully fixes the constraints; return to `sol_planner` once only when the plan must be revised. / 用户答复前暂停实施；答复已完整确定约束时直接交给 `luna_worker`，只有需要重整方案时才返回 `sol_planner` 一次。
 
 ## Handoff
 
