@@ -1,11 +1,11 @@
 ---
 name: lean-dev-router
-description: Route project development through sol_planner, luna_worker, and terra_auditor with the minimum necessary agent calls and compact handoffs. Use for implementation, fixes, refactors, planning, or code review when token-efficient subagent coordination is desired.
+description: Route project development through sol_planner, luna_worker, and terra_auditor with compact handoffs and parent-led parallel fan-out for large independent read-only workloads. Use for implementation, fixes, refactors, planning, audits, or code review when token- or latency-efficient subagent coordination is desired.
 ---
 
 # Lean Dev Router
 
-Use the fewest agents needed. Keep routing sequential; the orchestrator owns every handoff.
+Use the fewest agents that satisfy the selected token-versus-latency priority. Keep dependent work sequential; the parent orchestrator owns every handoff.
 
 ## Language / 语言
 
@@ -37,11 +37,19 @@ SUMMARY: one concise sentence
 ## Codex execution mode / Codex 执行方式
 
 - Default to native Codex subagents using the configured custom Agent TOML files. Ask the parent session to spawn the named role; route dependent work sequentially. / 默认使用 Codex 原生 subagent 和已配置的 Agent TOML 文件，由父会话直接调用指定角色；有依赖的工作按顺序执行。
-- Use parallel agents only for independent read-only work. Do not run parallel write agents against the same worktree. / 仅对相互独立的只读任务并行；不得让并行写入 Agent 同时修改同一工作区。
+- Use parallel agents only for independent read-only work and follow the fan-out rules below. Do not run parallel write agents against the same worktree. / 仅对相互独立的只读任务按下述规则并行；不得让并行写入 Agent 同时修改同一工作区。
 - Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v1`. / 在有依赖或写入的交接前，确认目标 Agent 已加载、模型和思考强度生效，且首次结果遵循 `lean-dev-router/v1`。
 - When available, check `codex --version` before relying on native routing; in the CLI use `/agent` to inspect agent threads. / 条件允许时，在依赖原生路由前检查 `codex --version`；CLI 中使用 `/agent` 检查 Agent 线程。
 - If native spawning is unavailable or the Agent configuration is not honored, use an independent Codex session one role at a time. Pass only the compact handoff, relevant paths, constraints, and evidence; use an isolated worktree or branch for writes. / 如果原生调用不可用或 Agent 配置未生效，则按角色逐个使用独立 Codex session；只传递紧凑交接、相关路径、约束和证据，写入时使用隔离 worktree 或分支。
 - Codex's native background-agent UI is still a native subagent workflow. Treat unrelated background processes or sessions as fallback, not as equivalent parent-child routing. / Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进程或独立 session 只能作为 fallback，不能视为等价的父子路由。
+
+## Parallel read fan-out / 并行只读分发
+
+- Keep the parent session as the only runtime orchestrator: it partitions, spawns, steers, waits, verifies coverage, and merges results. Subagents never orchestrate other subagents; `sol_planner` may only propose a partition when partitioning itself requires a real decision. / 父会话是唯一运行时调度者，负责分批、启动、调整、等待、覆盖检查和结果归并。子代理不得编排其他子代理；只有分批本身需要真实决策时，`sol_planner` 才可提出分批方案。
+- Default to `token-first` unless the user prioritizes elapsed time. Use requested fan-out caps of 3 for `token-first`, 6 for `balanced`, and 10 for `latency-first`; these are routing heuristics, not runtime guarantees. / 用户未强调耗时时默认 `token-first`。请求的并发上限为：`token-first` 3 个、`balanced` 6 个、`latency-first` 10 个；这些是调度启发式，不是运行时保证。
+- Fan out only when the scope contains at least two independent read-only batches. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then balance batches by estimated size and risk rather than count alone. If fewer agents start, run disjoint waves. / 仅当范围可拆成至少两个相互独立的只读批次时并行。对相对均匀的项目集合，先使用 `min(模式上限, ceil(项目数 / 30))`，再按预计规模和风险平衡负载，而非只看数量；可用 Agent 较少时使用互不重叠的波次。
+- Give every worker an exact disjoint item list, identical rubric and output schema, and a batch identifier. Require a first `EVIDENCE` item with `path: N/A (batch coverage)` and assigned versus processed identifiers; the parent must verify that batch unions equal the full scope and intersections are empty. / 为每个 worker 提供精确且互不重叠的项目清单、相同判定标准和输出结构，以及批次标识。首条 `EVIDENCE` 必须使用 `path: N/A (batch coverage)` 并记录已分配与已处理标识；父会话必须确认批次并集等于完整范围、交集为空。
+- Let the parent mechanically merge and deduplicate compact results. Use a different `terra_auditor` to verify only high-risk or conflicting findings; never let an auditor verify its own finding. Call `sol_planner` only after this reduction when a neutral unresolved decision truly needs planning, never to manage workers or adjudicate an audit of Sol itself. / 由父会话机械归并并去重紧凑结果；仅让不同的 `terra_auditor` 复核高风险或冲突发现，不得自审。只有归并后仍存在需要规划的中立未决事项时才调用 `sol_planner`，不得让其管理 worker，也不得让其裁定针对 Sol 自身的审计。
 
 ## Route
 

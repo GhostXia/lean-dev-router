@@ -46,6 +46,20 @@ When available, check `codex --version` before relying on native routing. In the
 
 The native Codex background-agent UI is part of the native subagent workflow. Unrelated background processes or independent sessions are fallback mechanisms, not equivalent parent-child routing. See the [official Codex subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) for current client and custom-agent behavior.
 
+### Parallel read scheduling
+
+The parent session is the only runtime orchestrator. It partitions work, spawns and waits for agents, verifies coverage, and merges compact results. Subagents never manage other subagents; Sol may propose a partition only when partitioning itself requires a real planning decision.
+
+| Mode | Requested cap | Priority |
+| --- | ---: | --- |
+| `token-first` | 3 | Minimize total agent overhead; default mode |
+| `balanced` | 6 | Balance elapsed time and token overhead |
+| `latency-first` | 10 | Minimize elapsed time for large independent read-only workloads |
+
+These caps are routing heuristics, not guarantees of client or account concurrency. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then balance batches by estimated size and risk. If fewer agents start, process disjoint waves. Each worker receives an exact non-overlapping item list and records assigned versus processed coverage; the parent verifies that all batch unions equal the full scope and that intersections are empty.
+
+For example, a latency-first audit of 282 merged pull requests requests 10 Terra auditors with roughly 28–29 PRs each. The parent merges and deduplicates their compact findings, then assigns high-risk or conflicting candidates to a different Terra for peer verification. Sol is used only after reduction for a genuinely unresolved neutral planning question; it does not manage workers and must not adjudicate an audit of Sol itself.
+
 From personal experience, worktrees are recommended for batching independent tasks in parallel, especially when handling multiple pull requests at the same time. Give each task its own worktree and branch; avoid parallel worktrees for tightly dependent tasks or changes that must share the same working state.
 
 Example routing chain:
@@ -68,7 +82,7 @@ For Codex, copy `.agents/skills/lean-dev-router/` to `~/.codex/skills/lean-dev-r
 
 ### Roles
 
-- `sol_planner`: initial planning and unresolved or major technical decisions; returns user-owned decisions to the parent.
+- `sol_planner`: initial planning and unresolved or major technical decisions; returns user-owned decisions to the parent and never orchestrates other agents.
 - `luna_worker`: all authorized code, test, documentation, and configuration edits.
 - `terra_auditor`: code audit, technical diagnosis, and validation; escalate only when it cannot resolve the issue or a major decision is required.
 
@@ -149,6 +163,20 @@ Sol 可以裁定不改变既定目标、范围、验收标准和用户授权策�
 
 Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进程或独立 session 只能作为 fallback，不能视为等价的父子路由。当前 Codex 自定义 Agent 的行为以[官方 Subagents 文档](https://learn.chatgpt.com/docs/agent-configuration/subagents)为准。
 
+### 并行只读调度
+
+父会话是唯一运行时调度者，负责分批、启动和等待 Agent、检查覆盖范围并归并紧凑结果。子代理不得管理其他子代理；只有分批本身需要真实规划决策时，Sol 才可提出分批方案。
+
+| 模式 | 请求上限 | 优先目标 |
+| --- | ---: | --- |
+| `token-first` | 3 | 尽量减少 Agent 总开销；默认模式 |
+| `balanced` | 6 | 平衡完成时间与 Token 开销 |
+| `latency-first` | 10 | 缩短大型独立只读任务的完成时间 |
+
+这些上限是调度启发式，不代表客户端或账户一定具备对应并发能力。对相对均匀的项目集合，先使用 `min(模式上限, ceil(项目数 / 30))`，再按预计规模和风险平衡批次；可用 Agent 较少时使用互不重叠的波次。每个 worker 获得精确且不重叠的项目清单，并记录已分配与已处理覆盖范围；父会话确认所有批次并集等于完整范围、交集为空。
+
+例如，对 282 个已合并 PR 进行 `latency-first` 审计时，请求 10 个 Terra，每个约 28–29 个 PR。父会话归并并去重紧凑发现，再将高风险或冲突候选交给不同的 Terra 交叉验证。只有归并后仍存在真正未决的中立规划问题时才调用 Sol；Sol 不管理 worker，也不得裁定针对 Sol 自身的审计。
+
 个人经验：推荐使用 worktree 批量并行处理相互独立的任务，尤其适合同时推进多个 PR。为每个任务分配独立的 worktree 和分支；对于强依赖任务，或必须共享同一工作状态的改动，不建议并行处理。
 
 示例调度链：
@@ -171,7 +199,7 @@ sol_planner → luna_worker → terra_auditor
 
 ### 角色
 
-- `sol_planner`：负责初始规划，以及无法解决或涉及重大变动的技术决策；属于用户的决策交还父会话。
+- `sol_planner`：负责初始规划，以及无法解决或涉及重大变动的技术决策；属于用户的决策交还父会话，且不得编排其他 Agent。
 - `luna_worker`：负责全部获授权的代码、测试、文档和配置编写与修改。
 - `terra_auditor`：负责代码审计、技术诊断和验证；只有无法解决问题或需要重大决策时才升级给 Sol。
 
