@@ -209,6 +209,7 @@ While the run proceeds, log:
 - whether each handoff followed `lean-dev-router/v1`
 - whether handoffs looked compact / normal / verbose
 - whether Sol used Todo/`DISPATCH` to produce independently verifiable, path-bounded batches without needless fragmentation
+- for multi-batch deliverables, whether Sol declared shared contracts, integration order, one clean integration state, and final integration acceptance
 - repeated file exploration or duplicated analysis
 
 ### Step 3 — Accept or reject
@@ -225,6 +226,8 @@ git ls-files --others --exclude-standard
 
 For each Group C Luna write batch, verify every tracked and untracked path is covered by its `paths_allow`. Do not accept a reported `PASS` when an extra path exists; record `FAILURE: scope` and the extra paths. Do not silently ignore snapshots, lockfiles, generated files, or formatter output. `git diff --stat` alone is insufficient because it does not show untracked files.
 
+For a Group C task with two or more write batches, treat each component `PASS` as batch-local. Integrate accepted batches into one clean worktree in dependency order, record the exact combined commit, and run `integration_acceptance` against that state. If Terra validation is part of the route, assign a final integration audit against the combined commit; separate component audits are insufficient. Record this repository-wide evidence as `path: N/A (integration-check)`.
+
 ### Step 4 — Score quality
 
 Fill the six quality dimensions and write a one-line note if anything failed.
@@ -240,6 +243,19 @@ Run this once for Group C in a disposable worktree to verify the gate itself:
 5. Require the coordinator to reject clean `PASS`, record `FAILURE: scope`, and identify the fixture path. Terra must not be called merely because an obvious extra path exists.
 
 The negative control passes only when green tests plus an extra path are treated as scope drift. Remove the disposable worktree during reset; do not inject this fixture into a valuable checkout.
+
+### Step 4b — Multi-batch integration control
+
+Run this once for Group C with a task whose deliverable is split across at least two isolated write batches:
+
+1. Define one shared contract, explicit dependency order, `integration_worktree`, and `integration_acceptance` before dispatch.
+2. Make each batch pass its own acceptance and any assigned component audit.
+3. Integrate batches incrementally into the clean integration worktree and run the narrow cross-batch check after each merge or wave.
+4. Run complete integration acceptance against the final combined commit.
+5. Confirm the coordinator rejects whole-task `PASS` if the combined state fails, even when every component passed independently.
+6. Confirm the failure is reduced to the earliest failing merge or wave and routed to Luna, Terra, Sol, or the user according to cause and authority.
+
+The control passes only when component success and integration success are recorded separately and only combined-state evidence can close the whole task.
 
 ### Step 5 — Reset
 

@@ -76,7 +76,7 @@ SUMMARY: one concise sentence
 
 **Field Semantics:**
 
-- `EVIDENCE` — must bind repository claims to a concrete path + short diff summary or command result; repository-wide allow-list results use `path: N/A (scope-check)`
+- `EVIDENCE` — must bind repository claims to a concrete path + short diff summary or command result; repository-wide allow-list results use `path: N/A (scope-check)`, while combined-state validation uses `path: N/A (integration-check)`
 - `PASS` — current stage complete
 - `BLOCKED` — required info, authority, or dependency unavailable
 - `ESCALATE` — another role must act
@@ -100,6 +100,21 @@ git ls-files --others --exclude-standard
 If any path falls outside `paths_allow`, Luna's original handoff remains part of the evidence, but its `PASS` is not accepted. Record `FAILURE: scope`; return obvious drive-by changes to Luna for trimming, and use Terra only when an extra path's technical necessity is unclear. Sol may explicitly amend or split the batch only within the fixed objective and acceptance criteria. Changes to user-owned scope or acceptance still use the user decision gate.
 
 There is no automatic ignore list: expected snapshots, lockfiles, generated files, or formatter output must be authorized in advance. This check is orthogonal to CI—CI asks whether the change is correct under its encoded checks; the scope gate asks whether the batch was authorized to touch those paths. Green tests do not prove that a batch stayed within its delegated write set. An in-scope `PASS` does **not** require Terra review, and a gate that rarely triggers is evidence of good decomposition rather than a reason to remove it.
+
+### 🧩 Integration Convergence Gate
+
+Component success is not transitive. When two or more write batches form one deliverable, each component `PASS` closes only that batch; whole-task `PASS` requires validation of the combined state.
+
+Before dispatch, Sol defines shared contracts, dependency order, a clean `integration_worktree`, and `integration_acceptance`. Accepted batches are integrated in dependency order, preferably incrementally: run narrow cross-batch checks after each dependent batch or independent wave, then run the complete integration acceptance against the exact combined commit.
+
+Final evidence uses `path: N/A (integration-check)` and records the combined commit, integration order, and command results. If Terra validation is part of the plan, Terra must inspect that combined state—separate component audits do not substitute for an integration audit.
+
+On failure, stop terminal success and locate the earliest failing merge or wave:
+
+- obvious bounded compatibility repair → **Luna**
+- unclear cross-component cause → **Terra**
+- in-scope contract or decomposition adjustment → **Sol**
+- user-owned objective, compatibility, or product trade-off → **parent → user**
 
 ### 🚪 User Decision Gate
 
@@ -135,7 +150,7 @@ Native Codex subagents are the default. Send a clear bounded task directly to on
 3. Its first result follows `lean-dev-router/v1`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`; Luna write entries also contain `baseline` and `paths_allow`.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`; Luna write entries also contain `baseline` and `paths_allow`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_order`, and `integration_acceptance`.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -274,7 +289,7 @@ SUMMARY: one concise sentence
 
 **字段语义：**
 
-- `EVIDENCE` — 必须将仓库结论绑定到具体路径，并附简短 diff 摘要或命令结果；仓库级 allow-list 结果使用 `path: N/A (scope-check)`
+- `EVIDENCE` — 必须将仓库结论绑定到具体路径，并附简短 diff 摘要或命令结果；仓库级 allow-list 结果使用 `path: N/A (scope-check)`，组合状态验证使用 `path: N/A (integration-check)`
 - `PASS` — 当前阶段完成
 - `BLOCKED` — 缺少必要信息、权限或依赖
 - `ESCALATE` — 需要其他角色继续处理
@@ -298,6 +313,21 @@ git ls-files --others --exclude-standard
 只要存在 `paths_allow` 之外的路径，就保留 Luna 的原始交接作为证据，但不得接受其 `PASS`；使用 `FAILURE: scope` 记录结果。明显的顺手改动直接退回 Luna 裁剪，只有额外路径的技术必要性不明确时才调用 Terra。Sol 仅可在既定目标和验收标准内显式修订或拆分批次；涉及用户专属范围或验收变化时仍进入用户决策门。
 
 默认没有自动忽略清单：预期的快照、锁文件、生成文件或格式化输出都必须提前授权。该检查与 CI 正交——CI 判断改动是否通过其编码的正确性检查，范围门判断该批次是否获准触碰这些路径；测试全绿不能证明批次没有超出写入授权。范围内的 `PASS` **不要求** Terra 审查；范围门很少触发说明拆分良好，不代表应移除它。
+
+### 🧩 集成收敛门
+
+组件成功不具有传递性。当两个或更多写入批次共同组成一个交付物时，每个组件 `PASS` 只关闭对应批次；整体任务 `PASS` 必须验证组合后的统一状态。
+
+派发前，Sol 需要定义共享契约、依赖顺序、干净的 `integration_worktree` 和 `integration_acceptance`。已接受的批次按依赖顺序合入，并优先采用增量收敛：每个依赖批次或独立波次后运行最小必要的跨批检查，最后针对确切的组合提交运行完整集成验收。
+
+最终证据使用 `path: N/A (integration-check)`，记录组合提交、集成顺序和命令结果。如果计划包含 Terra 验证，Terra 必须审查组合后的状态——各组件分别通过审计不能替代集成审计。
+
+集成失败时不得宣布最终成功，并定位最早失败的合入或波次：
+
+- 明确且边界清晰的兼容修复 → **Luna**
+- 跨组件原因不明确 → **Terra**
+- 范围内的契约或拆分调整 → **Sol**
+- 用户专属目标、兼容性或产品取舍 → **父会话 → 用户**
 
 ### 🚪 用户决策门
 
@@ -333,7 +363,7 @@ NEXT: parent
 3. 首次结果遵循 `lean-dev-router/v1`
 
 如果 **Sol** 无法嵌套启动 worker，应返回 `BLOCKED/dependency/NEXT parent`，并在 `EVIDENCE` 中提供 `DISPATCH` 清单。每个 worker 条目包含：
-`id`、`role`、`scope`、`worktree`（共享只读任务使用 `N/A`）、`depends_on` 和 `acceptance`；Luna 写入条目还包含 `baseline` 和 `paths_allow`。
+`id`、`role`、`scope`、`worktree`（共享只读任务使用 `N/A`）、`depends_on` 和 `acceptance`；Luna 写入条目还包含 `baseline` 和 `paths_allow`。多批次交付还必须声明共享契约、`integration_worktree`、`integration_order` 和 `integration_acceptance`。
 
 父会话机械执行后，将紧凑结果送回同一个 **Sol**。原生调用完全不可用时，使用相同清单启动独立 Codex session。
 
