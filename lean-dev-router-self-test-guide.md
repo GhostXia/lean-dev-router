@@ -208,6 +208,7 @@ While the run proceeds, log:
 - whether an escalation occurred
 - whether each handoff followed `lean-dev-router/v1`
 - whether handoffs looked compact / normal / verbose
+- whether Sol used Todo/`DISPATCH` to produce independently verifiable, path-bounded batches without needless fragmentation
 - repeated file exploration or duplicated analysis
 
 ### Step 3 — Accept or reject
@@ -352,6 +353,7 @@ Keep failed acceptance checks and quality regressions visible in the summary; do
 | L3: Many escalations; cost near Sol | Hard decisions still need Sol; savings may be modest |
 | Lean fails acceptance while Sol passes | Quality regression risk for that task class |
 | Luna cheapest but fails tests / expands scope | Cheap model without routing is not free in quality terms |
+| Scope gate rarely triggers and no extra paths appear | Sol decomposition and Luna compliance are working; keep the gate as a low-cost audit signal |
 | Handoffs are long / full transcripts leaked | Lean policy not being followed; treat as process failure |
 
 **Do not average away failures.** A single L3 regression can matter more than average L1 savings.
