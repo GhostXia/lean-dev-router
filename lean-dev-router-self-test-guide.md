@@ -221,12 +221,13 @@ git status --short
 git diff --stat <baseline-commit>
 git diff --name-only --no-renames <baseline-commit> --
 git ls-files --others --exclude-standard
+git ls-files --others --ignored --exclude-standard
 # then the acceptance commands from the packet
 ```
 
-For each Group C Luna write batch, verify every tracked and untracked path is covered by its `paths_allow`. Do not accept a reported `PASS` when an extra path exists; record `FAILURE: scope` and the extra paths. Do not silently ignore snapshots, lockfiles, generated files, or formatter output. `git diff --stat` alone is insufficient because it does not show untracked files.
+For each Group C Luna write batch, verify every tracked, standard untracked, and ignored untracked path is covered by its `paths_allow`. Do not accept a reported `PASS` when an extra path exists; record `FAILURE: scope` and the extra paths. Do not silently ignore snapshots, lockfiles, generated files, or formatter output. `git diff --stat` alone is insufficient because it does not show untracked files.
 
-For a Group C task with two or more write batches, treat each component `PASS` as batch-local. Sol assigns one Luna as `integration_owner`; a parent fallback may perform only conflict-free mechanical merges. Integrate accepted batches into one clean worktree in dependency order, record the exact combined commit, and run `integration_acceptance` against that state. Verify tracked paths from `integration_baseline` to the combined commit plus all untracked paths against `integration_paths_allow`, the exact union of accepted batch allow-lists plus any separately authorized integration-repair paths. Record final scope as `path: N/A (scope-check)` and combined-state acceptance as `path: N/A (integration-check)`.
+For a Group C task with two or more write batches, treat each component `PASS` as batch-local. Sol assigns one Luna as `integration_owner`; a parent fallback may perform only conflict-free mechanical merges. Integrate accepted batches into one clean worktree in dependency order, record the exact combined commit, and run `integration_acceptance` against that state. Verify tracked paths from `integration_baseline` to the combined commit plus all standard and ignored untracked paths against `integration_paths_allow`, the exact union of accepted batch allow-lists plus any separately authorized integration-repair paths. Record final scope as `path: N/A (scope-check)` and combined-state acceptance as `path: N/A (integration-check)`.
 
 Assign a final Terra integration audit when the user requested independent verification, two or more component batches received Terra verification, or integration crosses a material security, data, concurrency, compatibility, migration, or public-contract boundary. Separate component audits are insufficient when this trigger applies.
 
@@ -239,9 +240,9 @@ Fill the six quality dimensions and write a one-line note if anything failed.
 Run this once for Group C in a disposable worktree to verify the gate itself:
 
 1. Complete a write batch whose acceptance commands pass and whose declared `paths_allow` contains only the intended files.
-2. Add one harmless tracked or untracked fixture outside `paths_allow` without changing the acceptance result.
+2. Add one harmless tracked, standard untracked, or ignored untracked fixture outside `paths_allow` without changing the acceptance result; exercise all three classes across control runs.
 3. Confirm the acceptance commands still pass.
-4. Run the tracked and untracked path checks from Step 3.
+4. Run the tracked, standard untracked, and ignored untracked path checks from Step 3.
 5. Require the coordinator to reject clean `PASS`, record `FAILURE: scope`, and identify the fixture path. Terra must not be called merely because an obvious extra path exists.
 
 The negative control passes only when green tests plus an extra path are treated as scope drift. Remove the disposable worktree during reset; do not inject this fixture into a valuable checkout.
@@ -253,7 +254,7 @@ Run this once for Group C with a task whose deliverable is split across at least
 1. Define one shared contract, explicit dependency order, `integration_worktree`, `integration_owner`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and the Terra-review trigger before dispatch.
 2. Make each batch pass its own acceptance and any assigned component audit.
 3. Integrate batches incrementally into the clean integration worktree and run the narrow cross-batch check after each merge or wave.
-4. Confirm the integration worktree is clean and the combined tracked plus untracked path set is contained in `integration_paths_allow`.
+4. Confirm the integration worktree is clean and the combined tracked, standard untracked, and ignored untracked path set is contained in `integration_paths_allow`.
 5. Run complete integration acceptance against the final combined commit and, when triggered, run one final Terra audit on that state.
 6. Confirm the coordinator rejects whole-task `PASS` if final scope or combined-state acceptance fails, even when every component passed independently.
 7. Confirm the failure is reduced to the earliest failing merge or wave and routed to Luna, Terra, Sol, or the user according to cause and authority.
@@ -385,7 +386,7 @@ If time is limited:
 
 1. Run **one L1** and **one L2** task.
 2. Compare only **A (Sol)** vs **C (Lean)**.
-3. Record: turns, escalations, acceptance pass/fail, quality total, `git diff --stat`, tracked path list, and untracked path list.
+3. Record: turns, escalations, acceptance pass/fail, quality total, `git diff --stat`, tracked path list, standard untracked path list, and ignored untracked path list.
 
 You should still be able to answer:
 

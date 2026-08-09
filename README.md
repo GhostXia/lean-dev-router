@@ -90,11 +90,12 @@ The primary scope control is still **Sol's Todo/DISPATCH decomposition plus prec
 
 For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while a baseline commit plus repository-relative `paths_allow` defines what may change. Sol supplies both for routed batches; the parent supplies both for a direct Luna fast path.
 
-Before accepting Luna's `PASS`, the current coordinator—Sol or the direct parent—independently checks both tracked and untracked paths:
+Before accepting Luna's `PASS`, the current coordinator—Sol or the direct parent—independently checks tracked, standard untracked, and ignored untracked paths:
 
 ```bash
 git diff --name-only --no-renames <baseline> --
 git ls-files --others --exclude-standard
+git ls-files --others --ignored --exclude-standard
 ```
 
 If any path falls outside `paths_allow`, Luna's original handoff remains part of the evidence, but its `PASS` is not accepted. Record `FAILURE: scope`; return obvious drive-by changes to Luna for trimming, and use Terra only when an extra path's technical necessity is unclear. Sol may explicitly amend or split the batch only within the fixed objective and acceptance criteria. Changes to user-owned scope or acceptance still use the user decision gate.
@@ -109,7 +110,7 @@ Before dispatch, Sol defines shared contracts, dependency order, `integration_wo
 
 Sol coordinates without modifying the integration tree. One Luna acts as `integration_owner` and combines accepted commits in dependency order; a parent fallback may perform only conflict-free mechanical merges. Conflict resolution or compatibility edits become a new bounded Luna write batch. Integrate incrementally, running narrow cross-batch checks after each dependent batch or independent wave.
 
-Before whole-task `PASS`, require a clean integration worktree and verify that every tracked path from `integration_baseline` to the combined commit plus every untracked path is covered by `integration_paths_allow`. Record that result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`.
+Before whole-task `PASS`, require a clean integration worktree and verify that every tracked path from `integration_baseline` to the combined commit plus every standard and ignored untracked path is covered by `integration_paths_allow`. Enumerate the two untracked classes with `git ls-files --others --exclude-standard` and `git ls-files --others --ignored --exclude-standard`. Record that result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`.
 
 A final Terra audit of the combined state is mandatory when the user requested independent verification, two or more component batches received Terra verification, or integration crosses a material security, data, concurrency, compatibility, migration, or public-contract boundary. Separate component audits never substitute for a required integration audit.
 
@@ -311,11 +312,12 @@ SUMMARY: one concise sentence
 
 每个 **Luna 写入任务**都必须区分读取上下文与写入授权：`relevant paths` 可以读取，而 baseline commit 与仓库相对 `paths_allow` 才定义允许改动的路径。路由批次由 Sol 提供两项字段，直接 Luna 快路径由父会话提供。
 
-接受 Luna 的 `PASS` 前，当前协调者——Sol 或直接父会话——必须独立检查 tracked 与 untracked 路径：
+接受 Luna 的 `PASS` 前，当前协调者——Sol 或直接父会话——必须独立检查 tracked、普通 untracked 与 ignored untracked 路径：
 
 ```bash
 git diff --name-only --no-renames <baseline> --
 git ls-files --others --exclude-standard
+git ls-files --others --ignored --exclude-standard
 ```
 
 只要存在 `paths_allow` 之外的路径，就保留 Luna 的原始交接作为证据，但不得接受其 `PASS`；使用 `FAILURE: scope` 记录结果。明显的顺手改动直接退回 Luna 裁剪，只有额外路径的技术必要性不明确时才调用 Terra。Sol 仅可在既定目标和验收标准内显式修订或拆分批次；涉及用户专属范围或验收变化时仍进入用户决策门。
@@ -330,7 +332,7 @@ git ls-files --others --exclude-standard
 
 Sol 只负责协调，不修改集成树。由一个 Luna 担任 `integration_owner`，按依赖顺序组合已接受提交；父会话 fallback 只能执行无冲突的机械合入。冲突解决或兼容性编辑必须成为新的、有边界的 Luna 写入批次。采用增量集成，每个依赖批次或独立波次后运行最小必要的跨批检查。
 
-返回整体任务 `PASS` 前，必须确认集成工作树干净，并检查从 `integration_baseline` 到组合提交的全部 tracked 路径以及全部 untracked 路径均包含在 `integration_paths_allow` 中。以 `path: N/A (scope-check)` 记录该结果，再以 `path: N/A (integration-check)` 记录组合提交、集成顺序和完整验收结果。
+返回整体任务 `PASS` 前，必须确认集成工作树干净，并检查从 `integration_baseline` 到组合提交的全部 tracked 路径以及普通与 ignored untracked 路径均包含在 `integration_paths_allow` 中。分别使用 `git ls-files --others --exclude-standard` 和 `git ls-files --others --ignored --exclude-standard` 枚举两类 untracked 路径。以 `path: N/A (scope-check)` 记录该结果，再以 `path: N/A (integration-check)` 记录组合提交、集成顺序和完整验收结果。
 
 用户要求独立验证、两个或更多组件批次接受了 Terra 验证，或集成跨越重大安全、数据、并发、兼容性、迁移或公共契约边界时，必须对组合状态进行最终 Terra 审计。需要集成审计时，各组件分别通过审计不能替代它。
 

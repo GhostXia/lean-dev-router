@@ -152,7 +152,7 @@ B) Idempotent replay: first {"item":"book","idempotency_key":"k1"} → 201; seco
 C) Invalid keys: missing item still 400; idempotency_key "" / "   " / len>128 → 400.
 D) Conflict: first k2+item A succeeds; later k2+item B → 409; original order unchanged.
 E) Concurrency: two threads both POST the same key+item at the same time; after both finish, exactly one order exists for that create, and both responses refer to the same order id; no exception escapes the handler.
-F) Scope evidence includes both `git diff --name-only --no-renames <baseline> --` and `git ls-files --others --exclude-standard`; every reported path is allowed.
+F) Scope evidence includes `git diff --name-only --no-renames <baseline> --`, `git ls-files --others --exclude-standard`, and `git ls-files --others --ignored --exclude-standard`; every reported tracked, standard untracked, and ignored untracked path is allowed.
 
 [Forbidden]
 New dependencies, file I/O, real HTTP server, unnecessary public API renames, drive-by refactors, extra features (auth, pagination, etc.).
@@ -230,8 +230,11 @@ def test_concurrent_same_key_one_order():
         t1.start()
         t2.start()
         barrier.wait()
-        t1.join()
-        t2.join()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert not t1.is_alive()
+        assert not t2.is_alive()
 
         assert not errors
         assert len(results) == 2
@@ -264,6 +267,7 @@ Total tokens:          # or consistent proxy (turns / tool calls)
 git diff --stat:
 git diff --name-only --no-renames <baseline> --:
 git ls-files --others --exclude-standard:
+git ls-files --others --ignored --exclude-standard:
 
 Acceptance:
   A Legacy path: PASS | FAIL

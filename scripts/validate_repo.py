@@ -15,14 +15,38 @@ ERRORS: list[str] = []
 
 
 def error(message: str) -> None:
+    """Record one validation failure without aborting the remaining checks."""
     ERRORS.append(message)
 
 
 def read(relative: str) -> str:
+    """Read one repository-relative UTF-8 text file."""
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
+def require_instruction_line(
+    relative: str,
+    instructions: str,
+    anchor: str,
+    required_terms: tuple[str, ...],
+) -> None:
+    """Require route controls to coexist in the instruction line they govern."""
+    line = next(
+        (candidate for candidate in instructions.splitlines() if anchor in candidate),
+        None,
+    )
+    if line is None:
+        error(f"{relative}: missing instruction section anchored by {anchor!r}")
+        return
+    for term in required_terms:
+        if term not in line:
+            error(
+                f"{relative}: instruction section {anchor!r} is missing {term!r}"
+            )
+
+
 def validate_agents() -> None:
+    """Validate Agent TOML metadata and route-specific instruction contracts."""
     expected = {
         "agents/luna-worker.toml": ("luna_worker", "gpt-5.6-luna", "max", None),
         "agents/sol-planner.toml": ("sol_planner", "gpt-5.6-sol", "medium", None),
@@ -60,9 +84,38 @@ def validate_agents() -> None:
             error(f"{relative}: developer_instructions is empty")
         if "语言 / Language" not in instructions:
             error(f"{relative}: bilingual language rule is missing")
+        if name == "luna_worker":
+            require_instruction_line(
+                relative,
+                instructions,
+                "Every write task",
+                (
+                    "baseline commit",
+                    "paths_allow",
+                    "direct fast path",
+                ),
+            )
+            require_instruction_line(
+                relative,
+                instructions,
+                "Before returning PASS",
+                ("git ls-files --others --ignored --exclude-standard",),
+            )
+        elif name == "terra_auditor":
+            require_instruction_line(
+                relative,
+                instructions,
+                "When assigned an integration audit",
+                (
+                    "exact combined commit",
+                    "integration_acceptance",
+                    "component-level audit PASS",
+                ),
+            )
 
 
 def validate_markdown() -> None:
+    """Validate Markdown fences, Python examples, and local links."""
     link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     for path in ROOT.rglob("*.md"):
         relative = path.relative_to(ROOT).as_posix()
@@ -108,6 +161,7 @@ def validate_markdown() -> None:
 
 
 def validate_skill_and_manifest() -> None:
+    """Validate the Skill frontmatter, protocol controls, and UI manifest."""
     skill = read(".agents/skills/lean-dev-router/SKILL.md")
     if not skill.startswith("---\n"):
         error("SKILL.md: missing YAML frontmatter")
@@ -118,6 +172,7 @@ def validate_skill_and_manifest() -> None:
         "integration_baseline",
         "integration_paths_allow",
         "integration_acceptance",
+        "git ls-files --others --ignored --exclude-standard",
     ):
         if required not in skill:
             error(f"SKILL.md: missing required protocol text {required!r}")
@@ -129,24 +184,33 @@ def validate_skill_and_manifest() -> None:
 
 
 def validate_repository_contract() -> None:
+    """Validate cross-file repository contracts and license text."""
     required_text = {
         "README.md": (
             "path: N/A (batch coverage)",
             "integration_owner",
             "integration_paths_allow",
+            "git ls-files --others --ignored --exclude-standard",
             "Historical evidence note:",
             "历史证据说明：",
         ),
-        "agents/luna-worker.toml": ("direct fast path", "直接快路径"),
-        "agents/sol-planner.toml": ("integration_owner", "integration_paths_allow"),
-        "agents/terra-auditor.toml": ("read-only sandbox", "只读 sandbox"),
+        "agents/sol-planner.toml": (
+            "integration_owner",
+            "integration_paths_allow",
+            "git ls-files --others --ignored --exclude-standard",
+        ),
         "lean-dev-router-self-test-guide.md": (
             "integration_owner",
             "tracked/untracked scope evidence",
+            "git ls-files --others --ignored --exclude-standard",
         ),
         "lean-dev-router-l3-idempotent-orders-task.md": (
             "threading.Barrier(3)",
             "git ls-files --others --exclude-standard",
+            "git ls-files --others --ignored --exclude-standard",
+            "join(timeout=5)",
+            "assert not t1.is_alive()",
+            "assert not t2.is_alive()",
         ),
     }
     for relative, snippets in required_text.items():
@@ -160,6 +224,7 @@ def validate_repository_contract() -> None:
 
 
 def main() -> int:
+    """Run every repository validator and return a process exit code."""
     validate_agents()
     validate_markdown()
     validate_skill_and_manifest()
