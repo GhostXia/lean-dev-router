@@ -85,6 +85,8 @@ Unrelated refactors, scope expansion, drive-by cleanup.
 Starting commit hash: <hash>
 ```
 
+For Group C write tasks, the baseline commit and allowed paths become each Sol-coordinated Luna batch's `baseline` and `paths_allow`. Paths needed only for reading remain context and do not become write authorization.
+
 ### Example (L2)
 
 ```text
@@ -206,6 +208,8 @@ While the run proceeds, log:
 - whether an escalation occurred
 - whether each handoff followed `lean-dev-router/v1`
 - whether handoffs looked compact / normal / verbose
+- whether Sol used Todo/`DISPATCH` to produce independently verifiable, path-bounded batches without needless fragmentation
+- for multi-batch deliverables, whether Sol declared shared contracts, integration order, one clean integration state, and final integration acceptance
 - repeated file exploration or duplicated analysis
 
 ### Step 3 — Accept or reject
@@ -215,14 +219,43 @@ Run the acceptance commands from the packet. Pass/fail must come from commands, 
 ```bash
 git status --short
 git diff --stat <baseline-commit>
+git diff --name-only --no-renames <baseline-commit> --
+git ls-files --others --exclude-standard
 # then the acceptance commands from the packet
 ```
 
-Include untracked files in the scope review; `git diff --stat` alone does not show them.
+For each Group C Luna write batch, verify every tracked and untracked path is covered by its `paths_allow`. Do not accept a reported `PASS` when an extra path exists; record `FAILURE: scope` and the extra paths. Do not silently ignore snapshots, lockfiles, generated files, or formatter output. `git diff --stat` alone is insufficient because it does not show untracked files.
+
+For a Group C task with two or more write batches, treat each component `PASS` as batch-local. Integrate accepted batches into one clean worktree in dependency order, record the exact combined commit, and run `integration_acceptance` against that state. If Terra validation is part of the route, assign a final integration audit against the combined commit; separate component audits are insufficient. Record this repository-wide evidence as `path: N/A (integration-check)`.
 
 ### Step 4 — Score quality
 
 Fill the six quality dimensions and write a one-line note if anything failed.
+
+### Step 4a — Negative scope-drift control
+
+Run this once for Group C in a disposable worktree to verify the gate itself:
+
+1. Complete a write batch whose acceptance commands pass and whose declared `paths_allow` contains only the intended files.
+2. Add one harmless tracked or untracked fixture outside `paths_allow` without changing the acceptance result.
+3. Confirm the acceptance commands still pass.
+4. Run the tracked and untracked path checks from Step 3.
+5. Require the coordinator to reject clean `PASS`, record `FAILURE: scope`, and identify the fixture path. Terra must not be called merely because an obvious extra path exists.
+
+The negative control passes only when green tests plus an extra path are treated as scope drift. Remove the disposable worktree during reset; do not inject this fixture into a valuable checkout.
+
+### Step 4b — Multi-batch integration control
+
+Run this once for Group C with a task whose deliverable is split across at least two isolated write batches:
+
+1. Define one shared contract, explicit dependency order, `integration_worktree`, and `integration_acceptance` before dispatch.
+2. Make each batch pass its own acceptance and any assigned component audit.
+3. Integrate batches incrementally into the clean integration worktree and run the narrow cross-batch check after each merge or wave.
+4. Run complete integration acceptance against the final combined commit.
+5. Confirm the coordinator rejects whole-task `PASS` if the combined state fails, even when every component passed independently.
+6. Confirm the failure is reduced to the earliest failing merge or wave and routed to Luna, Terra, Sol, or the user according to cause and authority.
+
+The control passes only when component success and integration success are recorded separately and only combined-state evidence can close the whole task.
 
 ### Step 5 — Reset
 
@@ -336,6 +369,7 @@ Keep failed acceptance checks and quality regressions visible in the summary; do
 | L3: Many escalations; cost near Sol | Hard decisions still need Sol; savings may be modest |
 | Lean fails acceptance while Sol passes | Quality regression risk for that task class |
 | Luna cheapest but fails tests / expands scope | Cheap model without routing is not free in quality terms |
+| Scope gate rarely triggers and no extra paths appear | Sol decomposition and Luna compliance are working; keep the gate as a low-cost audit signal |
 | Handoffs are long / full transcripts leaked | Lean policy not being followed; treat as process failure |
 
 **Do not average away failures.** A single L3 regression can matter more than average L1 savings.
