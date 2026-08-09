@@ -1,6 +1,6 @@
 ---
 name: lean-dev-router
-description: Route project development through one sol_planner coordinator and complexity-scaled pools of luna_worker and terra_auditor agents, with compact handoffs and parallel execution for independent work. Use for implementation, fixes, refactors, planning, audits, or code review when token- or latency-efficient subagent coordination is desired.
+description: Route project development through one sol_planner coordinator by default and complexity-scaled pools of luna_worker and terra_auditor agents, with compact handoffs and parallel execution for independent work. Use for implementation, fixes, refactors, planning, audits, or code review when token- or latency-efficient subagent coordination is desired.
 ---
 
 # Lean Dev Router
@@ -32,20 +32,20 @@ SUMMARY: one concise sentence
 - `PASS` means the current role's stage is complete; `BLOCKED` means required information, authority, or dependency is unavailable; `ESCALATE` means another role must act. / `PASS` 表示当前角色阶段完成；`BLOCKED` 表示缺少必要信息、权限或依赖；`ESCALATE` 表示需要其他角色继续处理。
 - `FAILURE` is `none` for `PASS`; otherwise choose one primary category. / `PASS` 时 `FAILURE` 必须为 `none`；其他状态只选择一个主要失败类别。
 - Every repository claim must bind to a concrete relative path and include a short diff summary or command result. For planning-only work with no repository artifact, use `path: N/A (planning-only)` and explain why; never invent a path. / 每个仓库结论都必须绑定具体相对路径，并附简短 diff 摘要或命令结果。纯规划且没有仓库文件时使用 `path: N/A (planning-only)` 并解释原因，不得伪造路径。
-- `NEXT` is mandatory and must name the exact next owner. If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`. / `NEXT` 必须填写并明确下一个负责人。交接缺字段或证据时不得自行推断成功，应返回一次紧凑的修正请求，并使用 `STATUS: BLOCKED`、`FAILURE: verification`。
+- `NEXT` is mandatory and names the role the current coordinator should dispatch next. A delegated result always returns to the session that spawned it; Sol performs the named route when present, otherwise the parent does. If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`. / `NEXT` 必须填写，表示当前协调者下一步应派发的角色。委派结果始终返回启动它的会话；存在 Sol 时由 Sol 执行该路由，否则由父会话执行。交接缺字段或证据时不得自行推断成功，应返回一次紧凑的修正请求，并使用 `STATUS: BLOCKED`、`FAILURE: verification`。
 
 ## Codex execution mode / Codex 执行方式
 
 - Default to native Codex subagents using the configured custom Agent TOML files. For a clear bounded task, call one `luna_worker` directly. For complex, ambiguous, or decomposable work, call one `sol_planner` by default and let it partition, delegate, wait, and consolidate. / 默认使用 Codex 原生 subagent 和已配置的 Agent TOML 文件。明确且边界清晰的任务直接调用一个 `luna_worker`；复杂、模糊或可拆分任务默认调用一个 `sol_planner`，由其分解、委派、等待和归并。
-- Let the single Sol coordinator run multiple Luna and Terra workers in parallel when their assignments are independent. Parallel Luna writes require separate worktrees or otherwise isolated branches; never let multiple writers modify the same worktree. / 当任务相互独立时，由单个 Sol 协调者并行运行多个 Luna 和 Terra。并行 Luna 写入必须使用独立 worktree 或其他隔离分支；不得让多个写入者修改同一工作区。
+- Let the default Sol coordinator run multiple Luna and Terra workers in parallel when their assignments are independent. Give every parallel Luna writer a dedicated worktree or independent checkout on its own branch; a branch alone is not write isolation. Read-only Terra workers may share a checkout. / 当任务相互独立时，由默认的 Sol 协调者并行运行多个 Luna 和 Terra。每个并行写入的 Luna 必须使用独立 worktree 或独立 checkout，并绑定各自分支；只有分支不构成写入隔离。只读 Terra 可以共享 checkout。
 - Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v1`. / 在有依赖或写入的交接前，确认目标 Agent 已加载、模型和思考强度生效，且首次结果遵循 `lean-dev-router/v1`。
 - When available, check `codex --version` before relying on native routing; in the CLI use `/agent` to inspect agent threads. / 条件允许时，在依赖原生路由前检查 `codex --version`；CLI 中使用 `/agent` 检查 Agent 线程。
-- If a Sol session cannot spawn nested workers, the parent acts only as a mechanical relay: execute Sol's exact worker manifest, return compact worker results to the same Sol, and let Sol make all routing and consolidation decisions. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest and isolated worktrees for writes. / 如果 Sol 会话不能嵌套启动 worker，父会话只做机械中继：严格执行 Sol 的 worker 清单，将紧凑结果送回同一个 Sol，并由 Sol 完成所有路由与归并决策。原生调用完全不可用时，使用相同清单启动独立 Codex session，写入任务使用隔离 worktree。
+- If a Sol session cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` and a compact `DISPATCH` manifest in `EVIDENCE`; each worker entry must contain `id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`. The parent executes the manifest mechanically and returns compact results to the same Sol for consolidation. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest. / 如果 Sol 会话不能嵌套启动 worker，应返回 `BLOCKED/dependency/NEXT parent`，并在 `EVIDENCE` 中提供紧凑的 `DISPATCH` 清单；每个 worker 条目必须包含 `id`、`role`、`scope`、`worktree`（共享只读任务使用 `N/A`）、`depends_on` 和 `acceptance`。父会话机械执行清单，再将紧凑结果送回同一个 Sol 归并。原生调用完全不可用时，使用相同清单启动独立 Codex session。
 - Codex's native background-agent UI is still a native subagent workflow. Treat unrelated background processes or sessions as fallback, not as equivalent parent-child routing. / Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进程或独立 session 只能作为 fallback，不能视为等价的父子路由。
 
 ## Worker scaling and fan-out / Worker 扩缩与分发
 
-- Use one `sol_planner` per routed task by default. Sol chooses worker count, role mix, ordering, and concurrency from task size, volume, independence, dependency depth, and risk. Only an explicit user instruction may enable multiple Sol coordinators; give each one a non-overlapping orchestration scope. / 每个路由任务默认使用一个 `sol_planner`。Sol 根据任务规模、数量、独立性、依赖深度和风险决定 worker 数量、角色组合、顺序及并发。只有用户明确指令才可启用多个 Sol，并必须为每个 Sol 分配互不重叠的调度范围。
+- Use one `sol_planner` per routed task by default. Sol chooses worker count, role mix, ordering, and concurrency from task size, volume, independence, dependency depth, and risk. Only an explicit user instruction may enable multiple Sol coordinators; the parent creates them with non-overlapping orchestration scopes, and no Sol may spawn a peer Sol. / 每个路由任务默认使用一个 `sol_planner`。Sol 根据任务规模、数量、独立性、依赖深度和风险决定 worker 数量、角色组合、顺序及并发。只有用户明确指令才可启用多个 Sol；由父会话创建它们并分配互不重叠的调度范围，任何 Sol 都不得启动同级 Sol。
 - Default to `token-first` unless the user prioritizes elapsed time. Use requested concurrent worker caps of 3 for `token-first`, 6 for `balanced`, and 10 for `latency-first`; the cap covers Luna and Terra combined and is a routing heuristic, not a runtime guarantee. / 用户未强调耗时时默认 `token-first`。并发 worker 请求上限为：`token-first` 3 个、`balanced` 6 个、`latency-first` 10 个；上限包含 Luna 与 Terra 总数，属于调度启发式，不是运行时保证。
 - Parallelize independent read, implementation, test, or review batches. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then adjust for complexity and risk. Keep dependent stages sequential; use disjoint waves when fewer workers start. / 对相互独立的读取、实现、测试或审查批次进行并行。对相对均匀的项目集合，先使用 `min(模式上限, ceil(项目数 / 30))`，再按复杂度和风险调整。有依赖的阶段保持串行；可用 worker 较少时使用互不重叠的波次。
 - Give every worker an exact disjoint assignment, fixed constraints, acceptance criteria, relevant paths, a batch identifier, and the same output schema. For item batches, require first `EVIDENCE` as `path: N/A (batch coverage)` with assigned versus processed identifiers. / 为每个 worker 提供精确且互不重叠的任务、固定约束、验收标准、相关路径、批次标识和统一输出结构。项目批次的首条 `EVIDENCE` 必须使用 `path: N/A (batch coverage)` 并记录已分配与已处理标识。
@@ -78,7 +78,7 @@ Pass only:
 - attempted fixes, if any;
 - the single decision or action needed next.
 
-Do not forward full transcripts, repeated context, complete logs, or broad repository dumps. Only the single `sol_planner` may orchestrate Luna and Terra workers.
+Do not forward full transcripts, repeated context, complete logs, or broad repository dumps. Only a parent-created `sol_planner` may orchestrate Luna and Terra workers.
 
 ## Stop
 
