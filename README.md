@@ -76,13 +76,28 @@ SUMMARY: one concise sentence
 
 **Field Semantics:**
 
-- `EVIDENCE` — must bind repository claims to a concrete path + short diff summary or command result
+- `EVIDENCE` — must bind repository claims to a concrete path + short diff summary or command result; repository-wide allow-list results use `path: N/A (scope-check)`
 - `PASS` — current stage complete
 - `BLOCKED` — required info, authority, or dependency unavailable
 - `ESCALATE` — another role must act
 - `NEXT` — role the coordinator should dispatch next; results always return to the spawning session
 
 > 🛡️ Sol performs the route when present, otherwise the parent does. The parent must **not** infer success from an incomplete handoff.
+
+### 🧯 Scope Drift Soft Gate
+
+For every Sol-coordinated **Luna write batch**, distinguish read context from write authorization: `relevant paths` may be inspected, while a baseline commit plus repository-relative `paths_allow` defines what may change.
+
+Before accepting Luna's `PASS`, the coordinator independently checks both tracked and untracked paths:
+
+```bash
+git diff --name-only --no-renames <baseline> --
+git ls-files --others --exclude-standard
+```
+
+If any path falls outside `paths_allow`, Luna's original handoff remains part of the evidence, but its `PASS` is not accepted. Record `FAILURE: scope`; return obvious drive-by changes to Luna for trimming, and use Terra only when an extra path's technical necessity is unclear. Sol may explicitly amend or split the batch only within the fixed objective and acceptance criteria. Changes to user-owned scope or acceptance still use the user decision gate.
+
+There is no automatic ignore list: expected snapshots, lockfiles, generated files, or formatter output must be authorized in advance. This check is orthogonal to CI—green tests do not prove that a batch stayed within its delegated write set. An in-scope `PASS` does **not** require Terra review.
 
 ### 🚪 User Decision Gate
 
@@ -118,7 +133,7 @@ Native Codex subagents are the default. Send a clear bounded task directly to on
 3. Its first result follows `lean-dev-router/v1`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`; Luna write entries also contain `baseline` and `paths_allow`.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -257,13 +272,28 @@ SUMMARY: one concise sentence
 
 **字段语义：**
 
-- `EVIDENCE` — 必须将仓库结论绑定到具体路径，并附简短 diff 摘要或命令结果
+- `EVIDENCE` — 必须将仓库结论绑定到具体路径，并附简短 diff 摘要或命令结果；仓库级 allow-list 结果使用 `path: N/A (scope-check)`
 - `PASS` — 当前阶段完成
 - `BLOCKED` — 缺少必要信息、权限或依赖
 - `ESCALATE` — 需要其他角色继续处理
 - `NEXT` — 当前协调者下一步应派发的角色，结果仍返回启动该 Agent 的会话
 
 > 🛡️ 存在 **Sol** 时由 **Sol** 执行，否则由父会话执行。主控**不得**从缺少字段或证据的交接中自行推断成功。
+
+### 🧯 范围漂移软门
+
+每个由 Sol 调度的 **Luna 写入批次**都必须区分读取上下文与写入授权：`relevant paths` 可以读取，而 baseline commit 与仓库相对 `paths_allow` 才定义允许改动的路径。
+
+接受 Luna 的 `PASS` 前，协调者必须独立检查 tracked 与 untracked 路径：
+
+```bash
+git diff --name-only --no-renames <baseline> --
+git ls-files --others --exclude-standard
+```
+
+只要存在 `paths_allow` 之外的路径，就保留 Luna 的原始交接作为证据，但不得接受其 `PASS`；使用 `FAILURE: scope` 记录结果。明显的顺手改动直接退回 Luna 裁剪，只有额外路径的技术必要性不明确时才调用 Terra。Sol 仅可在既定目标和验收标准内显式修订或拆分批次；涉及用户专属范围或验收变化时仍进入用户决策门。
+
+默认没有自动忽略清单：预期的快照、锁文件、生成文件或格式化输出都必须提前授权。该检查与 CI 正交——测试全绿不能证明批次没有超出写入授权。范围内的 `PASS` **不要求** Terra 审查。
 
 ### 🚪 用户决策门
 
@@ -299,7 +329,7 @@ NEXT: parent
 3. 首次结果遵循 `lean-dev-router/v1`
 
 如果 **Sol** 无法嵌套启动 worker，应返回 `BLOCKED/dependency/NEXT parent`，并在 `EVIDENCE` 中提供 `DISPATCH` 清单。每个 worker 条目包含：
-`id`、`role`、`scope`、`worktree`（共享只读任务使用 `N/A`）、`depends_on` 和 `acceptance`。
+`id`、`role`、`scope`、`worktree`（共享只读任务使用 `N/A`）、`depends_on` 和 `acceptance`；Luna 写入条目还包含 `baseline` 和 `paths_allow`。
 
 父会话机械执行后，将紧凑结果送回同一个 **Sol**。原生调用完全不可用时，使用相同清单启动独立 Codex session。
 

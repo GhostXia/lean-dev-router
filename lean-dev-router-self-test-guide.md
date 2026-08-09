@@ -85,6 +85,8 @@ Unrelated refactors, scope expansion, drive-by cleanup.
 Starting commit hash: <hash>
 ```
 
+For Group C write tasks, the baseline commit and allowed paths become each Sol-coordinated Luna batch's `baseline` and `paths_allow`. Paths needed only for reading remain context and do not become write authorization.
+
 ### Example (L2)
 
 ```text
@@ -215,14 +217,28 @@ Run the acceptance commands from the packet. Pass/fail must come from commands, 
 ```bash
 git status --short
 git diff --stat <baseline-commit>
+git diff --name-only --no-renames <baseline-commit> --
+git ls-files --others --exclude-standard
 # then the acceptance commands from the packet
 ```
 
-Include untracked files in the scope review; `git diff --stat` alone does not show them.
+For each Group C Luna write batch, verify every tracked and untracked path is covered by its `paths_allow`. Do not accept a reported `PASS` when an extra path exists; record `FAILURE: scope` and the extra paths. Do not silently ignore snapshots, lockfiles, generated files, or formatter output. `git diff --stat` alone is insufficient because it does not show untracked files.
 
 ### Step 4 — Score quality
 
 Fill the six quality dimensions and write a one-line note if anything failed.
+
+### Step 4a — Negative scope-drift control
+
+Run this once for Group C in a disposable worktree to verify the gate itself:
+
+1. Complete a write batch whose acceptance commands pass and whose declared `paths_allow` contains only the intended files.
+2. Add one harmless tracked or untracked fixture outside `paths_allow` without changing the acceptance result.
+3. Confirm the acceptance commands still pass.
+4. Run the tracked and untracked path checks from Step 3.
+5. Require the coordinator to reject clean `PASS`, record `FAILURE: scope`, and identify the fixture path. Terra must not be called merely because an obvious extra path exists.
+
+The negative control passes only when green tests plus an extra path are treated as scope drift. Remove the disposable worktree during reset; do not inject this fixture into a valuable checkout.
 
 ### Step 5 — Reset
 
