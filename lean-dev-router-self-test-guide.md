@@ -85,7 +85,7 @@ Unrelated refactors, scope expansion, drive-by cleanup.
 Starting commit hash: <hash>
 ```
 
-For Group C write tasks, the baseline commit and allowed paths become each Sol-coordinated Luna batch's `baseline` and `paths_allow`. Paths needed only for reading remain context and do not become write authorization.
+For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C these become each routed Luna batch's `baseline` and `paths_allow`; in a direct-Luna run the parent supplies the same fields. Paths needed only for reading remain context and do not become write authorization.
 
 ### Example (L2)
 
@@ -114,7 +114,7 @@ abc1234
 
 ## 4.1 Codex Runtime and Routing Controls
 
-For Group C, use native Codex subagents as the default path. Ask the parent Codex session to spawn the configured role and keep the route sequential. Use parallel agents only for independent read-only work; do not let multiple agents write to the same worktree.
+For Group C, use native Codex subagents as the default path. Keep dependent stages sequential. Independent read-only work may share a checkout; independent Luna writes may run in parallel only when each writer has a dedicated worktree or independent checkout and branch. Never let multiple agents write to the same worktree.
 
 Before a dependent or write handoff, verify that the intended Agent loaded, its configured model and reasoning effort are honored, and the first result follows `lean-dev-router/v1`. In the CLI, use `/agent` to inspect agent threads; when available, record `codex --version` before the run.
 
@@ -209,7 +209,7 @@ While the run proceeds, log:
 - whether each handoff followed `lean-dev-router/v1`
 - whether handoffs looked compact / normal / verbose
 - whether Sol used Todo/`DISPATCH` to produce independently verifiable, path-bounded batches without needless fragmentation
-- for multi-batch deliverables, whether Sol declared shared contracts, integration order, one clean integration state, and final integration acceptance
+- for multi-batch deliverables, whether Sol declared shared contracts, integration owner/order/baseline/allow-list, one clean integration state, final integration acceptance, and the Terra-review trigger
 - repeated file exploration or duplicated analysis
 
 ### Step 3 — Accept or reject
@@ -226,7 +226,9 @@ git ls-files --others --exclude-standard
 
 For each Group C Luna write batch, verify every tracked and untracked path is covered by its `paths_allow`. Do not accept a reported `PASS` when an extra path exists; record `FAILURE: scope` and the extra paths. Do not silently ignore snapshots, lockfiles, generated files, or formatter output. `git diff --stat` alone is insufficient because it does not show untracked files.
 
-For a Group C task with two or more write batches, treat each component `PASS` as batch-local. Integrate accepted batches into one clean worktree in dependency order, record the exact combined commit, and run `integration_acceptance` against that state. If Terra validation is part of the route, assign a final integration audit against the combined commit; separate component audits are insufficient. Record this repository-wide evidence as `path: N/A (integration-check)`.
+For a Group C task with two or more write batches, treat each component `PASS` as batch-local. Sol assigns one Luna as `integration_owner`; a parent fallback may perform only conflict-free mechanical merges. Integrate accepted batches into one clean worktree in dependency order, record the exact combined commit, and run `integration_acceptance` against that state. Verify tracked paths from `integration_baseline` to the combined commit plus all untracked paths against `integration_paths_allow`, the exact union of accepted batch allow-lists plus any separately authorized integration-repair paths. Record final scope as `path: N/A (scope-check)` and combined-state acceptance as `path: N/A (integration-check)`.
+
+Assign a final Terra integration audit when the user requested independent verification, two or more component batches received Terra verification, or integration crosses a material security, data, concurrency, compatibility, migration, or public-contract boundary. Separate component audits are insufficient when this trigger applies.
 
 ### Step 4 — Score quality
 
@@ -248,12 +250,13 @@ The negative control passes only when green tests plus an extra path are treated
 
 Run this once for Group C with a task whose deliverable is split across at least two isolated write batches:
 
-1. Define one shared contract, explicit dependency order, `integration_worktree`, and `integration_acceptance` before dispatch.
+1. Define one shared contract, explicit dependency order, `integration_worktree`, `integration_owner`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and the Terra-review trigger before dispatch.
 2. Make each batch pass its own acceptance and any assigned component audit.
 3. Integrate batches incrementally into the clean integration worktree and run the narrow cross-batch check after each merge or wave.
-4. Run complete integration acceptance against the final combined commit.
-5. Confirm the coordinator rejects whole-task `PASS` if the combined state fails, even when every component passed independently.
-6. Confirm the failure is reduced to the earliest failing merge or wave and routed to Luna, Terra, Sol, or the user according to cause and authority.
+4. Confirm the integration worktree is clean and the combined tracked plus untracked path set is contained in `integration_paths_allow`.
+5. Run complete integration acceptance against the final combined commit and, when triggered, run one final Terra audit on that state.
+6. Confirm the coordinator rejects whole-task `PASS` if final scope or combined-state acceptance fails, even when every component passed independently.
+7. Confirm the failure is reduced to the earliest failing merge or wave and routed to Luna, Terra, Sol, or the user according to cause and authority.
 
 The control passes only when component success and integration success are recorded separately and only combined-state evidence can close the whole task.
 
@@ -382,7 +385,7 @@ If time is limited:
 
 1. Run **one L1** and **one L2** task.
 2. Compare only **A (Sol)** vs **C (Lean)**.
-3. Record: turns, escalations, acceptance pass/fail, quality total, `git diff --stat`.
+3. Record: turns, escalations, acceptance pass/fail, quality total, `git diff --stat`, tracked path list, and untracked path list.
 
 You should still be able to answer:
 
@@ -418,7 +421,7 @@ You should still be able to answer:
 - [ ] Acceptance commands executed
 - [ ] Token or proxy metrics recorded
 - [ ] Quality scores filled
-- [ ] Diff stat recorded
+- [ ] Diff stat plus tracked/untracked scope evidence recorded
 - [ ] Repo reset to baseline
 
 **After all runs**

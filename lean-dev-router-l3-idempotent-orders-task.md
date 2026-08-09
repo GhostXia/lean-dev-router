@@ -102,7 +102,7 @@ git commit -m "baseline: orders without idempotency"
 # record the commit hash
 ```
 
-Optional: add the concurrency test skeleton from §4 to the baseline as a **failing** test so the agent must make it pass.
+Optional: add the concurrency test skeleton from §3 to the baseline as a **failing** test so the agent must make it pass.
 
 ---
 
@@ -138,6 +138,7 @@ Forbidden: any other files; no new third-party dependencies
 6) Storage:
    - You may extend the in-memory store in service/store.py (e.g. maps/locks).
    - Must be process-local only; no DB, no network, no new packages.
+   - If you add module-level idempotency state, update test setup so every test resets it deterministically.
 7) Do not break existing tests for plain create / missing item.
 8) Keep the change minimal and readable; no unrelated refactors.
 
@@ -151,7 +152,7 @@ B) Idempotent replay: first {"item":"book","idempotency_key":"k1"} → 201; seco
 C) Invalid keys: missing item still 400; idempotency_key "" / "   " / len>128 → 400.
 D) Conflict: first k2+item A succeeds; later k2+item B → 409; original order unchanged.
 E) Concurrency: two threads both POST the same key+item at the same time; after both finish, exactly one order exists for that create, and both responses refer to the same order id; no exception escapes the handler.
-F) git diff --stat only touches allowed files.
+F) Scope evidence includes both `git diff --name-only --no-renames <baseline> --` and `git ls-files --others --exclude-standard`; every reported path is allowed.
 
 [Forbidden]
 New dependencies, file I/O, real HTTP server, unnecessary public API renames, drive-by refactors, extra features (auth, pagination, etc.).
@@ -207,23 +208,38 @@ from service import store
 def test_concurrent_same_key_one_order():
     store.ORDERS.clear()
     store.NEXT_ID = 1
-    results = []
+    rounds = 25
 
-    def worker():
-        results.append(post_orders({"item": "book", "idempotency_key": "same"}))
+    for round_id in range(rounds):
+        barrier = threading.Barrier(3)
+        results = []
+        errors = []
 
-    t1 = threading.Thread(target=worker)
-    t2 = threading.Thread(target=worker)
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
+        def worker():
+            try:
+                barrier.wait()
+                results.append(post_orders({
+                    "item": "book",
+                    "idempotency_key": f"same-{round_id}",
+                }))
+            except BaseException as exc:
+                errors.append(exc)
 
-    codes = sorted(r[0] for r in results)
-    ids = [r[1]["id"] for r in results if isinstance(r[1], dict) and "id" in r[1]]
-    assert len(store.ORDERS) == 1
-    assert len(set(ids)) == 1
-    assert codes[0] in (200, 201) and codes[1] in (200, 201)
+        t1 = threading.Thread(target=worker)
+        t2 = threading.Thread(target=worker)
+        t1.start()
+        t2.start()
+        barrier.wait()
+        t1.join()
+        t2.join()
+
+        assert not errors
+        assert len(results) == 2
+        assert sorted(r[0] for r in results) == [200, 201]
+        ids = [r[1]["id"] for r in results]
+        assert len(set(ids)) == 1
+
+    assert len(store.ORDERS) == rounds
 ```
 
 ---
@@ -246,6 +262,8 @@ Output tokens:
 Total tokens:          # or consistent proxy (turns / tool calls)
 
 git diff --stat:
+git diff --name-only --no-renames <baseline> --:
+git ls-files --others --exclude-standard:
 
 Acceptance:
   A Legacy path: PASS | FAIL
@@ -340,4 +358,3 @@ Do not add this mid-run for only one group.
 ## License note
 
 This document is a test protocol only. Adapt paths and commands to your environment freely.
-```

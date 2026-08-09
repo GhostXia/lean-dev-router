@@ -29,7 +29,7 @@
 > **Token 高效** — 减少不必要的 Agent 调用与交接上下文，主会话可用更低成本模型  
 > **职责分层** — Sol 规划、Luna 实施、Terra 验证，各司其职按需升级  
 > **协议驱动** — 紧凑可解析的 `lean-dev-router/v1` 交接协议，结果可追溯可审计  
-> **并行隔离** — 每个写入 Luna 独占 worktree/branch，并发无冲突  
+> **并行隔离** — 每个写入 Luna 独占 worktree 或独立 checkout；避免工作区互相覆盖，语义冲突由集成门发现
 > **运行时无关** — 路由理论不绑定 Codex 或 GPT，可迁移至任意 Agent 运行时
 
 ---
@@ -76,7 +76,7 @@ SUMMARY: one concise sentence
 
 **Field Semantics:**
 
-- `EVIDENCE` — must bind repository claims to a concrete path + short diff summary or command result; repository-wide allow-list results use `path: N/A (scope-check)`, while combined-state validation uses `path: N/A (integration-check)`
+- `EVIDENCE` — must bind repository claims to a concrete path + short diff summary or command result; item coverage uses `path: N/A (batch coverage)`, repository-wide allow-list results use `path: N/A (scope-check)`, and combined-state validation uses `path: N/A (integration-check)`
 - `PASS` — current stage complete
 - `BLOCKED` — required info, authority, or dependency unavailable
 - `ESCALATE` — another role must act
@@ -88,9 +88,9 @@ SUMMARY: one concise sentence
 
 The primary scope control is still **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
 
-For every Sol-coordinated **Luna write batch**, distinguish read context from write authorization: `relevant paths` may be inspected, while a baseline commit plus repository-relative `paths_allow` defines what may change.
+For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while a baseline commit plus repository-relative `paths_allow` defines what may change. Sol supplies both for routed batches; the parent supplies both for a direct Luna fast path.
 
-Before accepting Luna's `PASS`, the coordinator independently checks both tracked and untracked paths:
+Before accepting Luna's `PASS`, the current coordinator—Sol or the direct parent—independently checks both tracked and untracked paths:
 
 ```bash
 git diff --name-only --no-renames <baseline> --
@@ -105,9 +105,13 @@ There is no automatic ignore list: expected snapshots, lockfiles, generated file
 
 Component success is not transitive. When two or more write batches form one deliverable, each component `PASS` closes only that batch; whole-task `PASS` requires validation of the combined state.
 
-Before dispatch, Sol defines shared contracts, dependency order, a clean `integration_worktree`, and `integration_acceptance`. Accepted batches are integrated in dependency order, preferably incrementally: run narrow cross-batch checks after each dependent batch or independent wave, then run the complete integration acceptance against the exact combined commit.
+Before dispatch, Sol defines shared contracts, dependency order, `integration_worktree`, `integration_owner`, `integration_baseline`, `integration_paths_allow`, and `integration_acceptance`. The integration allow-list starts as the exact union of accepted batch allow-lists and changes only through an authorized Luna integration-repair batch.
 
-Final evidence uses `path: N/A (integration-check)` and records the combined commit, integration order, and command results. If Terra validation is part of the plan, Terra must inspect that combined state—separate component audits do not substitute for an integration audit.
+Sol coordinates without modifying the integration tree. One Luna acts as `integration_owner` and combines accepted commits in dependency order; a parent fallback may perform only conflict-free mechanical merges. Conflict resolution or compatibility edits become a new bounded Luna write batch. Integrate incrementally, running narrow cross-batch checks after each dependent batch or independent wave.
+
+Before whole-task `PASS`, require a clean integration worktree and verify that every tracked path from `integration_baseline` to the combined commit plus every untracked path is covered by `integration_paths_allow`. Record that result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`.
+
+A final Terra audit of the combined state is mandatory when the user requested independent verification, two or more component batches received Terra verification, or integration crosses a material security, data, concurrency, compatibility, migration, or public-contract boundary. Separate component audits never substitute for a required integration audit.
 
 On failure, stop terminal success and locate the earliest failing merge or wave:
 
@@ -136,7 +140,7 @@ NEXT: parent
 
 ### 🔌 Codex Execution Mode
 
-Native Codex subagents are the default. Send a clear bounded task directly to one **Luna**. For complex, ambiguous, or decomposable work, start one **Sol** coordinator by default and let it partition, dispatch, wait for, and consolidate multiple **Luna** and **Terra** workers.
+Native Codex subagents are the default. Send a clear bounded task directly to one **Luna** only after the parent captures its baseline commit and repository-relative `paths_allow`. For complex, ambiguous, or decomposable work, start one **Sol** coordinator by default and let it partition, dispatch, wait for, and consolidate multiple **Luna** and **Terra** workers.
 
 **Key Rules:**
 
@@ -150,7 +154,7 @@ Native Codex subagents are the default. Send a clear bounded task directly to on
 3. Its first result follows `lean-dev-router/v1`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`; Luna write entries also contain `baseline` and `paths_allow`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_order`, and `integration_acceptance`.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`; Luna write entries also contain `baseline` and `paths_allow`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -170,7 +174,7 @@ Use **one Sol coordinator** for each routed task by default. Sol chooses the num
 | `balanced` | 6 | Balance elapsed time and token overhead |
 | `latency-first` | 10 | Minimize elapsed time for large independent workloads |
 
-The cap covers Luna and Terra workers combined and is a routing heuristic, not a concurrency guarantee. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then adjust for complexity and risk. Keep dependent stages sequential and use disjoint waves if fewer workers start. Each worker receives an exact non-overlapping assignment; Sol verifies complete coverage and empty intersections. Every parallel Luna writer uses a dedicated worktree or independent checkout on its own branch, with integration order decided by Sol.
+The cap covers Luna and Terra workers combined and is a routing heuristic, not a concurrency guarantee. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then adjust for complexity and risk. Keep dependent stages sequential and use disjoint waves if fewer workers start. Each worker receives an exact non-overlapping assignment; Sol verifies complete coverage and empty intersections. Every parallel Luna writer uses a dedicated worktree or independent checkout on its own branch; Sol decides integration order and assigns one Luna as integration owner.
 
 **Example:** A latency-first audit of 282 merged PRs uses **1 Sol coordinator** + **10 Terra auditors** with roughly 28–29 PRs each. Sol waits for every batch, verifies coverage, merges and deduplicates findings, then assigns high-risk or conflicting candidates to different Terra auditors for peer verification. A development task can similarly use multiple Luna workers in isolated worktrees, plus Terra workers for diagnosis or independent verification.
 
@@ -197,6 +201,8 @@ flowchart LR
 | `.agents/skills/lean-dev-router/` | The lightweight routing Skill |
 | `agents/` | Example Agent config files: `luna_worker`, `sol_planner`, `terra_auditor` |
 | `lean-dev-router-self-test-guide.md` | Controlled guide for measuring token savings, quality, and routing overhead |
+| `lean-dev-router-l3-idempotent-orders-task.md` | Reusable L3 benchmark task packet |
+| `scripts/validate_repo.py` | Dependency-free repository consistency checks used by CI |
 
 ### 🚀 Install
 
@@ -218,7 +224,7 @@ Use `$lean-dev-router` when a task benefits from this routing policy. The Skill 
 
 ### 📊 Final L3 Test Result
 
-This is a recorded run of the L3 idempotent `POST /orders` task from [`lean-dev-router-l3-idempotent-orders-task.md`](lean-dev-router-l3-idempotent-orders-task.md), using a **Luna High** controller with `$lean-dev-router`. Figures are transcribed from supplied run screenshots — not a rerun in this repository.
+This is a recorded run of the initial L3 idempotent `POST /orders` task revision at [`6d803af`](https://github.com/GhostXia/lean-dev-router/blob/6d803af52d9f651093413036226562f07da4b052/lean-dev-router-l3-idempotent-orders-task.md), using a **Luna High** controller with `$lean-dev-router`. The current reusable task packet is [`lean-dev-router-l3-idempotent-orders-task.md`](lean-dev-router-l3-idempotent-orders-task.md). Figures are transcribed from supplied run screenshots — not a rerun in this repository.
 
 ```mermaid
 pie showData title Token Volume by Model
@@ -240,10 +246,12 @@ pie showData title Token Volume by Model
 | ✅ Required Behavior | First create `201`; replay `200`; conflicting key `409`; invalid input `400` |
 | 🔒 Concurrency | `RLock` protects same-key creation; one order for concurrent duplicate submissions |
 | 🧪 Tests | `python -m pytest tests/ -q` → **9 passed** ✅ |
-| 🎯 Scope | `git diff --stat` touches only `handlers/orders.py`, `service/order.py`, `service/store.py`, `tests/test_order.py` |
+| 🎯 Scope | Screenshot showed those four tracked paths via `git diff --stat`; untracked paths were not independently recorded |
 | 📌 Baseline | `92ea4575174a163657005711057c97db97776845` |
 
 The run used **405,908** tokens outside Luna (~**8.6%** of total). This is a routed-run cost profile, not a standalone savings rate; a savings claim still requires the same-packet Sol and direct-Luna control runs described in the self-test guide.
+
+> Historical evidence note: this run predates the current tracked-plus-untracked scope gate and integration convergence gate. It must not be treated as validation of those newer controls.
 
 ---
 
@@ -289,7 +297,7 @@ SUMMARY: one concise sentence
 
 **字段语义：**
 
-- `EVIDENCE` — 必须将仓库结论绑定到具体路径，并附简短 diff 摘要或命令结果；仓库级 allow-list 结果使用 `path: N/A (scope-check)`，组合状态验证使用 `path: N/A (integration-check)`
+- `EVIDENCE` — 必须将仓库结论绑定到具体路径，并附简短 diff 摘要或命令结果；项目覆盖使用 `path: N/A (batch coverage)`，仓库级 allow-list 结果使用 `path: N/A (scope-check)`，组合状态验证使用 `path: N/A (integration-check)`
 - `PASS` — 当前阶段完成
 - `BLOCKED` — 缺少必要信息、权限或依赖
 - `ESCALATE` — 需要其他角色继续处理
@@ -301,9 +309,9 @@ SUMMARY: one concise sentence
 
 主要范围控制仍然是 **Sol 的 Todo/DISPATCH 拆分与精确的 Luna 指令**。每个写入批次都应可独立验证、路径有界、依赖明确且失败后可单独重做，但不要为了形式而过度拆分。没有 CI 时，这一点尤其重要。下面的路径检查只是**低频辅路保险丝**，不是主调度器。
 
-每个由 Sol 调度的 **Luna 写入批次**都必须区分读取上下文与写入授权：`relevant paths` 可以读取，而 baseline commit 与仓库相对 `paths_allow` 才定义允许改动的路径。
+每个 **Luna 写入任务**都必须区分读取上下文与写入授权：`relevant paths` 可以读取，而 baseline commit 与仓库相对 `paths_allow` 才定义允许改动的路径。路由批次由 Sol 提供两项字段，直接 Luna 快路径由父会话提供。
 
-接受 Luna 的 `PASS` 前，协调者必须独立检查 tracked 与 untracked 路径：
+接受 Luna 的 `PASS` 前，当前协调者——Sol 或直接父会话——必须独立检查 tracked 与 untracked 路径：
 
 ```bash
 git diff --name-only --no-renames <baseline> --
@@ -318,9 +326,13 @@ git ls-files --others --exclude-standard
 
 组件成功不具有传递性。当两个或更多写入批次共同组成一个交付物时，每个组件 `PASS` 只关闭对应批次；整体任务 `PASS` 必须验证组合后的统一状态。
 
-派发前，Sol 需要定义共享契约、依赖顺序、干净的 `integration_worktree` 和 `integration_acceptance`。已接受的批次按依赖顺序合入，并优先采用增量收敛：每个依赖批次或独立波次后运行最小必要的跨批检查，最后针对确切的组合提交运行完整集成验收。
+派发前，Sol 需要定义共享契约、依赖顺序、`integration_worktree`、`integration_owner`、`integration_baseline`、`integration_paths_allow` 和 `integration_acceptance`。集成 allow-list 初始值是已接受批次 allow-list 的精确并集，只有获得授权的 Luna 集成修复批次才能修改。
 
-最终证据使用 `path: N/A (integration-check)`，记录组合提交、集成顺序和命令结果。如果计划包含 Terra 验证，Terra 必须审查组合后的状态——各组件分别通过审计不能替代集成审计。
+Sol 只负责协调，不修改集成树。由一个 Luna 担任 `integration_owner`，按依赖顺序组合已接受提交；父会话 fallback 只能执行无冲突的机械合入。冲突解决或兼容性编辑必须成为新的、有边界的 Luna 写入批次。采用增量集成，每个依赖批次或独立波次后运行最小必要的跨批检查。
+
+返回整体任务 `PASS` 前，必须确认集成工作树干净，并检查从 `integration_baseline` 到组合提交的全部 tracked 路径以及全部 untracked 路径均包含在 `integration_paths_allow` 中。以 `path: N/A (scope-check)` 记录该结果，再以 `path: N/A (integration-check)` 记录组合提交、集成顺序和完整验收结果。
+
+用户要求独立验证、两个或更多组件批次接受了 Terra 验证，或集成跨越重大安全、数据、并发、兼容性、迁移或公共契约边界时，必须对组合状态进行最终 Terra 审计。需要集成审计时，各组件分别通过审计不能替代它。
 
 集成失败时不得宣布最终成功，并定位最早失败的合入或波次：
 
@@ -349,7 +361,7 @@ NEXT: parent
 
 ### 🔌 Codex 执行方式
 
-默认使用 Codex 原生 subagent。明确且边界清晰的任务直接交给一个 **Luna**；复杂、模糊或可拆分任务默认启动一个 **Sol** 协调者，由其分解、分配、等待和归并多个 **Luna/Terra**。
+默认使用 Codex 原生 subagent。明确且边界清晰的任务，必须先由父会话记录 baseline commit 与仓库相对 `paths_allow`，再直接交给一个 **Luna**；复杂、模糊或可拆分任务默认启动一个 **Sol** 协调者，由其分解、分配、等待和归并多个 **Luna/Terra**。
 
 **核心规则：**
 
@@ -363,7 +375,7 @@ NEXT: parent
 3. 首次结果遵循 `lean-dev-router/v1`
 
 如果 **Sol** 无法嵌套启动 worker，应返回 `BLOCKED/dependency/NEXT parent`，并在 `EVIDENCE` 中提供 `DISPATCH` 清单。每个 worker 条目包含：
-`id`、`role`、`scope`、`worktree`（共享只读任务使用 `N/A`）、`depends_on` 和 `acceptance`；Luna 写入条目还包含 `baseline` 和 `paths_allow`。多批次交付还必须声明共享契约、`integration_worktree`、`integration_order` 和 `integration_acceptance`。
+`id`、`role`、`scope`、`worktree`（共享只读任务使用 `N/A`）、`depends_on` 和 `acceptance`；Luna 写入条目还包含 `baseline` 和 `paths_allow`。多批次交付还必须声明共享契约、`integration_worktree`、`integration_owner`、`integration_order`、`integration_baseline`、`integration_paths_allow`、`integration_acceptance`，以及是否需要最终 Terra 审查。
 
 父会话机械执行后，将紧凑结果送回同一个 **Sol**。原生调用完全不可用时，使用相同清单启动独立 Codex session。
 
@@ -383,7 +395,7 @@ Codex 原生后台 Agent 界面仍属于原生 subagent 流程；其他后台进
 | `balanced` | 6 | 平衡完成时间与 Token 开销 |
 | `latency-first` | 10 | 缩短大型独立任务的完成时间 |
 
-上限包含 Luna 与 Terra 的总数，属于调度启发式，不代表客户端或账户一定具备对应并发能力。对相对均匀的项目集合，先使用 `min(模式上限, ceil(项目数 / 30))`，再按复杂度和风险调整。有依赖的阶段保持串行；可用 worker 较少时使用互不重叠的波次。每个 worker 获得精确且不重叠的任务；Sol 确认覆盖完整且交集为空。每个并行 Luna 写入者使用独立 worktree 或独立 checkout，并绑定各自分支；合并顺序由 Sol 决定。
+上限包含 Luna 与 Terra 的总数，属于调度启发式，不代表客户端或账户一定具备对应并发能力。对相对均匀的项目集合，先使用 `min(模式上限, ceil(项目数 / 30))`，再按复杂度和风险调整。有依赖的阶段保持串行；可用 worker 较少时使用互不重叠的波次。每个 worker 获得精确且不重叠的任务；Sol 确认覆盖完整且交集为空。每个并行 Luna 写入者使用独立 worktree 或独立 checkout，并绑定各自分支；Sol 决定集成顺序并指定一个 Luna 作为 integration owner。
 
 **示例：** 对 282 个已合并 PR 进行 `latency-first` 审计时，使用 **1 个 Sol 协调者** + **10 个 Terra**，每个约 28–29 个 PR。Sol 等待所有批次、检查覆盖范围、归并去重发现，再将高风险或冲突候选交给不同的 Terra 交叉验证。开发任务同样可以让多个 Luna 在隔离 worktree 中并行实现，并搭配 Terra 诊断或独立验证。
 
@@ -410,6 +422,8 @@ flowchart LR
 | `.agents/skills/lean-dev-router/` | 轻量级调度 Skill |
 | `agents/` | 示例 Agent 配置：`luna_worker`、`sol_planner`、`terra_auditor` |
 | `lean-dev-router-self-test-guide.md` | 用于在自己的代码库中对比 Token 节省、质量和调度开销的受控测试指南 |
+| `lean-dev-router-l3-idempotent-orders-task.md` | 可复用的 L3 基准测试题包 |
+| `scripts/validate_repo.py` | CI 使用的零依赖仓库一致性检查 |
 
 ### 🚀 安装
 
@@ -431,7 +445,7 @@ flowchart LR
 
 ### 📊 最终 L3 测试结果
 
-这是一次 L3 幂等 `POST /orders` 测试记录，测试题来自 [`lean-dev-router-l3-idempotent-orders-task.md`](lean-dev-router-l3-idempotent-orders-task.md)，使用 **Luna High** 主控与 `$lean-dev-router`。下列数据根据用户提供的测试截图整理，**未**在本仓库重新运行。
+这是一次 L3 幂等 `POST /orders` 测试记录，使用的是测试题初始版本 [`6d803af`](https://github.com/GhostXia/lean-dev-router/blob/6d803af52d9f651093413036226562f07da4b052/lean-dev-router-l3-idempotent-orders-task.md)，主控为 **Luna High** 并使用 `$lean-dev-router`。当前可复用题包见 [`lean-dev-router-l3-idempotent-orders-task.md`](lean-dev-router-l3-idempotent-orders-task.md)。下列数据根据用户提供的测试截图整理，**未**在本仓库重新运行。
 
 ```mermaid
 pie showData title 按模型统计的 Token 总量
@@ -453,10 +467,12 @@ pie showData title 按模型统计的 Token 总量
 | ✅ 必需行为 | 首次创建 `201`；重放 `200`；冲突 key `409`；无效输入 `400` |
 | 🔒 并发 | 使用 `RLock` 保护同 key 创建；并发重复提交最终只创建一个订单 |
 | 🧪 测试 | `python -m pytest tests/ -q` → **9 passed** ✅ |
-| 🎯 范围 | `git diff --stat` 仅涉及 `handlers/orders.py`、`service/order.py`、`service/store.py`、`tests/test_order.py` |
+| 🎯 范围 | 截图中的 `git diff --stat` 显示四个 tracked 路径；未独立记录 untracked 路径 |
 | 📌 基线 | `92ea4575174a163657005711057c97db97776845` |
 
 本次运行中，Luna 之外的模型合计消耗 **405,908** tokens，约占总量 **8.6%**。这表示本次调度运行的成本构成，不等同于独立的节省率；若要得出节省结论，仍需按照测试指南使用相同题包进行 Direct Sol 和 Direct Luna 对照测试。
+
+> 历史证据说明：该次运行早于当前 tracked + untracked 范围门与集成收敛门，不能用来证明这些较新的控制已经生效。
 
 ---
 
