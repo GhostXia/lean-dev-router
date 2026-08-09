@@ -1,6 +1,6 @@
 ---
 name: lean-dev-router
-description: Route project development through one sol_planner coordinator by default and complexity-scaled pools of luna_worker and terra_auditor agents, with compact handoffs and parallel execution for independent work. Use for implementation, fixes, refactors, planning, audits, or code review when token- or latency-efficient subagent coordination is desired.
+description: Route repository-bound software engineering lifecycle work through one sol_planner coordinator by default and complexity-scaled pools of luna_worker and terra_auditor agents. Use for planning, implementation, fixes, refactors, audits, reviews, investigations, incident diagnosis, migrations, upgrades, testing, documentation, configuration, or release-readiness checks when token- or latency-efficient coordination is desired.
 ---
 
 # Lean Dev Router
@@ -51,6 +51,15 @@ SUMMARY: one concise sentence
 - Give every worker an exact disjoint assignment, fixed constraints, acceptance criteria, relevant paths, a batch identifier, and the same output schema. For item batches, require first `EVIDENCE` as `path: N/A (batch coverage)` with assigned versus processed identifiers. / 为每个 worker 提供精确且互不重叠的任务、固定约束、验收标准、相关路径、批次标识和统一输出结构。项目批次的首条 `EVIDENCE` 必须使用 `path: N/A (batch coverage)` 并记录已分配与已处理标识。
 - Sol waits for all required workers, verifies complete non-overlapping coverage, merges and deduplicates results, and decides follow-up routing. Use a different Terra to verify high-risk or conflicting findings; never let an auditor verify its own finding. / Sol 等待所有必要 worker，检查覆盖完整且互不重叠，归并去重结果并决定后续路由。高风险或冲突发现交给不同的 Terra 复核，不得自审。
 
+## Engineering task entry / 工程任务入口
+
+- Treat repository-bound implementation, fixes, refactors, audits and reviews, investigations and incident diagnosis, migrations and upgrades, tests and QA, documentation and configuration, and release-readiness checks as in scope. / 仓库范围内的实现、修复、重构、审计与审查、调查与事件诊断、迁移与升级、测试与 QA、文档与配置，以及发布就绪检查都属于适用范围。
+- For change-producing work, send a clear bounded assignment to Luna. Use Sol first when the work is ambiguous, decomposable, cross-cutting, or decision-heavy; add Terra only when diagnosis or independent verification is justified. / 对产生改动的任务，边界明确时直接交给 Luna；任务模糊、可拆分、跨模块或决策较多时先由 Sol 规划；只有需要诊断或独立验证时才加入 Terra。
+- For audits, reviews, compliance checks, and release readiness, start with one or more Terra workers. Use Sol only when partitioning, consolidation, conflict resolution, or a major decision is needed; use Luna only after remediation is authorized. / 对审计、审查、合规检查和发布就绪任务，先使用一个或多个 Terra；只有需要拆分、归并、冲突裁定或重大决策时才使用 Sol；修复获得授权后才调用 Luna。
+- For investigations, incidents, performance analysis, and debugging, let Terra establish evidence and likely causes, parallelizing independent hypotheses when useful. Sol resolves in-scope technical trade-offs and invokes the human decision gate for user-owned choices; Luna applies the authorized fix. / 对调查、事件、性能分析和调试任务，由 Terra 建立证据和可能原因，并在适合时并行验证独立假设；Sol 裁定范围内的技术取舍，属于用户的选择则进入用户决策门；获得授权的修复交给 Luna。
+- For migrations and dependency or platform upgrades, let Sol plan within the authorized scope and define implementation order, Terra inventory compatibility and risk, Luna implement isolated changes, and Terra verify the result. / 对迁移、依赖或平台升级，由 Sol 在已授权范围内规划并确定实施顺序，Terra 盘点兼容性与风险，Luna 隔离实施，最后由 Terra 验证。
+- This scope does not grant authority for production deployment, destructive actions, external commitments, or changes to business or product policy. Those actions require explicit user approval. / 此范围不授予生产部署、破坏性操作、外部承诺或业务及产品策略变更的权限；这些操作必须获得用户明确批准。
+
 ## Route
 
 - Send a clear, bounded implementation task directly to `luna_worker`.
@@ -58,7 +67,7 @@ SUMMARY: one concise sentence
 - When a `luna_worker` cannot resolve an implementation, debugging, testing, or local technical-choice problem, it returns a compact Terra escalation to the Sol coordinator; it never resolves the major decision itself.
 - Sol sends `terra_auditor`'s actionable technical resolution to the relevant `luna_worker` for edits and validation.
 - In a standalone Luna fast path, invoke one Sol only if Terra cannot establish a supported solution or identifies a major decision. In a Sol-coordinated task, Terra returns that escalation to the existing Sol; never create another Sol. Sol sends an in-scope technical decision back to the relevant Luna and uses the human decision gate below for user-owned decisions.
-- Use `terra_auditor` after implementation only for explicit review requests or material correctness, security, migration, compatibility, or regression risk.
+- Use `terra_auditor` as the entry point for explicit audit, review, investigation, diagnosis, compliance, or release-readiness requests. After implementation, invoke Terra only for an explicit review request or material correctness, security, migration, compatibility, or regression risk.
 
 ## Human decision gate / 用户决策门
 

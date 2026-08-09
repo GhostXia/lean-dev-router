@@ -4,13 +4,25 @@
 
 ## English
 
-Lean Dev Router is a general theory for coordinating and escalating multi-agent software development work. It assigns planning, implementation, diagnosis, and validation to agents with different responsibilities and cost levels, escalating only when necessary.
+Lean Dev Router is a general theory for coordinating and escalating repository-bound software engineering lifecycle work. It assigns planning, implementation, diagnosis, and validation to agents with different responsibilities and cost levels, escalating only when necessary.
 
 I currently use Codex, so this repository uses GPT model identifiers as concrete examples. The routing theory is not tied to Codex or GPT and can be adapted to other agent runtimes and models.
 
 For further token savings, this router can be combined with projects such as [Caveman](https://github.com/juliusbrussee/caveman), which reduce unnecessary verbosity in engineering workflows. Lean Dev Router reduces unnecessary agent calls and handoff context; Caveman reduces unnecessary prose in agent responses. Together, they can help maximize token efficiency while preserving the technical content that matters. This project currently does not plan to duplicate response-compression features already provided by such projects.
 
 Because the subagents use explicitly selected models and follow detailed work assignments, the main conversation can often use Luna High or an even lower-cost model. One Sol coordinator handles complex planning and cross-task coordination when needed; the main conversation remains the user-facing control surface and mechanical fallback relay.
+
+### Engineering lifecycle entry points
+
+| Work type | Default route |
+| --- | --- |
+| Bounded implementation, fixes, refactors, tests, documentation, or configuration | Luna directly; use Sol first when the work is ambiguous, decomposable, cross-cutting, or decision-heavy |
+| Audits, reviews, compliance checks, or release readiness | One or more Terra workers first; Sol partitions or consolidates when needed; Luna handles only authorized remediation |
+| Investigations, incidents, performance analysis, or debugging | Terra establishes evidence and likely causes; Sol resolves in-scope technical trade-offs or returns user-owned choices; Luna applies the authorized fix |
+| Migrations, dependency upgrades, or platform upgrades | Sol plans within the authorized scope and defines implementation order; Terra inventories compatibility and risk; isolated Luna worktrees implement; Terra verifies |
+| Major direction, scope, policy, or irreversible commitments | Sol may frame options, but the parent returns the decision to the user |
+
+This expansion covers repository-bound engineering work. It does not grant authority for production deployment, destructive operations, external commitments, or changes to business or product policy without explicit user approval.
 
 ### Handoff protocol
 
@@ -121,13 +133,25 @@ The run used 405,908 tokens outside Luna, approximately 8.6% of the total. This 
 
 ## 中文
 
-Lean Dev Router 是一套用于协调和升级多 Agent 软件开发任务的通用理论。它让不同职责和成本层级的 Agent 分别负责规划、实施、诊断和验证，并且只在必要时向上升级。
+Lean Dev Router 是一套用于协调和升级仓库范围内软件工程全生命周期任务的通用理论。它让不同职责和成本层级的 Agent 分别负责规划、实施、诊断和验证，并且只在必要时向上升级。
 
 我本人目前正在使用 Codex，因此本仓库使用 GPT 模型标识作为具体示例。这套路由理论不依赖 Codex 或 GPT，也可以迁移到其他 Agent 运行时和模型。
 
 为了进一步节省 Token，可以配合 [Caveman](https://github.com/juliusbrussee/caveman) 这类减少工程中冗余表达的项目使用。Lean Dev Router 负责减少不必要的 Agent 调用和交接上下文，Caveman 负责减少 Agent 回复中的冗余措辞；两者结合可以在保留关键技术内容的同时，进一步提高 Token 使用效率。本项目目前暂不考虑重复实现这类项目已经提供的回复压缩功能。
 
 由于各 Subagent 使用的模型明确、职责边界清晰且工作安排详细，主控对话通常可以使用 Luna High 或更低成本的模型。需要复杂规划和跨任务协调时，由一个 Sol 协调者处理；主控对话保留用户交互入口，并在必要时只做机械中继。
+
+### 工程生命周期任务入口
+
+| 任务类型 | 默认路由 |
+| --- | --- |
+| 边界明确的实现、修复、重构、测试、文档或配置 | 直接交给 Luna；任务模糊、可拆分、跨模块或决策较多时先使用 Sol |
+| 审计、审查、合规检查或发布就绪 | 先使用一个或多个 Terra；需要时由 Sol 拆分或归并；只有获得授权后才由 Luna 修复 |
+| 调查、事件、性能分析或调试 | Terra 建立证据和可能原因；Sol 裁定范围内的技术取舍，属于用户的选择则交还父会话；Luna 实施获得授权的修复 |
+| 迁移、依赖或平台升级 | Sol 在已授权范围内规划并确定实施顺序；Terra 盘点兼容性与风险；Luna 在隔离 worktree 中实施；Terra 验证 |
+| 重大方向、范围、策略或不可逆承诺 | Sol 可以整理选项，但父会话必须将决断权交还用户 |
+
+本次扩展仅覆盖仓库范围内的软件工程任务。未经用户明确批准，不授予生产部署、破坏性操作、外部承诺或业务及产品策略变更的权限。
 
 ### 交接协议
 
