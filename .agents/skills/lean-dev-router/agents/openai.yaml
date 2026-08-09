@@ -1,4 +1,4 @@
 interface:
   display_name: "Lean Dev Router"
-  short_description: "Route Luna, Terra, and Sol with minimal token use"
-  default_prompt: "Use $lean-dev-router to complete this development task with the minimum necessary agent calls."
+  short_description: "Sol coordinates parallel Luna and Terra workers"
+  default_prompt: "Use $lean-dev-router with one sol_planner by default, coordinating parallel luna_worker and terra_auditor instances according to task complexity and volume."
