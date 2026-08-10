@@ -23,4 +23,6 @@ jobs:
         run: |
           python scripts/build_runtime.py --check-all
           python scripts/build_runtime.py --check --language en
+          python scripts/build_runtime.py --check --language en --output-dir profiles/codex/en
+          python scripts/build_runtime.py --check --language zh-CN --output-dir profiles/codex/zh-CN
           python scripts/validate_repo.py

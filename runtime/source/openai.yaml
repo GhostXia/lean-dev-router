@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lean Dev Router"
+  short_description: "Route software engineering work across three agents / 在三个 Agent 之间路由软件工程任务"
+  default_prompt: "Use $lean-dev-router to route this software engineering task through the minimum necessary Sol, Luna, and Terra agents. / 使用 $lean-dev-router 通过最少必要的 Sol、Luna 和 Terra Agent 路由此软件工程任务。"

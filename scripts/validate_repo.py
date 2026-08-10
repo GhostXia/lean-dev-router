@@ -9,7 +9,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from build_runtime import LANGUAGES, TARGETS, render
+from build_runtime import LANGUAGES, STATIC_TARGETS, TARGETS, normalized, render
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -199,6 +199,53 @@ def validate_skill_and_manifest() -> None:
             error(f"openai.yaml: missing {required}")
 
 
+def validate_codex_profile() -> None:
+    """Validate the Codex adapter metadata and all generated language artifacts."""
+    profile_path = ROOT / "profiles/codex/profile.toml"
+    try:
+        profile = tomllib.loads(profile_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        error(f"profiles/codex/profile.toml: TOML parse failed: {exc}")
+        return
+
+    expected = {
+        "id": "codex",
+        "runtime": "codex",
+        "default_language": "en",
+        "source": "runtime/source",
+    }
+    for key, value in expected.items():
+        if profile.get(key) != value:
+            error(f"profiles/codex/profile.toml: expected {key}={value!r}")
+    if profile.get("generated_profiles") != list(LANGUAGES):
+        error("profiles/codex/profile.toml: generated_profiles must match supported languages")
+    execution = profile.get("execution", {})
+    if execution.get("native_subagents") is not True:
+        error("profiles/codex/profile.toml: native_subagents must be true")
+    if execution.get("default_coordinator") != "sol_planner":
+        error("profiles/codex/profile.toml: default_coordinator must be sol_planner")
+    for language in LANGUAGES:
+        output_root = Path("profiles/codex") / language
+        for relative in TARGETS + STATIC_TARGETS:
+            expected_bytes = render(relative, language)
+            output = ROOT / output_root / relative
+            if not output.is_file() or normalized(output.read_bytes()) != normalized(expected_bytes):
+                error(f"{output_root.as_posix()}/{relative.as_posix()}: generated output is stale")
+        manifest = ROOT / output_root / STATIC_TARGETS[0]
+        manifest_text = manifest.read_text(encoding="utf-8") if manifest.is_file() else ""
+        language_marker = "在三个 Agent 之间路由软件工程任务" if language == "zh-CN" else "Route software engineering work across three agents"
+        if language_marker not in manifest_text:
+            error(f"{manifest.as_posix()}: language-specific manifest text is missing")
+        for relative, spec in {
+            "agents/luna-worker.toml": ("luna_worker", "gpt-5.6-luna", "max", None),
+            "agents/sol-planner.toml": ("sol_planner", "gpt-5.6-sol", "medium", None),
+            "agents/terra-auditor.toml": ("terra_auditor", "gpt-5.6-terra", "high", "read-only"),
+        }.items():
+            output = ROOT / output_root / relative
+            if output.is_file():
+                validate_agent_text(output.as_posix(), output.read_text(encoding="utf-8"), spec, language)
+
+
 def validate_repository_contract() -> None:
     """Validate cross-file repository contracts and license text."""
     required_text = {
@@ -209,11 +256,18 @@ def validate_repository_contract() -> None:
             "git ls-files --others --ignored --exclude-standard",
             "Historical evidence note:",
             "历史证据说明：",
+            "profiles/codex/",
         ),
         "agents/sol-planner.toml": (
             "integration_owner",
             "integration_paths_allow",
             "git ls-files --others --ignored --exclude-standard",
+        ),
+        "profiles/codex/README.md": (
+            "profiles/codex/<language>/.agents/skills/lean-dev-router/",
+            "~/.codex/skills/lean-dev-router/",
+            "profiles/codex/<language>/agents/*.toml",
+            "~/.codex/agents/",
         ),
         "lean-dev-router-self-test-guide.md": (
             "integration_owner",
@@ -244,6 +298,7 @@ def main() -> int:
     validate_agents()
     validate_markdown()
     validate_skill_and_manifest()
+    validate_codex_profile()
     validate_repository_contract()
     if ERRORS:
         for message in ERRORS:

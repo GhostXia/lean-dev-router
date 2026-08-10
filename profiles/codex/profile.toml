@@ -1,0 +1,11 @@
+id = "codex"
+runtime = "codex"
+display_name = "Lean Dev Router for Codex"
+default_language = "en"
+source = "runtime/source"
+generated_profiles = ["en", "zh-CN"]
+
+[execution]
+native_subagents = true
+default_coordinator = "sol_planner"
+fallback = "independent Codex sessions with the same dispatch manifest"
