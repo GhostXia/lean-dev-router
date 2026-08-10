@@ -203,6 +203,8 @@ flowchart LR
 | `agents/` | Example Agent config files: `luna_worker`, `sol_planner`, `terra_auditor` |
 | `lean-dev-router-self-test-guide.md` | Controlled guide for measuring token savings, quality, and routing overhead |
 | `lean-dev-router-l3-idempotent-orders-task.md` | Reusable L3 benchmark task packet |
+| `runtime/source/` | Canonical bilingual runtime source for the generated language profiles |
+| `scripts/build_runtime.py` | Materializes one single-language runtime profile into the active paths |
 | `scripts/validate_repo.py` | Dependency-free repository consistency checks used by CI |
 
 ### 🚀 Install
@@ -212,6 +214,16 @@ For **Codex**, copy:
 2. The three files in `agents/` → `~/.codex/agents/`
 
 Adapt the file format and model identifiers when using another runtime.
+
+### 🌐 Single-language runtime profiles
+
+The active runtime files are generated from the canonical bilingual source in `runtime/source/`. English (`en`) is the default profile and is materialized at the paths shown above. To use the Chinese profile, run:
+
+```bash
+python scripts/build_runtime.py --language zh-CN
+```
+
+Run `python scripts/build_runtime.py --language en` before committing the default profile. Do not edit generated runtime files directly; edit the bilingual source and regenerate. The generator preserves protocol identifiers, model settings, role boundaries, and routing behavior while keeping each runtime context single-language. Agents still follow the parent task's primary language when responding.
 
 ### 🎭 Roles
 
@@ -425,6 +437,8 @@ flowchart LR
 | `agents/` | 示例 Agent 配置：`luna_worker`、`sol_planner`、`terra_auditor` |
 | `lean-dev-router-self-test-guide.md` | 用于在自己的代码库中对比 Token 节省、质量和调度开销的受控测试指南 |
 | `lean-dev-router-l3-idempotent-orders-task.md` | 可复用的 L3 基准测试题包 |
+| `runtime/source/` | 生成语言 profile 的规范双语运行时源文件 |
+| `scripts/build_runtime.py` | 将单一语言运行时 profile 写入当前生效路径 |
 | `scripts/validate_repo.py` | CI 使用的零依赖仓库一致性检查 |
 
 ### 🚀 安装
@@ -434,6 +448,16 @@ flowchart LR
 2. `agents/` 中的三个 TOML 文件 → `~/.codex/agents/`
 
 使用其他运行时或模型时，应相应调整文件格式和模型标识。
+
+### 🌐 单语言运行时 profile
+
+当前生效的运行时文件由 `runtime/source/` 中的规范双语源文件生成。默认 profile 是英语（`en`），会写入上面列出的现有路径。需要中文 profile 时运行：
+
+```bash
+python scripts/build_runtime.py --language zh-CN
+```
+
+提交默认 profile 前运行 `python scripts/build_runtime.py --language en`。不要直接编辑生成的运行时文件；请修改双语源文件后重新生成。生成器只改变语言载荷，不改变协议标识、模型设置、角色边界或路由行为；Agent 回复仍应跟随父任务的主要语言。
 
 ### 🎭 角色
 

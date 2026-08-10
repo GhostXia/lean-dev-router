@@ -20,4 +20,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Validate configs and documentation
-        run: python scripts/validate_repo.py
+        run: |
+          python scripts/build_runtime.py --check-all
+          python scripts/build_runtime.py --check --language en
+          python scripts/validate_repo.py

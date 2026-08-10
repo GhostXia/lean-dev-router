@@ -9,6 +9,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from build_runtime import LANGUAGES, TARGETS, render
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
@@ -45,6 +47,60 @@ def require_instruction_line(
             )
 
 
+def validate_agent_text(
+    relative: str,
+    text: str,
+    expected: tuple[str, str, str, str | None],
+    language: str,
+) -> None:
+    """Validate one rendered Agent profile without requiring a filesystem copy."""
+    name, model, effort, sandbox = expected
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        error(f"{relative} ({language}): TOML parse failed: {exc}")
+        return
+    for key, value in {
+        "name": name,
+        "model": model,
+        "model_reasoning_effort": effort,
+    }.items():
+        if data.get(key) != value:
+            error(f"{relative} ({language}): expected {key}={value!r}")
+    if sandbox is not None and data.get("sandbox_mode") != sandbox:
+        error(f"{relative} ({language}): expected sandbox_mode={sandbox!r}")
+    if not str(data.get("description", "")).strip():
+        error(f"{relative} ({language}): description is empty")
+    instructions = str(data.get("developer_instructions", ""))
+    if not instructions.strip():
+        error(f"{relative} ({language}): developer_instructions is empty")
+    language_anchor = "Language:" if language == "en" else "语言:"
+    if language_anchor not in instructions:
+        error(f"{relative} ({language}): language rule is missing")
+    if language != "en":
+        return
+    if name == "luna_worker":
+        require_instruction_line(
+            relative,
+            instructions,
+            "Every write task",
+            ("baseline commit", "paths_allow", "direct fast path"),
+        )
+        require_instruction_line(
+            relative,
+            instructions,
+            "Before returning PASS",
+            ("git ls-files --others --ignored --exclude-standard",),
+        )
+    elif name == "terra_auditor":
+        require_instruction_line(
+            relative,
+            instructions,
+            "When assigned an integration audit",
+            ("exact combined commit", "integration_acceptance", "component-level audit PASS"),
+        )
+
+
 def validate_agents() -> None:
     """Validate Agent TOML metadata and route-specific instruction contracts."""
     expected = {
@@ -58,60 +114,12 @@ def validate_agents() -> None:
         ),
     }
 
-    for relative, (name, model, effort, sandbox) in expected.items():
-        path = ROOT / relative
-        try:
-            with path.open("rb") as handle:
-                data = tomllib.load(handle)
-        except (OSError, tomllib.TOMLDecodeError) as exc:
-            error(f"{relative}: TOML parse failed: {exc}")
-            continue
-
-        required = {
-            "name": name,
-            "model": model,
-            "model_reasoning_effort": effort,
-        }
-        for key, value in required.items():
-            if data.get(key) != value:
-                error(f"{relative}: expected {key}={value!r}")
-        if sandbox is not None and data.get("sandbox_mode") != sandbox:
-            error(f"{relative}: expected sandbox_mode={sandbox!r}")
-        if not str(data.get("description", "")).strip():
-            error(f"{relative}: description is empty")
-        instructions = str(data.get("developer_instructions", ""))
-        if not instructions.strip():
-            error(f"{relative}: developer_instructions is empty")
-        if "语言 / Language" not in instructions:
-            error(f"{relative}: bilingual language rule is missing")
-        if name == "luna_worker":
-            require_instruction_line(
-                relative,
-                instructions,
-                "Every write task",
-                (
-                    "baseline commit",
-                    "paths_allow",
-                    "direct fast path",
-                ),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "Before returning PASS",
-                ("git ls-files --others --ignored --exclude-standard",),
-            )
-        elif name == "terra_auditor":
-            require_instruction_line(
-                relative,
-                instructions,
-                "When assigned an integration audit",
-                (
-                    "exact combined commit",
-                    "integration_acceptance",
-                    "component-level audit PASS",
-                ),
-            )
+    for relative, spec in expected.items():
+        validate_agent_text(relative, read(relative), spec, "en")
+        source = Path("runtime/source/agents") / Path(relative).name
+        for language in LANGUAGES:
+            rendered = render(Path(relative), language).decode("utf-8")
+            validate_agent_text(source.as_posix(), rendered, spec, language)
 
 
 def validate_markdown() -> None:
@@ -176,6 +184,14 @@ def validate_skill_and_manifest() -> None:
     ):
         if required not in skill:
             error(f"SKILL.md: missing required protocol text {required!r}")
+
+    for language in LANGUAGES:
+        rendered = render(TARGETS[0], language).decode("utf-8")
+        if not rendered.startswith("---\n"):
+            error(f"runtime/source/SKILL.md ({language}): missing YAML frontmatter")
+        for required in ("lean-dev-router", "integration_owner", "integration_acceptance"):
+            if required not in rendered:
+                error(f"runtime/source/SKILL.md ({language}): missing {required!r}")
 
     manifest = read(".agents/skills/lean-dev-router/agents/openai.yaml")
     for required in ("interface:", "display_name:", "short_description:", "default_prompt:"):
