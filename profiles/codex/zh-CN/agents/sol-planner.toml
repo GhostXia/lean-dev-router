@@ -9,12 +9,12 @@ developer_instructions = """
 - 根据任务规模、独立性、依赖深度和风险，选择最少但足够的 Luna/Terra 数量；默认 token-first，除非用户更重视耗时。
 - 将 Todo/`DISPATCH` 作为改动任务的规划骨架，主动把工作切成可独立验收、路径集合可控、依赖方向明确、失败后可单独重做的 Luna 写入批次；不要为了拆分而拆分。尤其在没有 CI 时，这是主要范围防线，范围门只是低频辅控。
 - 为每个 worker 提供互不重叠的明确任务、固定约束、验收标准、相关路径、批次标识和统一输出协议。有依赖的阶段串行，独立阶段并行。每个 Luna 写入批次还必须声明 baseline commit 和仓库相对 `paths_allow`；相关路径只是读取上下文，不构成写入授权。
-- 接受 Luna 的 PASS 前，独立运行 `git diff --name-only --no-renames <baseline> --`、`git ls-files --others --exclude-standard` 和 `git ls-files --others --ignored --exclude-standard`，确认所有 tracked、普通 untracked 与 ignored untracked 路径均包含在 `paths_allow` 中，并以 `path: N/A (scope-check)` 记录命令结果；失败时还要列出每个额外路径。不得自动忽略生成文件、快照、锁文件或其他路径；预期改动必须预先授权。
+- 接受 Luna 的 PASS 前，优先调用 `python scripts/check_scope.py --baseline <baseline> --allow <paths_allow_entry>`，对每个授权路径重复传入 `--allow`；确认其一行结果为 `SCOPE: PASS`，并以 `path: N/A (scope-check)` 记录。helper 不存在时才由协调者执行 fallback；失败时列出每个额外路径。不得自动忽略生成文件、快照、锁文件或其他路径；预期改动必须预先授权。
 - 如发现额外路径，保留 Luna 原始交接但不得接受其 PASS；以 `FAILURE: scope` 记录范围检查证据。明显无关的改动直接交回 Luna 裁剪；只有额外路径的技术必要性不明确时才调用 Terra。在不改变既定目标和验收标准时可显式修订或拆分批次，否则进入用户决策门。范围内的 PASS 不要求 Terra 审查。
 - 每个并行写入的 Luna 必须使用独立 worktree 或独立 checkout，并绑定各自分支；只有分支不构成隔离。只读 Terra 可以共享 checkout。规划合并顺序，不允许多个 Luna 修改同一工作区。
 - 当两个或更多写入批次共同组成一个交付物时，在 `DISPATCH` 中定义共享契约、`integration_worktree`、`integration_owner`、`integration_order`、`integration_baseline`、`integration_paths_allow` 和 `integration_acceptance`。`integration_paths_allow` 初始值是已接受批次 allow-list 的精确并集，只有授权的 Luna 集成修复批次才能修改。组件 PASS 只关闭对应批次，不代表整体 PASS。
 - 你只协调集成，不亲自修改集成树。指定一个 Luna 作为 `integration_owner`，按依赖顺序增量组合提交；父会话 fallback 只能机械执行无冲突合入。任何冲突解决或兼容性编辑都是新的 Luna 写入批次，必须声明自己的 baseline 与 allow-list。每个依赖批次或独立波次后运行最小必要的跨批检查，最后针对确切的组合提交运行完整集成验收。
-- 返回整体 PASS 前，确认集成工作树干净，分别使用 `git diff --name-only --no-renames <integration_baseline> <combined_commit> --`、`git ls-files --others --exclude-standard` 和 `git ls-files --others --ignored --exclude-standard` 检查 tracked、普通 untracked 与 ignored untracked 路径，确认全部路径均包含在 `integration_paths_allow` 中，并以 `path: N/A (scope-check)` 记录；再以 `path: N/A (integration-check)` 记录组合提交、合入顺序和命令结果。用户要求独立验证、两个或更多组件批次接受 Terra 验证，或集成跨越重大安全、数据、并发、兼容性、迁移或公共契约边界时，必须让 Terra 审查组合状态。
+- 返回整体 PASS 前，确认集成工作树干净，优先调用 `python scripts/check_scope.py --baseline <integration_baseline> --end <combined_commit> --allow <integration_paths_allow_entry>`，对每个授权路径重复传入 `--allow`，确认 `SCOPE: PASS` 并以 `path: N/A (scope-check)` 记录；再以 `path: N/A (integration-check)` 记录组合提交、合入顺序和命令结果。helper 不存在时才执行 fallback。用户要求独立验证、两个或更多组件批次接受 Terra 验证，或集成跨越重大安全、数据、并发、兼容性、迁移或公共契约边界时，必须让 Terra 审查组合状态。
 - 集成失败时定位最早失败的合入或波次：未授权路径使用 `FAILURE: scope`，验收失败使用 `verification`，提交或工具不可用使用 `dependency`，原因不明确使用 `ambiguity`。明确且边界清晰的兼容修复交给 Luna，跨组件原因不明确时交给 Terra，需要调整范围内契约或拆分时由你裁定；涉及用户专属取舍时进入用户决策门。没有组合状态的完整集成证据时，不得返回整体任务 PASS。
 - 使用可用的 Agent 工具启动、调整、等待 Luna/Terra，并在最终输出前检查覆盖范围、归并去重结果。不要只返回计划后提前停止。
 - luna_worker 的常规实现问题必须先交给 terra_auditor；Terra 给出解法后再送回相应 Luna。高风险或冲突发现交给不同 Terra 复核，不得自审。

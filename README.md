@@ -90,7 +90,13 @@ The primary scope control is still **Sol's Todo/DISPATCH decomposition plus prec
 
 For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while a baseline commit plus repository-relative `paths_allow` defines what may change. Sol supplies both for routed batches; the parent supplies both for a direct Luna fast path.
 
-Before accepting Luna's `PASS`, the current coordinator—Sol or the direct parent—independently checks tracked, standard untracked, and ignored untracked paths:
+Before accepting Luna's `PASS`, prefer the deterministic repository helper:
+
+```bash
+python scripts/check_scope.py --baseline <baseline> --allow <paths_allow_entry>
+```
+
+Repeat `--allow` for every authorized path. The helper performs the three mechanical Git queries and emits one compact `SCOPE: PASS` or `SCOPE: FAIL` result. The direct commands remain the fallback when the helper is unavailable:
 
 ```bash
 git diff --name-only --no-renames <baseline> --
@@ -110,7 +116,7 @@ Before dispatch, Sol defines shared contracts, dependency order, `integration_wo
 
 Sol coordinates without modifying the integration tree. One Luna acts as `integration_owner` and combines accepted commits in dependency order; a parent fallback may perform only conflict-free mechanical merges. Conflict resolution or compatibility edits become a new bounded Luna write batch. Integrate incrementally, running narrow cross-batch checks after each dependent batch or independent wave.
 
-Before whole-task `PASS`, require a clean integration worktree and verify that every tracked path from `integration_baseline` to the combined commit plus every standard and ignored untracked path is covered by `integration_paths_allow`. Enumerate the two untracked classes with `git ls-files --others --exclude-standard` and `git ls-files --others --ignored --exclude-standard`. Record that result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`.
+Before whole-task `PASS`, require a clean integration worktree and prefer `python scripts/check_scope.py --baseline <integration_baseline> --end <combined_commit> --allow <integration_paths_allow_entry>` repeated for every authorized path. Record its compact result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`. Use the direct Git commands above as fallback when the helper is unavailable.
 
 A final Terra audit of the combined state is mandatory when the user requested independent verification, two or more component batches received Terra verification, or integration crosses a material security, data, concurrency, compatibility, migration, or public-contract boundary. Separate component audits never substitute for a required integration audit.
 
@@ -205,6 +211,7 @@ flowchart LR
 | `lean-dev-router-l3-idempotent-orders-task.md` | Reusable L3 benchmark task packet |
 | `runtime/source/` | Canonical bilingual runtime source for the generated language profiles |
 | `profiles/codex/` | Codex adapter metadata and generated English/Chinese install profiles |
+| `scripts/check_scope.py` | Deterministic tracked/untracked path allow-list check |
 | `scripts/build_runtime.py` | Materializes one single-language runtime profile into the active paths |
 | `scripts/validate_repo.py` | Dependency-free repository consistency checks used by CI |
 
@@ -336,7 +343,13 @@ SUMMARY: one concise sentence
 
 每个 **Luna 写入任务**都必须区分读取上下文与写入授权：`relevant paths` 可以读取，而 baseline commit 与仓库相对 `paths_allow` 才定义允许改动的路径。路由批次由 Sol 提供两项字段，直接 Luna 快路径由父会话提供。
 
-接受 Luna 的 `PASS` 前，当前协调者——Sol 或直接父会话——必须独立检查 tracked、普通 untracked 与 ignored untracked 路径：
+接受 Luna 的 `PASS` 前，优先使用确定性的仓库 helper：
+
+```bash
+python scripts/check_scope.py --baseline <baseline> --allow <paths_allow_entry>
+```
+
+对每个授权路径重复传入 `--allow`。helper 会机械执行三类 Git 查询，并输出一条紧凑的 `SCOPE: PASS` 或 `SCOPE: FAIL` 结果。helper 不存在时，才使用以下命令 fallback：
 
 ```bash
 git diff --name-only --no-renames <baseline> --
@@ -356,7 +369,7 @@ git ls-files --others --ignored --exclude-standard
 
 Sol 只负责协调，不修改集成树。由一个 Luna 担任 `integration_owner`，按依赖顺序组合已接受提交；父会话 fallback 只能执行无冲突的机械合入。冲突解决或兼容性编辑必须成为新的、有边界的 Luna 写入批次。采用增量集成，每个依赖批次或独立波次后运行最小必要的跨批检查。
 
-返回整体任务 `PASS` 前，必须确认集成工作树干净，并检查从 `integration_baseline` 到组合提交的全部 tracked 路径以及普通与 ignored untracked 路径均包含在 `integration_paths_allow` 中。分别使用 `git ls-files --others --exclude-standard` 和 `git ls-files --others --ignored --exclude-standard` 枚举两类 untracked 路径。以 `path: N/A (scope-check)` 记录该结果，再以 `path: N/A (integration-check)` 记录组合提交、集成顺序和完整验收结果。
+返回整体任务 `PASS` 前，必须确认集成工作树干净，并优先使用 `python scripts/check_scope.py --baseline <integration_baseline> --end <combined_commit> --allow <integration_paths_allow_entry>`，对每个授权路径重复传入 `--allow`。以 `path: N/A (scope-check)` 记录其紧凑结果，再以 `path: N/A (integration-check)` 记录组合提交、集成顺序和完整验收结果。helper 不存在时才使用上面的 Git 命令 fallback。
 
 用户要求独立验证、两个或更多组件批次接受了 Terra 验证，或集成跨越重大安全、数据、并发、兼容性、迁移或公共契约边界时，必须对组合状态进行最终 Terra 审计。需要集成审计时，各组件分别通过审计不能替代它。
 
@@ -451,6 +464,7 @@ flowchart LR
 | `lean-dev-router-l3-idempotent-orders-task.md` | 可复用的 L3 基准测试题包 |
 | `runtime/source/` | 生成语言 profile 的规范双语运行时源文件 |
 | `profiles/codex/` | Codex adapter 元数据及中英文生成安装 profile |
+| `scripts/check_scope.py` | 机械检查 tracked、untracked 路径是否符合 allow-list |
 | `scripts/build_runtime.py` | 将单一语言运行时 profile 写入当前生效路径 |
 | `scripts/validate_repo.py` | CI 使用的零依赖仓库一致性检查 |
 

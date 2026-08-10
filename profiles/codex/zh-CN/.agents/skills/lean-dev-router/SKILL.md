@@ -38,7 +38,7 @@ SUMMARY: one concise sentence
 
 对产生改动的任务，尤其在没有 CI 时，将 Sol 的 Todo/`DISPATCH` 计划作为主要范围控制。Luna 写入批次应具备单一且边界清晰的目标、明确依赖、可控路径集合和独立验收；不要拆得比这些属性所需更细。精确委托与 Luna 守约负责预防大多数漂移。
 将 `relevant paths` 视为读取上下文而非写入授权。任何 Luna 写任务开始前，其协调者都必须记录 baseline commit 和明确的仓库相对 `paths_allow`，条目可指向文件或目录子树；路由批次由 Sol 提供，直接 Luna 快路径由父会话提供。测试、格式化工具、包管理器或其他工具生成的文件也必须事先授权。
-接受 Luna 的 `PASS` 前，当前协调者——路由批次中的 Sol 或直接快路径中的父会话——必须独立使用 `git diff --name-only --no-renames <baseline> --` 收集 tracked 改动，使用 `git ls-files --others --exclude-standard` 收集普通 untracked 文件，并使用 `git ls-files --others --ignored --exclude-standard` 收集 ignored untracked 文件，再确认每个路径均被 `paths_allow` 覆盖。将结果记录为 `path: N/A (scope-check)` 命令证据；失败时还要列出每个额外路径。不得静默忽略任何路径类别。
+接受 Luna 的 `PASS` 前，优先使用仓库 helper：`python scripts/check_scope.py --baseline <baseline> --allow <paths_allow_entry>`，对每个授权路径重复传入 `--allow`。它会机械收集 tracked 改动、普通 untracked 文件和 ignored untracked 文件，完成 allow-list 比对并输出一条紧凑结果。将该输出记录为 `path: N/A (scope-check)` 证据；helper 不存在时才 fallback 到 `git diff --name-only --no-renames <baseline> --`、`git ls-files --others --exclude-standard` 和 `git ls-files --others --ignored --exclude-standard`。失败时列出每个额外路径，不得静默忽略任何路径类别。
 如存在额外路径，保留 Luna 的原始交接，但不得将其作为最终成功接受；将额外路径记录为范围检查证据并使用 `FAILURE: scope`。已有 Sol 可将明显无关的改动直接退回 Luna 裁剪；只有技术必要性不明确时才使用 Terra。Sol 仅可在既定目标和验收标准内修订或拆分批次，否则进入用户决策门。独立父会话执行同一范围门。
 将该检查保留为低频辅路保险丝，而非主调度器。范围内的 `PASS` 不要求 Terra 审查；范围门很少触发说明拆分良好，不代表应移除它。
 
@@ -46,7 +46,7 @@ SUMMARY: one concise sentence
 
 当两个或更多写入批次共同组成一个交付物时，组件级 `PASS` 只关闭对应批次，绝不代表整体任务成功。派发前，Sol 必须定义共享契约、依赖顺序、`integration_worktree`、`integration_owner`、`integration_baseline`、`integration_paths_allow` 和 `integration_acceptance`。`integration_paths_allow` 初始值是已接受批次 allow-list 的精确并集，只有获得授权的 Luna 集成修复批次才能修改它。
 Sol 只负责协调，不修改集成树。指定一个 Luna 作为 `integration_owner`，按依赖顺序组合提交；父会话 fallback 只能执行无冲突的机械合入。任何冲突解决或兼容性改动都是新的、有边界的 Luna 写入批次，必须拥有自己的 baseline 和 allow-list。优先增量收敛：每个依赖批次或独立波次后运行最小必要的跨批检查，最后针对确切的组合提交完成验收。
-返回整体任务最终 `PASS` 前，协调者必须确认集成 worktree 干净，使用 `git diff --name-only --no-renames <integration_baseline> <combined_commit> --` 收集 tracked 路径，使用 `git ls-files --others --exclude-standard` 收集普通 untracked 文件，并使用 `git ls-files --others --ignored --exclude-standard` 收集 ignored untracked 文件，再确认全部路径都包含在 `integration_paths_allow` 中。将结果记录为 `path: N/A (scope-check)`，再以 `path: N/A (integration-check)` 记录组合提交、集成顺序和验收命令。
+返回整体任务最终 `PASS` 前，协调者必须确认集成 worktree 干净，并优先使用 `python scripts/check_scope.py --baseline <integration_baseline> --end <combined_commit> --allow <integration_paths_allow_entry>`，对每个授权路径重复传入 `--allow`。将其紧凑输出记录为 `path: N/A (scope-check)`，再以 `path: N/A (integration-check)` 记录组合提交、合入顺序和验收命令。helper 不存在时才使用 `git diff --name-only --no-renames <integration_baseline> <combined_commit> --`、`git ls-files --others --exclude-standard` 和 `git ls-files --others --ignored --exclude-standard`。
 用户要求独立验证、两个或更多组件批次接受了 Terra 验证，或集成跨越重大安全、数据、并发、兼容性、迁移或公共契约边界时，必须进行最终 Terra 集成审计；其他情况可仅使用组合状态的命令证据。需要集成审计时，各组件分别通过审计不能替代它。
 集成失败时不得宣布最终成功，并定位最早失败的合入或波次。未授权路径使用 `FAILURE: scope`，验收失败使用 `verification`，提交或工具不可用使用 `dependency`，原因无法确定使用 `ambiguity`。明确且边界清晰的兼容修复交给 Luna，跨组件原因不明确时交给 Terra，需要在范围内调整契约或拆分时交给 Sol；涉及用户专属目标、兼容性或产品取舍时进入用户决策门。
 

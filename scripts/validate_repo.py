@@ -90,7 +90,7 @@ def validate_agent_text(
             relative,
             instructions,
             "Before returning PASS",
-            ("git ls-files --others --ignored --exclude-standard",),
+            ("scripts/check_scope.py", "scope-check"),
         )
     elif name == "terra_auditor":
         require_instruction_line(
@@ -257,11 +257,18 @@ def validate_repository_contract() -> None:
             "Historical evidence note:",
             "历史证据说明：",
             "profiles/codex/",
+            "scripts/check_scope.py",
+        ),
+        "scripts/check_scope.py": (
+            "SCOPE: ",
+            "--baseline",
+            "--allow",
+            '"ls-files", "--others", "--ignored", "--exclude-standard"',
         ),
         "agents/sol-planner.toml": (
             "integration_owner",
             "integration_paths_allow",
-            "git ls-files --others --ignored --exclude-standard",
+            "scripts/check_scope.py",
         ),
         "profiles/codex/README.md": (
             "profiles/codex/<language>/.agents/skills/lean-dev-router/",
