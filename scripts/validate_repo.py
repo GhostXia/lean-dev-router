@@ -22,6 +22,7 @@ LEGACY_PATHS = (
     Path("scripts").joinpath("build_" + "runtime.py"),
 )
 DISPATCH_FIELDS = (
+    "PROTOCOL: lean-dev-router/v1",
     "STATUS: DISPATCH",
     "TARGET: implementation",
     "TASK_SUMMARY",
@@ -29,6 +30,7 @@ DISPATCH_FIELDS = (
     "PATHS_ALLOW",
     "ACCEPTANCE",
     "CONSTRAINTS",
+    "NEXT: parent",
 )
 
 
@@ -173,9 +175,11 @@ def validate_skill() -> None:
         "PATHS_ALLOW",
         "ACCEPTANCE",
         "CONSTRAINTS",
+        "NEXT: parent",
         "FAILURE: missing_dispatch",
         "The parent may relay it mechanically but must not author, repair, or broaden it",
         "`PLAN_READY` is not an execution status",
+        "For change-producing work, send every task to one `sol_planner`",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")

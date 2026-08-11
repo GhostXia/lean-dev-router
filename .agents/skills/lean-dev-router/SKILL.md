@@ -34,8 +34,10 @@ NEXT: parent
 
 - Only `sol_planner` may issue a `DISPATCH`. The parent may relay it mechanically but must not author, repair, or broaden it.
 - `DISPATCH` is valid only when every field above is present and non-empty, `PATHS_ALLOW` contains repository-relative writable paths, and no major product or architecture decision remains open. A minimal single-step contract is valid for L1 work.
+- Inbound `DISPATCH` does not use an `AGENT` field. When no narrower constraint is needed, `minimal change only` is a valid non-empty `CONSTRAINTS` entry.
 - Before any implementation tool or write, Luna validates only the contract, not the system topology. Missing or invalid authorization produces `STATUS: BLOCKED`, `FAILURE: missing_dispatch`, and `NEXT: parent`; Luna does not name another agent or edit files.
 - `PASS`, `BLOCKED`, and `ESCALATE` are outbound result statuses and never authorize implementation. `PLAN_READY` is not an execution status.
+- Luna may name `terra_auditor` only as the single technical-escalation edge; it never names the dispatch authority. Full worker-to-worker topology anonymity remains outside this gate's scope.
 
 Every delegated result must use this compact outbound protocol; do not invent role-specific output schemas.
 
@@ -78,7 +80,7 @@ SUMMARY: one concise sentence
 - Let the default Sol coordinator run multiple Luna and Terra workers in parallel when their assignments are independent. Give every parallel Luna writer a dedicated worktree or independent checkout on its own branch; a branch alone is not write isolation. Read-only Terra workers may share a checkout.
 - Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v1`.
 - When available, check `codex --version` before relying on native routing; in the CLI use `/agent` to inspect agent threads.
-- If a Sol session cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` and a compact `DISPATCH` manifest in `EVIDENCE`; each worker entry must contain `id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`, plus `baseline` and `paths_allow` for Luna write entries. Multi-batch deliverables also declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required. The parent executes the manifest mechanically and returns compact results to the same Sol for consolidation. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
+- If a Sol session cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` and a compact `DISPATCH` manifest in `EVIDENCE`. Each Luna write entry must embed a literal complete artifact containing `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`; worker metadata also contains `id`, `role`, `scope`, `worktree`, and `depends_on`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required. The parent relays each artifact unchanged and returns compact results to the same Sol for consolidation. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 - Codex's native background-agent UI is still a native subagent workflow. Treat unrelated background processes or sessions as fallback, not as equivalent parent-child routing.
 
 ## Worker scaling and fan-out
@@ -92,7 +94,7 @@ SUMMARY: one concise sentence
 ## Engineering task entry
 
 - Treat repository-bound implementation, fixes, refactors, audits and reviews, investigations and incident diagnosis, migrations and upgrades, tests and QA, documentation and configuration, and release-readiness checks as in scope.
-- For change-producing work, send a clear bounded assignment to Luna. Use Sol first when the work is ambiguous, decomposable, cross-cutting, or decision-heavy; add Terra only when diagnosis or independent verification is justified.
+- For change-producing work, send every task to one `sol_planner` for dispatch authorization before any Luna assignment. Sol uses one minimal `DISPATCH` for clear bounded work and fuller decomposition when the work is ambiguous, cross-cutting, or decision-heavy; add Terra only when diagnosis or independent verification is justified.
 - For audits, reviews, compliance checks, and release readiness, start with one or more Terra workers. Use Sol only when partitioning, consolidation, conflict resolution, or a major decision is needed; use Luna only after remediation is authorized.
 - For investigations, incidents, performance analysis, and debugging, let Terra establish evidence and likely causes, parallelizing independent hypotheses when useful. Sol resolves in-scope technical trade-offs and invokes the human decision gate for user-owned choices; Luna applies the authorized fix.
 - For migrations and dependency or platform upgrades, let Sol plan within the authorized scope and define implementation order, Terra inventory compatibility and risk, Luna implement isolated changes, and Terra verify the result.

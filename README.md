@@ -81,6 +81,8 @@ NEXT: parent
 
 Only Sol authors or amends a `DISPATCH`; the parent may relay it unchanged. Missing fields, non-relative write paths, or open major product/architecture decisions make it invalid. Luna then performs no implementation work and returns `BLOCKED / missing_dispatch / NEXT parent` without naming a planning role. A minimal single-step `DISPATCH` preserves the L1 path without weakening the gate.
 
+Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Luna may name Terra only as the single technical-escalation edge; complete worker-to-worker topology anonymity is outside this gate's scope.
+
 All three roles use a separate compact outbound result protocol:
 
 ```text
@@ -113,7 +115,7 @@ The hard entry gate is the valid inbound `DISPATCH`. The primary scope control i
 
 For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in Sol's dispatch defines what may change. The parent cannot create a direct Luna fast path.
 
-Before accepting Luna's `PASS`, the current coordinator—Sol or the direct parent—independently checks tracked, standard untracked, and ignored untracked paths:
+Before accepting Luna's `PASS`, Sol—or the parent mechanically relaying for Sol—independently checks tracked, standard untracked, and ignored untracked paths:
 
 ```bash
 git diff --name-only --no-renames <baseline> --
@@ -178,7 +180,7 @@ Native Codex subagents are the default. Start every change-producing task with o
 3. Its first result follows `lean-dev-router/v1`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`; Luna write entries also contain a complete inbound contract with `task_summary`, `baseline`, `paths_allow`, and `constraints`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 

@@ -60,33 +60,44 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertIn("luna-worker.toml", language_errors[0])
 
     def test_luna_requires_complete_dispatch_without_planner_knowledge(self) -> None:
-        for relative in (
+        agent_paths = (
             "agents/luna-worker.toml",
             "agents/sol-planner.toml",
             "agents/terra-auditor.toml",
-        ):
-            source = (self.original_root / relative).read_text(encoding="utf-8")
-            if relative.endswith("luna-worker.toml"):
-                source = source.replace("`TASK_SUMMARY`", "`TASK`", 1)
-            self.write(relative, source)
-
-        validate_repo.validate_agents()
-
-        self.assertTrue(
-            any(
-                "luna-worker.toml" in message and "TASK_SUMMARY" in message
-                for message in validate_repo.ERRORS
-            )
         )
+        originals = {
+            relative: (self.original_root / relative).read_text(encoding="utf-8")
+            for relative in agent_paths
+        }
+
+        for required, replacement in (
+            ("PROTOCOL: lean-dev-router/v1", "PROTOCOL: other/v1"),
+            ("`TASK_SUMMARY`", "`TASK`"),
+            ("NEXT: parent", "NEXT: none"),
+        ):
+            with self.subTest(required=required):
+                validate_repo.ERRORS.clear()
+                for relative, source in originals.items():
+                    if relative.endswith("luna-worker.toml"):
+                        source = source.replace(required, replacement, 1)
+                    self.write(relative, source)
+
+                validate_repo.validate_agents()
+
+                self.assertTrue(
+                    any(
+                        "luna-worker.toml" in message and required.strip("`") in message
+                        for message in validate_repo.ERRORS
+                    )
+                )
 
         validate_repo.ERRORS.clear()
-        luna = (self.original_root / "agents/luna-worker.toml").read_text(
-            encoding="utf-8"
-        )
-        self.write(
-            "agents/luna-worker.toml",
-            luna.replace("do not name another agent", "ask sol_planner"),
-        )
+        for relative, source in originals.items():
+            if relative.endswith("luna-worker.toml"):
+                source = source.replace(
+                    "do not name another agent", "ask sol_planner"
+                )
+            self.write(relative, source)
 
         validate_repo.validate_agents()
 
