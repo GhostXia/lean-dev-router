@@ -281,6 +281,65 @@ class ValidateRepositoryTests(unittest.TestCase):
             )
         )
 
+    def test_skill_validation_rejects_missing_streaming_requirements(self) -> None:
+        original = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        for required in (
+            "Streaming component scheduling",
+            "<component>:<revision>:<stage>",
+            "all-component barrier",
+            "`token-first` may reuse one uninvolved Terra",
+            "long parent commands",
+            "within 60 seconds",
+            "first eligible slot release",
+            "not an outbound result envelope",
+        ):
+            with self.subTest(required=required):
+                validate_repo.ERRORS.clear()
+                source = original.replace(required, "removed requirement", 1)
+                self.assertNotEqual(source, original)
+
+                errors = self.validate_skill_source(source)
+
+                self.assertIn(
+                    ".agents/skills/lean-dev-router/SKILL.md: "
+                    f"missing required text {required!r}",
+                    errors,
+                )
+
+    def test_agent_validation_rejects_missing_streaming_contracts(self) -> None:
+        agent_paths = (
+            "agents/luna-worker.toml",
+            "agents/sol-planner.toml",
+            "agents/terra-auditor.toml",
+        )
+        originals = {
+            relative: (self.original_root / relative).read_text(encoding="utf-8")
+            for relative in agent_paths
+        }
+
+        for anchor in (
+            "Process each independent component result as it arrives",
+            "Use a stable `<component>:<revision>:<stage>` job key",
+            "Keep this coordinator resumable",
+        ):
+            with self.subTest(anchor=anchor):
+                validate_repo.ERRORS.clear()
+                for relative, source in originals.items():
+                    if relative == "agents/sol-planner.toml":
+                        source = source.replace(anchor, "Removed contract", 1)
+                    self.write(relative, source)
+
+                validate_repo.validate_agents()
+
+                self.assertIn(
+                    "agents/sol-planner.toml: "
+                    f"missing instruction anchored by {anchor!r}",
+                    validate_repo.ERRORS,
+                )
+
     def test_skill_stays_within_context_budget(self) -> None:
         source = (
             self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
@@ -339,6 +398,7 @@ class ValidateRepositoryTests(unittest.TestCase):
                 "`token-first` may reuse one uninvolved Terra",
                 "long parent commands",
                 "within 60 seconds",
+                "first eligible slot release",
             ),
             "terra assignment envelope": (
                 "STATUS: DISPATCH",
@@ -402,6 +462,7 @@ class ValidateRepositoryTests(unittest.TestCase):
                     "token-first",
                     "long parent commands",
                     "60 seconds",
+                    "first eligible slot release",
                 ),
             ),
             "idempotent partial retry": (

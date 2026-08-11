@@ -94,7 +94,7 @@ SUMMARY: one concise sentence
 - Process each independent component result as it arrives. Return it to the existing Sol, then start or queue that component's next required publish, audit, repair, or re-audit stage without waiting for unrelated siblings. `token-first` may reuse one uninvolved Terra across components, but reuse never creates a sibling wait.
 - Give every component audit or re-audit a stable `<component>:<revision>:<stage>` job key and track `queued`, `running`, `complete`, or `failed`. Reconcile batch spawn results per item; retry only missing or failed keys and never replay a running or complete key.
 - Keep the original Sol resumable until every component, repair, integration, and final gate is terminal. A fallback `BLOCKED/dependency` result is not coordinator completion; replace that Sol only when it is unavailable and record the reason.
-- Only combined integration and final combined-state review use an all-component barrier. When host timestamps are available, record component-ready and next-stage times; with capacity available, relay or queue the next stage within 60 seconds, excluding external compile, CI, or network waits. During long parent commands, keep completion-event consumption responsive or record why a ready job remained queued.
+- Only combined integration and final combined-state review use an all-component barrier. When host timestamps are available, record component-ready and next-stage times. Start within 60 seconds when capacity exists; otherwise mark the job queued with its reason and start it at the first eligible slot release. Exclude external compile, CI, or network waits. During long parent commands, keep completion-event consumption responsive.
 
 ## Codex execution and scaling
 

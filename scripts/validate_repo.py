@@ -183,6 +183,7 @@ def validate_agents() -> None:
                     "token-first",
                     "long parent commands",
                     "60 seconds",
+                    "first eligible slot release",
                 ),
             )
             require_instruction_line(
@@ -412,6 +413,7 @@ def validate_skill() -> None:
         "`token-first` may reuse one uninvolved Terra",
         "long parent commands",
         "within 60 seconds",
+        "first eligible slot release",
         "not an outbound result envelope",
     ):
         if required not in skill:

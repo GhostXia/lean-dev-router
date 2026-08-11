@@ -85,7 +85,7 @@ git ls-files --others --ignored --exclude-standard
 
 组件审计与复审使用稳定的 `<component>:<revision>:<stage>` 任务键，并记录 `queued`、`running`、`complete` 或 `failed`。批量创建 Agent 部分失败时逐项核对，只重试缺失或失败项，不能重放已经运行或完成的任务。原 Sol 在所有组件、返工、集成和最终门禁结束前保持可恢复；`BLOCKED/dependency` fallback 不代表协调者已经完成。
 
-宿主能提供时间戳时，记录组件就绪与下一阶段启动时间；有空闲容量时应在 60 秒内转交或排队，并把编译、CI、网络等外部等待与可控 handoff 延迟分开报告。parent 执行长命令时仍应及时消费完成事件，否则记录就绪任务继续排队的原因。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
+宿主能提供时间戳时，记录组件就绪与下一阶段启动时间。有空闲容量时应在 60 秒内启动；否则记录排队状态与原因，并在第一个符合条件的槽位释放时启动。把编译、CI、网络等外部等待与可控 handoff 延迟分开报告，parent 执行长命令时仍应及时消费完成事件。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
 
 ## 安装
 
