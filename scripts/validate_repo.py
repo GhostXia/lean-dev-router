@@ -21,6 +21,15 @@ LEGACY_PATHS = (
     Path("profiles").joinpath("codex"),
     Path("scripts").joinpath("build_" + "runtime.py"),
 )
+DISPATCH_FIELDS = (
+    "STATUS: DISPATCH",
+    "TARGET: implementation",
+    "TASK_SUMMARY",
+    "BASELINE",
+    "PATHS_ALLOW",
+    "ACCEPTANCE",
+    "CONSTRAINTS",
+)
 
 
 def error(message: str) -> None:
@@ -86,8 +95,14 @@ def validate_agents() -> None:
             require_instruction_line(
                 relative,
                 instructions,
-                "Every write task",
-                ("baseline commit", "paths_allow", "direct fast path"),
+                "Before any implementation tool or write",
+                DISPATCH_FIELDS + ("PLAN_READY",),
+            )
+            require_instruction_line(
+                relative,
+                instructions,
+                "If the inbound contract is missing or invalid",
+                ("FAILURE: missing_dispatch", "NEXT: parent", "do not name another agent"),
             )
             require_instruction_line(
                 relative,
@@ -95,7 +110,15 @@ def validate_agents() -> None:
                 "Before returning PASS",
                 ("scripts/check_scope.py", "scope-check"),
             )
+            if "sol_planner" in instructions:
+                error(f"{relative}: Luna instructions must not name sol_planner")
         elif name == "sol_planner":
+            require_instruction_line(
+                relative,
+                instructions,
+                "Before every Luna write call",
+                DISPATCH_FIELDS + ("Only you may author or amend",),
+            )
             require_instruction_line(
                 relative,
                 instructions,
@@ -143,6 +166,16 @@ def validate_skill() -> None:
         "integration_acceptance",
         "python scripts/check_scope.py",
         "ceil(items / 30)",
+        "STATUS: DISPATCH",
+        "TARGET: implementation",
+        "TASK_SUMMARY",
+        "BASELINE",
+        "PATHS_ALLOW",
+        "ACCEPTANCE",
+        "CONSTRAINTS",
+        "FAILURE: missing_dispatch",
+        "The parent may relay it mechanically but must not author, repair, or broaden it",
+        "`PLAN_READY` is not an execution status",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")

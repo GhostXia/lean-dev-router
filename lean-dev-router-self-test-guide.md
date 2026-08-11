@@ -14,7 +14,7 @@ You will compare three setups on the same tasks:
 |-------|--------|--------|
 | **A. Direct Sol** | `gpt-5.6-sol` only at a fixed **medium** reasoning effort for the primary comparison. No lean-dev-router. | Strong baseline for quality and cost of “just use Sol”. |
 | **B. Direct Luna** | `gpt-5.6-luna` only (max). No routing skill. | Cheap baseline; may fail more on ambiguous work. |
-| **C. Lean Router** | `$lean-dev-router` with `sol_planner`, `luna_worker`, `terra_auditor`, plus a fixed controller model/effort chosen before testing. For a cost-focused run, `gpt-5.6-luna` + `high` is a reasonable default. | The system under test. |
+| **C. Lean Router** | `$lean-dev-router` with `sol_planner`, `luna_worker`, `terra_auditor`, plus a fixed controller model/effort chosen before testing. Every write run starts with Sol issuing a valid `DISPATCH`. For a cost-focused run, `gpt-5.6-luna` + `high` is a reasonable controller default. | The system under test. |
 
 Optional later (do **not** mix into the primary comparison):
 
@@ -85,7 +85,7 @@ Unrelated refactors, scope expansion, drive-by cleanup.
 Starting commit hash: <hash>
 ```
 
-For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C these become each routed Luna batch's `baseline` and `paths_allow`; in a direct-Luna run the parent supplies the same fields. Paths needed only for reading remain context and do not become write authorization.
+For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C, Sol places them with task summary, objective acceptance, and fixed constraints in a standard inbound `DISPATCH`; the parent may relay but not author or amend it. In a direct-Luna Group B run, the parent supplies the packet because the router is not in use. Paths needed only for reading remain context and do not become write authorization.
 
 ### Example (L2)
 
@@ -114,7 +114,7 @@ abc1234
 
 ## 4.1 Codex Runtime and Routing Controls
 
-For Group C, use native Codex subagents as the default path. Keep dependent stages sequential. Independent read-only work may share a checkout; independent Luna writes may run in parallel only when each writer has a dedicated worktree or independent checkout and branch. Never let multiple agents write to the same worktree.
+For Group C, use native Codex subagents as the default path. Start every change-producing run with Sol: bounded L1 work should receive one minimal single-step `DISPATCH`, while L2/L3 work may require fuller decomposition. Keep dependent stages sequential. Independent read-only work may share a checkout; independent Luna writes may run in parallel only when each writer has a dedicated worktree or independent checkout and branch. Never let multiple agents write to the same worktree.
 
 Before a dependent or write handoff, verify that the intended Agent loaded, its configured model and reasoning effort are honored, and the first result follows `lean-dev-router/v1`. In the CLI, use `/agent` to inspect agent threads; when available, record `codex --version` before the run.
 

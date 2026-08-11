@@ -59,6 +59,44 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertEqual(len(language_errors), 1)
         self.assertIn("luna-worker.toml", language_errors[0])
 
+    def test_luna_requires_complete_dispatch_without_planner_knowledge(self) -> None:
+        for relative in (
+            "agents/luna-worker.toml",
+            "agents/sol-planner.toml",
+            "agents/terra-auditor.toml",
+        ):
+            source = (self.original_root / relative).read_text(encoding="utf-8")
+            if relative.endswith("luna-worker.toml"):
+                source = source.replace("`TASK_SUMMARY`", "`TASK`", 1)
+            self.write(relative, source)
+
+        validate_repo.validate_agents()
+
+        self.assertTrue(
+            any(
+                "luna-worker.toml" in message and "TASK_SUMMARY" in message
+                for message in validate_repo.ERRORS
+            )
+        )
+
+        validate_repo.ERRORS.clear()
+        luna = (self.original_root / "agents/luna-worker.toml").read_text(
+            encoding="utf-8"
+        )
+        self.write(
+            "agents/luna-worker.toml",
+            luna.replace("do not name another agent", "ask sol_planner"),
+        )
+
+        validate_repo.validate_agents()
+
+        self.assertTrue(
+            any(
+                "Luna instructions must not name sol_planner" in message
+                for message in validate_repo.ERRORS
+            )
+        )
+
     def test_four_backtick_fence_wraps_shorter_backtick_fence(self) -> None:
         text = "````\n```\ninside\n````\noutside\n"
 
