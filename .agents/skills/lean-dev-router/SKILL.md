@@ -9,7 +9,7 @@ Use the fewest agents that meet the requested token-versus-latency priority. Use
 
 ## Language
 
-Follow the parent task's primary language. Keep code, commands, paths, model IDs, and agent names unchanged.
+Follow the parent task's primary language; for bilingual tasks use the requested output language, otherwise the dominant language. Use English when no natural-language signal exists. Keep code, commands, paths, model IDs, and agent names unchanged.
 
 ## Engineering entry and route
 
@@ -38,7 +38,7 @@ CONSTRAINTS:
 NEXT: parent
 ```
 
-- Only Sol may author or amend `DISPATCH`; the parent may relay it unchanged. Every field must be present and non-empty, `PATHS_ALLOW` must contain repository-relative writable paths, and no major product or architecture decision may remain open.
+- Only Sol may author or amend `DISPATCH`; the parent may relay it unchanged. Every field must be present and non-empty, `PATHS_ALLOW` must contain repository-relative writable paths, and no major product or architecture decision may remain open. Use `minimal change only` when no narrower `CONSTRAINTS` entry is needed.
 - Missing or invalid authorization makes Luna perform no implementation and return `STATUS: BLOCKED`, `FAILURE: missing_dispatch`, and `NEXT: parent`.
 - `PASS`, `BLOCKED`, and `ESCALATE` are outbound results, never write authorization. `PLAN_READY` is not an execution status.
 
@@ -57,7 +57,7 @@ NEXT: parent
 SUMMARY: one concise sentence
 ```
 
-`PASS` completes the current stage with `FAILURE: none`; `BLOCKED` pauses for missing information, authority, or dependency; `ESCALATE` requests another capability. `REQUEST` is mandatory and never authorizes a write. `NEXT` is always `parent`. Bind repository claims to a relative path and short diff or command result. Use `path: N/A (planning-only)` only for planning, `path: N/A (batch coverage)` for assigned-versus-processed identifiers, `path: N/A (scope-check)` for repository scope, and `path: N/A (integration-check)` for combined-state evidence. Reject incomplete or unlisted combinations instead of inferring success or routing from prose.
+`PASS` completes the current stage with `FAILURE: none`; `BLOCKED` pauses for missing information, authority, or dependency; `ESCALATE` requests another capability. `REQUEST` is mandatory and never authorizes a write. `NEXT` is always `parent`. Bind repository claims to a relative path and short diff or command result. Use `path: N/A (planning-only)` only for planning, `path: N/A (batch coverage)` for assigned-versus-processed identifiers, `path: N/A (scope-check)` for repository scope, and `path: N/A (integration-check)` for combined-state evidence. Reject unlisted combinations instead of inferring routing from prose. If required fields or evidence are missing, require the originating role to return a complete result using its own `AGENT`, `STATUS: BLOCKED`, `FAILURE: verification`, `REQUEST: none`, correction details in `EVIDENCE` and `SUMMARY`, and `NEXT: parent`.
 
 | AGENT | STATUS | REQUEST | Mechanical destination |
 |:---|:---|:---|:---|
@@ -78,8 +78,8 @@ SUMMARY: one concise sentence
 - `DISPATCH` is a protocol authorization statement, not a cryptographic signature. The parent and Sol are a trusted coordination plane; the protocol does not constrain a malicious agent with host-level write access.
 - `PATHS_ALLOW` and `scripts/check_scope.py` constrain declared scope and detect drift; they do not block operating-system writes. Terra's read-only guarantee depends on Codex enforcing `sandbox_mode = "read-only"`. Host sandboxing, filesystem permissions, and worktree isolation enforce write access.
 - Sol's bounded decomposition is the primary scope control. Read context is not write authority; generated files also require prior authorization.
-- Before accepting Luna `PASS`, prefer `python scripts/check_scope.py --baseline <baseline> --allow <paths_allow_entry>` for every allow entry. It checks tracked, standard untracked, and ignored untracked paths. Record `SCOPE: PASS` as scope-check evidence; never auto-ignore a path class.
-- An extra path rejects terminal `PASS` with `FAILURE: scope`. Trim obvious drift, use Terra only when technical necessity is unclear, and amend scope only within the fixed objective and acceptance; otherwise use the human decision gate.
+- Before accepting Luna `PASS`, verify every allow entry together, preferably with one `python scripts/check_scope.py --baseline <baseline>` invocation and a repeated `--allow <paths_allow_entry>` flag for each entry; if the helper is unavailable, use the documented fallback checks. Require recorded `SCOPE: PASS` or equivalent fallback evidence and never auto-ignore a path class.
+- Missing or failed scope evidence rejects terminal `PASS` with `FAILURE: scope`. Trim obvious drift, use Terra only when technical necessity is unclear, and amend scope only within the fixed objective and acceptance; otherwise use the human decision gate.
 
 ## Integration convergence gate
 

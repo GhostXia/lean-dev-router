@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import re
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -312,6 +313,21 @@ class ValidateRepositoryTests(unittest.TestCase):
                 "trusted coordination plane",
                 "host-level write access",
             ),
+            "incomplete handoff": (
+                "originating role",
+                "FAILURE: verification",
+                "correction details in `EVIDENCE` and `SUMMARY`",
+            ),
+            "scope fallback": (
+                "verify every allow entry together",
+                "repeated `--allow <paths_allow_entry>` flag for each entry",
+                "if the helper is unavailable",
+                "Missing or failed scope evidence",
+            ),
+            "language fallback": (
+                "otherwise the dominant language",
+                "Use English when no natural-language signal exists",
+            ),
         }.items():
             with self.subTest(scenario=scenario):
                 for term in required:
@@ -328,7 +344,50 @@ class ValidateRepositoryTests(unittest.TestCase):
                     validate_repo.resolve_handoff_route(*handoff), destination
                 )
 
-        self.assertIn("cannot spawn nested workers", sol)
+        sol_instructions = tomllib.loads(sol)["developer_instructions"]
+        for contract, (anchor, required) in {
+            "single coordinator": (
+                "You are sol_planner",
+                ("non-overlapping orchestration scopes", "never spawn a peer Sol"),
+            ),
+            "scope defense": (
+                "Use Todo/`DISPATCH`",
+                ("primary scope defense", "low-frequency secondary control"),
+            ),
+            "write isolation": (
+                "Give every parallel Luna writer",
+                ("dedicated worktree", "branch alone is not isolation"),
+            ),
+            "integration contract": (
+                "When two or more write batches",
+                (
+                    "integration_order",
+                    "integration_baseline",
+                    "integration_paths_allow",
+                    "integration_acceptance",
+                ),
+            ),
+            "integration failure routing": (
+                "On integration failure",
+                ("FAILURE: scope", "verification", "dependency", "ambiguity"),
+            ),
+            "nested-spawn fallback": (
+                "If this session cannot spawn nested workers",
+                ("`DISPATCH` manifest", "worker metadata", "integration_worktree"),
+            ),
+        }.items():
+            with self.subTest(contract=contract):
+                line = next(
+                    (
+                        line
+                        for line in sol_instructions.splitlines()
+                        if anchor in line
+                    ),
+                    None,
+                )
+                self.assertIsNotNone(line)
+                for term in required:
+                    self.assertIn(term, line)
 
     def test_missing_license_is_reported_without_traceback(self) -> None:
         validate_repo.validate_license()
