@@ -402,17 +402,13 @@ def validate_skill() -> None:
     expected_titles = {
         "Lean Dev Router",
         "Language",
+        "Engineering entry and route",
         "Handoff protocol",
-        "Security and enforcement boundary",
-        "Write scope gate",
+        "Security and write scope",
         "Integration convergence gate",
-        "Codex execution mode",
-        "Worker scaling and fan-out",
-        "Engineering task entry",
-        "Route",
+        "Codex execution and scaling",
         "Human decision gate",
-        "Handoff",
-        "Stop",
+        "Handoff and stop",
     }
     actual_titles = {title for _, title in headings}
     for title in sorted(expected_titles - actual_titles):
