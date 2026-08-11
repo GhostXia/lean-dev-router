@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -178,9 +179,13 @@ class ValidateRepositoryTests(unittest.TestCase):
         source = (
             self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
         ).read_text(encoding="utf-8")
+        original = (
+            "Only Sol may author or amend `DISPATCH`; the parent may relay it unchanged."
+        )
+        self.assertIn(original, source)
         source = source.replace(
-            "The parent may relay it mechanically but must not author, repair, or broaden it.",
-            "The parent can forward the contract unchanged; creating, fixing, or expanding it remains Sol's responsibility.",
+            original,
+            "The parent may forward `DISPATCH` unchanged, while authorship and amendments remain Sol-only.",
         )
 
         self.assertEqual(self.validate_skill_source(source), [])
@@ -274,6 +279,56 @@ class ValidateRepositoryTests(unittest.TestCase):
                 for message in errors
             )
         )
+
+    def test_skill_stays_within_context_budget(self) -> None:
+        source = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertLessEqual(len(source), 12_000)
+        self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", source)), 1_500)
+
+    def test_compaction_preserves_representative_scenarios(self) -> None:
+        skill = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+        sol = (self.original_root / "agents/sol-planner.toml").read_text(
+            encoding="utf-8"
+        )
+
+        for scenario, required in {
+            "bounded L1 write": ("minimal single-step `DISPATCH`", "`sol_planner`"),
+            "read-only audit": ("audit", "`terra_auditor`"),
+            "multi-batch integration": (
+                "integration_owner",
+                "integration_baseline",
+                "integration_paths_allow",
+                "integration_acceptance",
+            ),
+            "no nested spawning": ("cannot spawn nested workers", "`DISPATCH` manifest"),
+            "security boundary": (
+                "not a cryptographic signature",
+                "sandbox_mode = \"read-only\"",
+                "trusted coordination plane",
+                "host-level write access",
+            ),
+        }.items():
+            with self.subTest(scenario=scenario):
+                for term in required:
+                    self.assertIn(term, skill)
+
+        for handoff, destination in {
+            ("luna_worker", "ESCALATE", "technical_resolution"): "terra_auditor",
+            ("terra_auditor", "ESCALATE", "implementation"): "sol_planner",
+            ("terra_auditor", "ESCALATE", "planning_resolution"): "sol_planner",
+            ("sol_planner", "BLOCKED", "human_authority"): "user",
+        }.items():
+            with self.subTest(handoff=handoff):
+                self.assertEqual(
+                    validate_repo.resolve_handoff_route(*handoff), destination
+                )
+
+        self.assertIn("cannot spawn nested workers", sol)
 
     def test_missing_license_is_reported_without_traceback(self) -> None:
         validate_repo.validate_license()
