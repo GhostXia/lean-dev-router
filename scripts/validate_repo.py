@@ -324,13 +324,13 @@ def validate_handoff_table(relative: str, skill: str) -> None:
     rows: dict[tuple[str, str, str], str] = {}
     row_pattern = re.compile(
         r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*"
-        r"\|\s*`([^`]+)`[^|]*\|\s*$"
+        r"\|\s*(.*?)\s*\|\s*$"
     )
     for number, line in markdown_lines(skill):
         match = row_pattern.match(line)
         if not match:
             continue
-        agent, status, request, destination = match.groups()
+        agent, status, request, destination_cell = match.groups()
         handoff = (agent, status, request)
         if handoff in rows:
             error(
@@ -338,6 +338,17 @@ def validate_handoff_table(relative: str, skill: str) -> None:
                 f"{agent}/{status}/{request}"
             )
             continue
+        if not destination_cell:
+            rows[handoff] = ""
+            error(
+                f"{relative}:{number}: missing destination for handoff "
+                f"{agent}/{status}/{request}"
+            )
+            continue
+        destination_match = re.fullmatch(r"`([^`]+)`[^|]*", destination_cell)
+        if destination_match is None:
+            continue
+        destination = destination_match.group(1)
         rows[handoff] = destination
         try:
             expected_destination = resolve_handoff_route(*handoff)

@@ -256,6 +256,25 @@ class ValidateRepositoryTests(unittest.TestCase):
             )
         )
 
+    def test_skill_protocol_validation_reports_empty_route_destination(self) -> None:
+        source = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+        source = source.replace(
+            "| `sol_planner` | `BLOCKED` | `human_authority` | `user`, through parent |",
+            "| `sol_planner` | `BLOCKED` | `human_authority` | |",
+        )
+
+        errors = self.validate_skill_source(source)
+
+        self.assertTrue(
+            any(
+                "missing destination for handoff "
+                "sol_planner/BLOCKED/human_authority" in message
+                for message in errors
+            )
+        )
+
     def test_missing_license_is_reported_without_traceback(self) -> None:
         validate_repo.validate_license()
 

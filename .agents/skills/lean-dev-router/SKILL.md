@@ -73,6 +73,7 @@ SUMMARY: one concise sentence
 | `sol_planner` | `BLOCKED` | `none` | `current_coordinator`, which is the parent at the top level; stage paused |
 | `sol_planner` | `BLOCKED` | `implementation` | `luna_worker`, with a valid `DISPATCH` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `user`, through parent |
+
 - If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`.
 
 ## Security and enforcement boundary
