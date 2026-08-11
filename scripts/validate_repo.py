@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate repository-owned configuration and documentation invariants."""
+"""Validate the repository's directly executable English runtime."""
 
 from __future__ import annotations
 
@@ -12,15 +12,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
+CJK = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")
+LEGACY_PATHS = (
+    Path("runtime").joinpath("source"),
+    Path("profiles").joinpath("codex"),
+    Path("scripts").joinpath("build_" + "runtime.py"),
+)
 
 
 def error(message: str) -> None:
-    """Record one validation failure without aborting the remaining checks."""
     ERRORS.append(message)
 
 
-def read(relative: str) -> str:
-    """Read one repository-relative UTF-8 text file."""
+def read(relative: str | Path) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
@@ -30,23 +34,16 @@ def require_instruction_line(
     anchor: str,
     required_terms: tuple[str, ...],
 ) -> None:
-    """Require route controls to coexist in the instruction line they govern."""
-    line = next(
-        (candidate for candidate in instructions.splitlines() if anchor in candidate),
-        None,
-    )
+    line = next((line for line in instructions.splitlines() if anchor in line), None)
     if line is None:
-        error(f"{relative}: missing instruction section anchored by {anchor!r}")
+        error(f"{relative}: missing instruction anchored by {anchor!r}")
         return
     for term in required_terms:
         if term not in line:
-            error(
-                f"{relative}: instruction section {anchor!r} is missing {term!r}"
-            )
+            error(f"{relative}: {anchor!r} instruction is missing {term!r}")
 
 
 def validate_agents() -> None:
-    """Validate Agent TOML metadata and route-specific instruction contracts."""
     expected = {
         "agents/luna-worker.toml": ("luna_worker", "gpt-5.6-luna", "max", None),
         "agents/sol-planner.toml": ("sol_planner", "gpt-5.6-sol", "medium", None),
@@ -57,22 +54,17 @@ def validate_agents() -> None:
             "read-only",
         ),
     }
-
     for relative, (name, model, effort, sandbox) in expected.items():
-        path = ROOT / relative
         try:
-            with path.open("rb") as handle:
-                data = tomllib.load(handle)
+            data = tomllib.loads(read(relative))
         except (OSError, tomllib.TOMLDecodeError) as exc:
             error(f"{relative}: TOML parse failed: {exc}")
             continue
-
-        required = {
+        for key, value in {
             "name": name,
             "model": model,
             "model_reasoning_effort": effort,
-        }
-        for key, value in required.items():
+        }.items():
             if data.get(key) != value:
                 error(f"{relative}: expected {key}={value!r}")
         if sandbox is not None and data.get("sandbox_mode") != sandbox:
@@ -80,91 +72,55 @@ def validate_agents() -> None:
         if not str(data.get("description", "")).strip():
             error(f"{relative}: description is empty")
         instructions = str(data.get("developer_instructions", ""))
-        if not instructions.strip():
-            error(f"{relative}: developer_instructions is empty")
-        if "语言 / Language" not in instructions:
-            error(f"{relative}: bilingual language rule is missing")
+        if "Language:" not in instructions:
+            error(f"{relative}: English language rule is missing")
         if name == "luna_worker":
             require_instruction_line(
                 relative,
                 instructions,
                 "Every write task",
-                (
-                    "baseline commit",
-                    "paths_allow",
-                    "direct fast path",
-                ),
+                ("baseline commit", "paths_allow", "direct fast path"),
             )
             require_instruction_line(
                 relative,
                 instructions,
                 "Before returning PASS",
-                ("git ls-files --others --ignored --exclude-standard",),
+                ("scripts/check_scope.py", "scope-check"),
             )
-        elif name == "terra_auditor":
+        elif name == "sol_planner":
+            require_instruction_line(
+                relative,
+                instructions,
+                "Before accepting Luna's PASS",
+                ("scripts/check_scope.py", "SCOPE: PASS", "scope-check"),
+            )
+        else:
             require_instruction_line(
                 relative,
                 instructions,
                 "When assigned an integration audit",
-                (
-                    "exact combined commit",
-                    "integration_acceptance",
-                    "component-level audit PASS",
-                ),
+                ("exact combined commit", "integration_acceptance"),
             )
 
 
-def validate_markdown() -> None:
-    """Validate Markdown fences, Python examples, and local links."""
-    link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-    for path in ROOT.rglob("*.md"):
-        relative = path.relative_to(ROOT).as_posix()
-        text = path.read_text(encoding="utf-8")
-        open_fence: int | None = None
-        fence_language = ""
-        fenced_lines: list[str] = []
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            if line.lstrip().startswith("```"):
-                if open_fence is None:
-                    open_fence = line_number
-                    fence_language = line.lstrip()[3:].strip().lower()
-                    fenced_lines = []
-                else:
-                    if fence_language == "python":
-                        try:
-                            ast.parse("\n".join(fenced_lines))
-                        except SyntaxError as exc:
-                            error(
-                                f"{relative}:{open_fence}: invalid Python fence: "
-                                f"{exc.msg} at fenced line {exc.lineno}"
-                            )
-                    open_fence = None
-                    fence_language = ""
-                    fenced_lines = []
-            elif open_fence is not None:
-                if fence_language in ("", "text") and re.match(r"^#{1,6}\s+", line):
-                    error(
-                        f"{relative}:{line_number}: Markdown heading appears inside "
-                        f"a fence opened at line {open_fence}"
-                    )
-                fenced_lines.append(line)
-        if open_fence is not None:
-            error(f"{relative}:{open_fence}: unclosed Markdown code fence")
-
-        for match in link_pattern.finditer(text):
-            target = match.group(1).split(maxsplit=1)[0].strip("<>")
-            if target.startswith(("http://", "https://", "#", "mailto:")):
-                continue
-            local_target = target.split("#", 1)[0]
-            if local_target and not (path.parent / local_target).exists():
-                error(f"{relative}: missing local link target {local_target!r}")
+def markdown_lines(text: str) -> list[tuple[int, str]]:
+    outside: list[tuple[int, str]] = []
+    fence: str | None = None
+    for number, line in enumerate(text.splitlines(), start=1):
+        marker = re.match(r"^\s*(```+|~~~+)", line)
+        if marker:
+            token = marker.group(1)[0]
+            fence = None if fence == token else token if fence is None else fence
+        elif fence is None:
+            outside.append((number, line))
+    return outside
 
 
-def validate_skill_and_manifest() -> None:
-    """Validate the Skill frontmatter, protocol controls, and UI manifest."""
-    skill = read(".agents/skills/lean-dev-router/SKILL.md")
-    if not skill.startswith("---\n"):
-        error("SKILL.md: missing YAML frontmatter")
+def validate_skill() -> None:
+    relative = ".agents/skills/lean-dev-router/SKILL.md"
+    skill = read(relative)
+    if not skill.startswith("---\n") or "\n---\n" not in skill[4:]:
+        error(f"{relative}: missing YAML-style frontmatter")
     for required in (
         "name: lean-dev-router",
         "path: N/A (batch coverage)",
@@ -172,62 +128,187 @@ def validate_skill_and_manifest() -> None:
         "integration_baseline",
         "integration_paths_allow",
         "integration_acceptance",
-        "git ls-files --others --ignored --exclude-standard",
+        "python scripts/check_scope.py",
+        "ceil(items / 30)",
     ):
         if required not in skill:
-            error(f"SKILL.md: missing required protocol text {required!r}")
+            error(f"{relative}: missing required text {required!r}")
 
-    manifest = read(".agents/skills/lean-dev-router/agents/openai.yaml")
-    for required in ("interface:", "display_name:", "short_description:", "default_prompt:"):
-        if not re.search(rf"^\s*{re.escape(required)}", manifest, re.MULTILINE):
-            error(f"openai.yaml: missing {required}")
+    headings: list[tuple[int, str]] = []
+    for number, line in markdown_lines(skill):
+        heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if heading:
+            headings.append((len(heading.group(1)), heading.group(2)))
+        if re.match(r"^\s*(?:[-+*]|\d+\.)\s*$", line):
+            error(f"{relative}:{number}: empty list item")
+        if re.search(r"\s/\s*$", line):
+            error(f"{relative}:{number}: unconsumed language separator")
+    for previous, current in zip(headings, headings[1:]):
+        if current[0] > previous[0] + 1:
+            error(f"{relative}: heading level jumps from H{previous[0]} to H{current[0]}")
+    expected_titles = {
+        "Lean Dev Router",
+        "Language",
+        "Handoff protocol",
+        "Write scope gate",
+        "Integration convergence gate",
+        "Codex execution mode",
+        "Worker scaling and fan-out",
+        "Engineering task entry",
+        "Route",
+        "Human decision gate",
+        "Handoff",
+        "Stop",
+    }
+    actual_titles = {title for _, title in headings}
+    for title in sorted(expected_titles - actual_titles):
+        error(f"{relative}: missing heading {title!r}")
+    for number, line in markdown_lines(skill):
+        if line.strip() in expected_titles and not line.startswith("#"):
+            error(f"{relative}:{number}: bare heading {line.strip()!r}")
+
+
+def parse_manifest(text: str) -> dict[str, dict[str, str]]:
+    """Parse the repository's intentionally small mapping-only YAML manifest."""
+    result: dict[str, dict[str, str]] = {}
+    section: str | None = None
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if "\t" in line:
+            raise ValueError(f"line {number}: tabs are not allowed")
+        top = re.fullmatch(r"([A-Za-z_][\w-]*):", line)
+        if top:
+            section = top.group(1)
+            if section in result:
+                raise ValueError(f"line {number}: duplicate section {section!r}")
+            result[section] = {}
+            continue
+        item = re.fullmatch(r"  ([A-Za-z_][\w-]*):\s*(.+)", line)
+        if item is None or section is None:
+            raise ValueError(f"line {number}: unsupported YAML structure")
+        key, raw_value = item.groups()
+        if key in result[section]:
+            raise ValueError(f"line {number}: duplicate key {key!r}")
+        try:
+            value = ast.literal_eval(raw_value)
+        except (SyntaxError, ValueError) as exc:
+            raise ValueError(f"line {number}: invalid quoted scalar") from exc
+        if not isinstance(value, str):
+            raise ValueError(f"line {number}: expected a string scalar")
+        result[section][key] = value
+    return result
+
+
+def validate_manifest() -> None:
+    relative = ".agents/skills/lean-dev-router/agents/openai.yaml"
+    try:
+        manifest = parse_manifest(read(relative))
+    except (OSError, ValueError) as exc:
+        error(f"{relative}: YAML parse failed: {exc}")
+        return
+    interface = manifest.get("interface", {})
+    for key in ("display_name", "short_description", "default_prompt"):
+        if not interface.get(key, "").strip():
+            error(f"{relative}: interface.{key} is missing")
+    if "$lean-dev-router" not in interface.get("default_prompt", ""):
+        error(f"{relative}: default_prompt disagrees with the Skill name")
+
+
+def validate_runtime_language() -> None:
+    for root in (ROOT / ".agents", ROOT / "agents"):
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(ROOT).as_posix()
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if CJK.search(line):
+                    error(f"{relative}:{number}: CJK text is not allowed in runtime files")
+
+
+def validate_markdown() -> None:
+    link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+    for path in ROOT.rglob("*.md"):
+        if ".git" in path.parts or ".workbuddy" in path.parts:
+            continue
+        relative = path.relative_to(ROOT).as_posix()
+        text = path.read_text(encoding="utf-8")
+        fence: tuple[str, int, str, list[str]] | None = None
+        for number, line in enumerate(text.splitlines(), start=1):
+            marker = re.match(r"^\s*(```+|~~~+)(.*)$", line)
+            if marker:
+                token = marker.group(1)[0]
+                if fence is None:
+                    fence = (token, number, marker.group(2).strip().lower(), [])
+                elif fence[0] == token:
+                    if fence[2] == "python":
+                        try:
+                            ast.parse("\n".join(fence[3]))
+                        except SyntaxError as exc:
+                            error(f"{relative}:{fence[1]}: invalid Python fence: {exc.msg}")
+                    fence = None
+            elif fence is not None:
+                fence[3].append(line)
+        if fence is not None:
+            error(f"{relative}:{fence[1]}: unclosed Markdown code fence")
+        for match in link_pattern.finditer(text):
+            target = match.group(1).split(maxsplit=1)[0].strip("<>")
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            local = target.split("#", 1)[0]
+            if local and not (path.parent / local).exists():
+                error(f"{relative}: missing local link target {local!r}")
 
 
 def validate_repository_contract() -> None:
-    """Validate cross-file repository contracts and license text."""
+    for path in LEGACY_PATHS:
+        if (ROOT / path).exists():
+            error(f"legacy runtime path still exists: {path.as_posix()}")
+    legacy_tokens = tuple(path.as_posix() for path in LEGACY_PATHS)
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or ".git" in path.parts or ".workbuddy" in path.parts:
+            continue
+        if path.suffix.lower() not in {".md", ".py", ".toml", ".yaml", ".yml"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for token in legacy_tokens:
+            if token in text:
+                error(f"{path.relative_to(ROOT).as_posix()}: legacy reference {token!r}")
     required_text = {
-        "README.md": (
-            "path: N/A (batch coverage)",
-            "integration_owner",
-            "integration_paths_allow",
-            "git ls-files --others --ignored --exclude-standard",
-            "Historical evidence note:",
-            "历史证据说明：",
-        ),
-        "agents/sol-planner.toml": (
-            "integration_owner",
-            "integration_paths_allow",
-            "git ls-files --others --ignored --exclude-standard",
+        "README.md": ("docs/zh-CN/README.md", "scripts/check_scope.py"),
+        "docs/zh-CN/README.md": (
+            "仅供人类阅读",
+            ".agents/skills/lean-dev-router/SKILL.md",
+            "scripts/check_scope.py",
         ),
         "lean-dev-router-self-test-guide.md": (
             "integration_owner",
             "tracked/untracked scope evidence",
-            "git ls-files --others --ignored --exclude-standard",
         ),
         "lean-dev-router-l3-idempotent-orders-task.md": (
             "threading.Barrier(3)",
-            "git ls-files --others --exclude-standard",
-            "git ls-files --others --ignored --exclude-standard",
             "join(timeout=5)",
-            "assert not t1.is_alive()",
-            "assert not t2.is_alive()",
         ),
     }
     for relative, snippets in required_text.items():
-        text = read(relative)
+        try:
+            text = read(relative)
+        except OSError as exc:
+            error(f"{relative}: cannot read required file: {exc}")
+            continue
         for snippet in snippets:
             if snippet not in text:
                 error(f"{relative}: missing contract text {snippet!r}")
-
     if not read("LICENSE").startswith("MIT License\n"):
         error("LICENSE: expected MIT license text")
 
 
 def main() -> int:
-    """Run every repository validator and return a process exit code."""
     validate_agents()
+    validate_skill()
+    validate_manifest()
+    validate_runtime_language()
     validate_markdown()
-    validate_skill_and_manifest()
     validate_repository_contract()
     if ERRORS:
         for message in ERRORS:
