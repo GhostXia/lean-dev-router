@@ -18,7 +18,7 @@ Use the fewest agents that satisfy the selected token-versus-latency priority. F
 Execution authorization and delegated results are different message types. A Luna write task starts only from this inbound contract:
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
 TASK_SUMMARY: one bounded objective
@@ -42,7 +42,7 @@ NEXT: parent
 Every delegated result must use this compact outbound protocol; do not invent role-specific output schemas.
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
@@ -81,9 +81,9 @@ SUMMARY: one concise sentence
 
 - Default to native Codex subagents using the configured custom Agent TOML files. Start change-producing work with one `sol_planner`; for clear bounded L1 work it issues one minimal `DISPATCH`, while complex work receives fuller decomposition and multiple contracts as needed. Read-only audit or investigation entry may still start with Terra.
 - Let the default Sol coordinator run multiple Luna and Terra workers in parallel when their assignments are independent. Give every parallel Luna writer a dedicated worktree or independent checkout on its own branch; a branch alone is not write isolation. Read-only Terra workers may share a checkout.
-- Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v1`.
+- Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v2`.
 - When available, check `codex --version` before relying on native routing; in the CLI use `/agent` to inspect agent threads.
-- If a Sol session cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` and a compact `DISPATCH` manifest in `EVIDENCE`. Each Luna write entry must embed a literal complete artifact containing `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`; worker metadata also contains `id`, `role`, `scope`, `worktree`, and `depends_on`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required. The parent relays each artifact unchanged and returns compact results to the same Sol for consolidation. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
+- If a Sol session cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` and a compact `DISPATCH` manifest in `EVIDENCE`. Each Luna write entry must embed a literal complete artifact containing `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`; worker metadata also contains `id`, `role`, `scope`, `worktree`, and `depends_on`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required. The parent relays each artifact unchanged and returns compact results to the same Sol for consolidation. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 - Codex's native background-agent UI is still a native subagent workflow. Treat unrelated background processes or sessions as fallback, not as equivalent parent-child routing.
 
 ## Worker scaling and fan-out

@@ -71,7 +71,7 @@ class ValidateRepositoryTests(unittest.TestCase):
         }
 
         for required, replacement in (
-            ("PROTOCOL: lean-dev-router/v1", "PROTOCOL: other/v1"),
+            ("PROTOCOL: lean-dev-router/v2", "PROTOCOL: other/v2"),
             ("`TASK_SUMMARY`", "`TASK`"),
             ("NEXT: parent", "NEXT: none"),
         ):

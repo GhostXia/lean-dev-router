@@ -28,7 +28,7 @@
 
 > **Token-efficient** — Reduce unnecessary agent calls and handoff context.
 > **Role-separated** — Sol plans, Luna implements, and Terra validates.
-> **Protocol-driven** — Compact, auditable `lean-dev-router/v1` handoffs.
+> **Protocol-driven** — Compact, auditable `lean-dev-router/v2` handoffs.
 > **Isolated parallelism** — Every writing Luna owns a separate worktree or checkout.
 > **Runtime-independent** — The routing theory is portable beyond Codex and GPT.
 
@@ -65,7 +65,7 @@ Because the subagents use explicitly selected models and follow detailed work as
 Execution authority is a distinct inbound contract. Luna must receive this complete artifact before any implementation tool or write:
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
 TASK_SUMMARY: one bounded objective
@@ -86,7 +86,7 @@ Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower con
 All three roles use a separate compact outbound result protocol:
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
@@ -110,6 +110,8 @@ SUMMARY: one concise sentence
 `PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. `PLAN_READY` is not an execution status.
 
 `NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. The parent applies a fixed transition table: Luna technical resolution goes to Terra; Terra implementation or planning resolution returns to the existing Sol; Sol implementation goes to Luna only with a valid `DISPATCH`; and only Sol may request human authority. Invalid combinations are rejected instead of inferred from prose.
+
+Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `REQUEST` and removes concrete agent names from `NEXT`. Coordinators must reject mixed-version handoffs instead of guessing missing fields or translating them implicitly.
 
 > 🛡️ The spawning coordinator or parent performs the fixed role-and-request lookup. It must **not** infer a route or success from an incomplete handoff.
 
@@ -182,10 +184,10 @@ Native Codex subagents are the default. Start every change-producing task with o
 **Before a dependent/write handoff**, verify:
 1. The intended Agent loaded
 2. Its model and reasoning effort are honored
-3. Its first result follows `lean-dev-router/v1`
+3. Its first result follows `lean-dev-router/v2`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -293,5 +295,5 @@ The run used **405,908** tokens outside Luna (~**8.6%** of total). This is a rou
 ---
 
 <p align="center">
-  <sub>Built with ⚡ by the routing theory · lean-dev-router/v1</sub>
+  <sub>Built with ⚡ by the routing theory · lean-dev-router/v2</sub>
 </p>

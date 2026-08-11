@@ -22,7 +22,7 @@ LEGACY_PATHS = (
     Path("scripts").joinpath("build_" + "runtime.py"),
 )
 DISPATCH_FIELDS = (
-    "PROTOCOL: lean-dev-router/v1",
+    "PROTOCOL: lean-dev-router/v2",
     "STATUS: DISPATCH",
     "TARGET: implementation",
     "TASK_SUMMARY",
