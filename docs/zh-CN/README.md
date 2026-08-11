@@ -69,14 +69,39 @@ python scripts/check_scope.py \
 
 脚本使用 Git 的 NUL 分隔输出读取路径，因此不会把中文、空格、换行或其他特殊字符误当成显示层转义文本。
 
+脚本不可用时，协调者仍必须执行等价的 Git fallback 检查。工作树批次分别枚举 tracked、普通 untracked 和 ignored untracked 路径：
+
+```bash
+git diff --name-only --no-renames <baseline> --
+git ls-files --others --exclude-standard
+git ls-files --others --ignored --exclude-standard
+```
+
+组合提交把第一条命令改为 `git diff --name-only --no-renames <integration-baseline> <combined-commit> --`，并在干净的 integration worktree 中继续检查两类 untracked 路径。所有发现的路径都必须与完整 allow-list 比对并记录等价范围证据；脚本与 fallback 的验收语义相同。
+
 ## 安装
 
-Codex 用户复制两组英文运行时文件：
+Codex 用户必须把以下英文运行时作为同一版本整体安装：
 
 1. `.agents/skills/lean-dev-router/` 到 Codex 的 Skill 目录；
 2. `agents/` 下的三个 TOML 文件到 Codex 的 Agent 配置目录。
 
-范围检查脚本当前位于仓库的 `scripts/check_scope.py`。如果未来提供独立分发包，必须把 helper 放在可稳定解析的位置并随运行时一起分发，不能假定目标仓库已经包含本项目的 `scripts/` 目录。
+不得混用不同版本的 Skill 与 Agent TOML。安装后启动新的 Codex 任务；不得把仍在进行的 v1 handoff 直接恢复为 v2。
+
+### 可选范围检查工具
+
+`scripts/check_scope.py` 是仓库级便利工具，不是 Skill 或 Agent 的必需运行时文件。真正必须满足的是：接受 Luna 的 `PASS` 前取得范围证据。如果目标仓库没有该脚本，使用本文[路径范围检查](#路径范围检查)中的 Git fallback。安装 Skill 不会自动把 `scripts/check_scope.py` 添加到其他目标仓库。
+
+### 升级与验证
+
+1. 先结束或停止正在进行的 handoff 链；
+2. 使用同一个 release 同时替换 Skill 目录和三个 Agent TOML；
+3. 启动新的 Codex 任务，在依赖或写入 handoff 前确认实际 Agent、模型、reasoning effort、sandbox 与首个 `lean-dev-router/v2` 结果；
+4. 在该 release 的干净 checkout 中运行 `python scripts/validate_repo.py` 和 `python -m unittest discover -s tests -v`。
+
+### 卸载与回滚
+
+卸载时只删除已安装的 `lean-dev-router` Skill 目录和三个具名 Agent TOML，然后启动新的 Codex 任务；这不会修改目标仓库。回滚时必须用某一个旧 release 的完整文件同时替换两组运行时，不得混合版本，也不得跨版本继续尚未结束的 handoff。
 
 ## 维护边界
 
