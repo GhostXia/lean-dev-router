@@ -59,7 +59,7 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertEqual(len(language_errors), 1)
         self.assertIn("luna-worker.toml", language_errors[0])
 
-    def test_luna_requires_complete_dispatch_without_planner_knowledge(self) -> None:
+    def test_workers_require_complete_protocol_without_peer_knowledge(self) -> None:
         agent_paths = (
             "agents/luna-worker.toml",
             "agents/sol-planner.toml",
@@ -71,7 +71,7 @@ class ValidateRepositoryTests(unittest.TestCase):
         }
 
         for required, replacement in (
-            ("PROTOCOL: lean-dev-router/v1", "PROTOCOL: other/v1"),
+            ("PROTOCOL: lean-dev-router/v2", "PROTOCOL: other/v2"),
             ("`TASK_SUMMARY`", "`TASK`"),
             ("NEXT: parent", "NEXT: none"),
         ):
@@ -92,21 +92,34 @@ class ValidateRepositoryTests(unittest.TestCase):
                 )
 
         validate_repo.ERRORS.clear()
+        for role, peer, expected in (
+            ("luna-worker.toml", "terra_auditor", "Luna instructions must not name terra"),
+            ("terra-auditor.toml", "luna_worker", "Terra instructions must not name luna"),
+        ):
+            with self.subTest(role=role, peer=peer):
+                validate_repo.ERRORS.clear()
+                for relative, source in originals.items():
+                    if relative.endswith(role):
+                        source = source.replace(
+                            'description = "', f'description = "Ask {peer}; ', 1
+                        )
+                    self.write(relative, source)
+
+                validate_repo.validate_agents()
+
+                self.assertTrue(
+                    any(expected in message for message in validate_repo.ERRORS)
+                )
+
+        validate_repo.ERRORS.clear()
         for relative, source in originals.items():
             if relative.endswith("luna-worker.toml"):
-                source = source.replace(
-                    "do not name another agent", "ask sol_planner"
-                )
+                source = source.replace("PROTOCOL, AGENT, STATUS, FAILURE, REQUEST", "PROTOCOL, AGENT, STATUS, FAILURE")
             self.write(relative, source)
 
         validate_repo.validate_agents()
 
-        self.assertTrue(
-            any(
-                "Luna instructions must not name sol_planner" in message
-                for message in validate_repo.ERRORS
-            )
-        )
+        self.assertTrue(any("REQUEST" in message for message in validate_repo.ERRORS))
 
     def test_four_backtick_fence_wraps_shorter_backtick_fence(self) -> None:
         text = "````\n```\ninside\n````\noutside\n"
@@ -117,6 +130,37 @@ class ValidateRepositoryTests(unittest.TestCase):
         validate_repo.validate_markdown()
 
         self.assertEqual(validate_repo.ERRORS, [])
+
+    def test_handoff_route_table_accepts_only_legal_combinations(self) -> None:
+        expected = {
+            ("luna_worker", "PASS", "none"): "current_coordinator",
+            ("luna_worker", "BLOCKED", "none"): "current_coordinator",
+            ("luna_worker", "ESCALATE", "technical_resolution"): "terra_auditor",
+            ("terra_auditor", "PASS", "none"): "current_coordinator",
+            ("terra_auditor", "BLOCKED", "none"): "current_coordinator",
+            ("terra_auditor", "ESCALATE", "implementation"): "sol_planner",
+            ("terra_auditor", "ESCALATE", "planning_resolution"): "sol_planner",
+            ("sol_planner", "PASS", "none"): "current_coordinator",
+            ("sol_planner", "BLOCKED", "none"): "current_coordinator",
+            ("sol_planner", "BLOCKED", "implementation"): "luna_worker",
+            ("sol_planner", "BLOCKED", "human_authority"): "user",
+        }
+        self.assertEqual(validate_repo.LEGAL_HANDOFFS, set(expected))
+        for handoff, destination in expected.items():
+            with self.subTest(handoff=handoff):
+                self.assertEqual(
+                    validate_repo.resolve_handoff_route(*handoff), destination
+                )
+
+        for illegal in (
+            ("luna_worker", "ESCALATE", "human_authority"),
+            ("terra_auditor", "BLOCKED", "implementation"),
+            ("sol_planner", "PASS", "implementation"),
+            ("luna_worker", "ESCALATE", "none"),
+        ):
+            with self.subTest(illegal=illegal):
+                with self.assertRaisesRegex(ValueError, "illegal handoff combination"):
+                    validate_repo.resolve_handoff_route(*illegal)
 
     def test_missing_license_is_reported_without_traceback(self) -> None:
         validate_repo.validate_license()

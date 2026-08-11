@@ -116,7 +116,7 @@ abc1234
 
 For Group C, use native Codex subagents as the default path. Start every change-producing run with Sol: bounded L1 work should receive one minimal single-step `DISPATCH`, while L2/L3 work may require fuller decomposition. Keep dependent stages sequential. Independent read-only work may share a checkout; independent Luna writes may run in parallel only when each writer has a dedicated worktree or independent checkout and branch. Never let multiple agents write to the same worktree.
 
-Before a dependent or write handoff, verify that the intended Agent loaded, its configured model and reasoning effort are honored, and the first result follows `lean-dev-router/v1`. In the CLI, use `/agent` to inspect agent threads; when available, record `codex --version` before the run.
+Before a dependent or write handoff, verify that the intended Agent loaded, its configured model and reasoning effort are honored, and the first result follows `lean-dev-router/v2`. In the CLI, use `/agent` to inspect agent threads; when available, record `codex --version` before the run.
 
 If native spawning is unavailable or the custom Agent configuration is not honored, use one independent Codex session per role as a fallback. Pass only the compact handoff, relevant paths, constraints, and evidence. Use an isolated worktree or branch for writes and record the fallback in the results.
 
@@ -206,7 +206,7 @@ While the run proceeds, log:
 - effective model and reasoning effort for each call
 - native subagent or independent-session fallback
 - whether an escalation occurred
-- whether each handoff followed `lean-dev-router/v1`
+- whether each handoff followed `lean-dev-router/v2`
 - whether handoffs looked compact / normal / verbose
 - whether Sol used Todo/`DISPATCH` to produce independently verifiable, path-bounded batches without needless fragmentation
 - for multi-batch deliverables, whether Sol declared shared contracts, integration owner/order/baseline/allow-list, one clean integration state, final integration acceptance, and the Terra-review trigger

@@ -16,15 +16,21 @@ Lean Dev Router 用三个职责不同的角色处理仓库内的软件工程任�
 
 ## 交接协议怎么读
 
-协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v1`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空的任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。只有 Sol 可以签发或修改，父会话只能原样转发；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`，也不会点名规划角色。
+协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空的任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。只有 Sol 可以签发或修改，父会话只能原样转发；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`，也不会点名规划角色。
 
-Agent 返回的出站交接包含状态、失败类型、证据、下一角色和一句摘要。重点检查三件事：
+Agent 返回的出站交接包含状态、失败类型、能力请求、证据、固定的 `NEXT: parent` 和一句摘要。重点检查三件事：
 
 1. 状态为成功时，失败类型必须为空。
 2. 仓库结论必须绑定真实文件路径或明确的仓库级检查结果。
-3. 下一角色表示当前协调者接下来应派发谁，不代表结果会绕过父会话直接发送。
+3. `REQUEST` 只描述下一步需要的能力，不点名其他 worker；父会话按“当前角色 + 能力请求”的固定表转发，不能根据证据自由推断路由。
 
 `PASS`、`BLOCKED`、`ESCALATE` 都只是结果，不能作为写入授权；`PLAN_READY` 也不是执行状态。
+
+升档顺序保持不变：Luna 请求技术解决能力，Terra 请求实施或规划能力，只有 Sol 可以请求用户决策。只有 Sol 和父会话知道具体拓扑。`REQUEST` 本身不授权写入；任何实施仍须由 Sol 签发完整 `DISPATCH`。`PASS/none` 表示当前阶段完成，`BLOCKED/none` 表示停在当前协调者处等待信息或依赖变化，不派发新能力。
+
+`lean-dev-router/v2` 与 v1 不兼容：v2 强制要求 `REQUEST`，并禁止在 `NEXT` 中点名具体 Agent。协调者必须拒绝混用版本的交接，不能自动猜测或静默转换。
+
+从 v1 迁移时，应一次性替换 Skill 和三个 Agent TOML，把保存的协议模板改为 v2，为每个出站结果增加合法的 `REQUEST`，并把具名的出站 `NEXT` 改为 `NEXT: parent`。不要把进行中的 v1 交接链直接续接为 v2；结束或停止旧链后，从新的 v2 协调会话开始。
 
 协议的精确定义只维护在英文 Skill 中，避免中英文副本漂移。
 

@@ -18,7 +18,7 @@ Use the fewest agents that satisfy the selected token-versus-latency priority. F
 Execution authorization and delegated results are different message types. A Luna write task starts only from this inbound contract:
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
 TASK_SUMMARY: one bounded objective
@@ -37,26 +37,43 @@ NEXT: parent
 - Inbound `DISPATCH` does not use an `AGENT` field. When no narrower constraint is needed, `minimal change only` is a valid non-empty `CONSTRAINTS` entry.
 - Before any implementation tool or write, Luna validates only the contract, not the system topology. Missing or invalid authorization produces `STATUS: BLOCKED`, `FAILURE: missing_dispatch`, and `NEXT: parent`; Luna does not name another agent or edit files.
 - `PASS`, `BLOCKED`, and `ESCALATE` are outbound result statuses and never authorize implementation. `PLAN_READY` is not an execution status.
-- Luna may name `terra_auditor` only as the single technical-escalation edge; it never names the dispatch authority. Full worker-to-worker topology anonymity remains outside this gate's scope.
+- Workers describe the capability required next and never name another worker or the dispatch authority. Only Sol and the parent know the concrete topology. The spawning coordinator or parent maps `AGENT`, `STATUS`, and `REQUEST` mechanically; it does not infer routing from `EVIDENCE`.
 
 Every delegated result must use this compact outbound protocol; do not invent role-specific output schemas.
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
+REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or `command` -> PASS/FAIL
-NEXT: parent | luna_worker | terra_auditor | sol_planner | none
+NEXT: parent
 SUMMARY: one concise sentence
 ```
 
 - `PASS` means the current role's stage is complete; `BLOCKED` means required information, authority, or dependency is unavailable; `ESCALATE` means another role must act.
 - `FAILURE` is `none` for `PASS`; otherwise choose one primary category.
 - Every repository claim must bind to a concrete relative path and include a short diff summary or command result. Use `path: N/A (planning-only)` only for planning with no repository artifact, `path: N/A (batch coverage)` for assigned-versus-processed item identifiers, `path: N/A (scope-check)` for a repository-wide allow-list result, and `path: N/A (integration-check)` for commands run against the combined integration commit; never invent a path.
-- `NEXT` is mandatory and names the role the current coordinator should dispatch next. A delegated result always returns to the session that spawned it; Sol performs the named route when present, otherwise the parent does. If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`.
+- `REQUEST` is mandatory. Use `none` only when no new capability should be dispatched, `implementation` to ask the dispatch authority for an authorized implementation or repair, `technical_resolution` for diagnosis or a local technical solution, `planning_resolution` for an in-scope plan or contract decision, and `human_authority` only for a user-owned decision. A `REQUEST` is never write authorization; Luna still requires a valid `DISPATCH`.
+- `NEXT` is always `parent`. Apply only the combinations below. `PASS/none` completes the current stage and returns control; `BLOCKED/none` pauses it at the current coordinator until its stated information or dependency changes. Reject every unlisted combination rather than inferring a route from `EVIDENCE`.
+
+| AGENT | STATUS | REQUEST | Mechanical destination |
+|:---|:---|:---|:---|
+| `luna_worker` | `PASS` | `none` | current coordinator, stage complete |
+| `luna_worker` | `BLOCKED` | `none` | current coordinator, stage paused |
+| `luna_worker` | `ESCALATE` | `technical_resolution` | `terra_auditor` |
+| `terra_auditor` | `PASS` | `none` | current coordinator, stage complete |
+| `terra_auditor` | `BLOCKED` | `none` | current coordinator, stage paused |
+| `terra_auditor` | `ESCALATE` | `implementation` | existing `sol_planner` for authorization |
+| `terra_auditor` | `ESCALATE` | `planning_resolution` | existing `sol_planner` |
+| `sol_planner` | `PASS` | `none` | parent, task complete |
+| `sol_planner` | `BLOCKED` | `none` | parent, stage paused |
+| `sol_planner` | `BLOCKED` | `implementation` | `luna_worker`, with a valid `DISPATCH` |
+| `sol_planner` | `BLOCKED` | `human_authority` | user through parent |
+- If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`.
 
 ## Write scope gate
 
@@ -78,9 +95,9 @@ SUMMARY: one concise sentence
 
 - Default to native Codex subagents using the configured custom Agent TOML files. Start change-producing work with one `sol_planner`; for clear bounded L1 work it issues one minimal `DISPATCH`, while complex work receives fuller decomposition and multiple contracts as needed. Read-only audit or investigation entry may still start with Terra.
 - Let the default Sol coordinator run multiple Luna and Terra workers in parallel when their assignments are independent. Give every parallel Luna writer a dedicated worktree or independent checkout on its own branch; a branch alone is not write isolation. Read-only Terra workers may share a checkout.
-- Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v1`.
+- Before a dependent or write handoff, verify that the intended Agent loaded, its model and reasoning effort are honored, and its first result follows `lean-dev-router/v2`.
 - When available, check `codex --version` before relying on native routing; in the CLI use `/agent` to inspect agent threads.
-- If a Sol session cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` and a compact `DISPATCH` manifest in `EVIDENCE`. Each Luna write entry must embed a literal complete artifact containing `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`; worker metadata also contains `id`, `role`, `scope`, `worktree`, and `depends_on`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required. The parent relays each artifact unchanged and returns compact results to the same Sol for consolidation. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
+- If a Sol session cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` and a compact `DISPATCH` manifest in `EVIDENCE`. Each Luna write entry must embed a literal complete artifact containing `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`; worker metadata also contains `id`, `role`, `scope`, `worktree`, and `depends_on`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required. The parent relays each artifact unchanged and returns compact results to the same Sol for consolidation. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 - Codex's native background-agent UI is still a native subagent workflow. Treat unrelated background processes or sessions as fallback, not as equivalent parent-child routing.
 
 ## Worker scaling and fan-out
@@ -103,16 +120,16 @@ SUMMARY: one concise sentence
 ## Route
 
 - Send every change-producing task to one `sol_planner` for dispatch authorization. For clear bounded L1 work, Sol should issue a minimal single-step `DISPATCH`; for ambiguous, decomposable, cross-task, or decision-heavy work, Sol resolves or returns the open decisions before dispatch and coordinates the workers until completion.
-- When a `luna_worker` cannot resolve an implementation, debugging, testing, or local technical-choice problem, it returns a compact Terra escalation to the Sol coordinator; it never resolves the major decision itself.
+- When a `luna_worker` cannot resolve an implementation, debugging, testing, or local technical-choice problem, it returns a compact `technical_resolution` request; the parent mechanically routes it to Terra and returns the result to the existing Sol coordinator.
 - Sol sends `terra_auditor`'s actionable technical resolution to the relevant `luna_worker` for edits and validation.
-- In a Sol-coordinated task, Terra returns escalation to the existing Sol; never create another Sol. Sol sends an in-scope technical decision back to the relevant Luna under a new or amended `DISPATCH` and uses the human decision gate below for user-owned decisions.
+- In a Sol-coordinated task, Terra requests `planning_resolution` when its technical layer cannot decide; the parent returns that request to the existing Sol and never creates another Sol. Sol sends an in-scope technical decision back to the relevant Luna under a new or amended `DISPATCH` and uses the human decision gate below for user-owned decisions.
 - Use `terra_auditor` as the entry point for explicit audit, review, investigation, diagnosis, compliance, or release-readiness requests. After implementation, invoke Terra only for an explicit review request or material correctness, security, migration, compatibility, or regression risk.
 
 ## Human decision gate
 
 - Let `sol_planner` decide reversible technical trade-offs that stay within the fixed objective, scope, acceptance criteria, and user-authorized policy.
 - Require user authority for changes to the objective, scope, acceptance criteria, direction, philosophy, or product priority; conflicts with explicit user intent; and irreversible or material compatibility, security, privacy, license, migration, or cost commitments.
-- For a user-owned decision, return `STATUS: BLOCKED`, `FAILURE: major-decision`, and `NEXT: parent`. Put up to three viable options, decisive trade-offs, affected paths, and one recommendation in `EVIDENCE`; make `SUMMARY` the single question for the user. Do not add `NEXT: user`: the route is `sol_planner -> parent -> user`.
+- For a user-owned decision, Sol returns `STATUS: BLOCKED`, `FAILURE: major-decision`, `REQUEST: human_authority`, and `NEXT: parent`. Put up to three viable options, decisive trade-offs, affected paths, and one recommendation in `EVIDENCE`; make `SUMMARY` the single question for the user. The route remains `sol_planner -> parent -> user`.
 - Pause implementation until the user answers. Resume through the existing Sol coordinator, which issues a new valid `DISPATCH` after the answer fixes the constraints.
 
 ## Handoff

@@ -22,7 +22,7 @@ LEGACY_PATHS = (
     Path("scripts").joinpath("build_" + "runtime.py"),
 )
 DISPATCH_FIELDS = (
-    "PROTOCOL: lean-dev-router/v1",
+    "PROTOCOL: lean-dev-router/v2",
     "STATUS: DISPATCH",
     "TARGET: implementation",
     "TASK_SUMMARY",
@@ -32,6 +32,36 @@ DISPATCH_FIELDS = (
     "CONSTRAINTS",
     "NEXT: parent",
 )
+OUTBOUND_FIELDS = (
+    "PROTOCOL",
+    "AGENT",
+    "STATUS",
+    "FAILURE",
+    "REQUEST",
+    "EVIDENCE",
+    "NEXT",
+    "SUMMARY",
+)
+LEGAL_HANDOFFS = {
+    ("luna_worker", "PASS", "none"),
+    ("luna_worker", "BLOCKED", "none"),
+    ("luna_worker", "ESCALATE", "technical_resolution"),
+    ("terra_auditor", "PASS", "none"),
+    ("terra_auditor", "BLOCKED", "none"),
+    ("terra_auditor", "ESCALATE", "implementation"),
+    ("terra_auditor", "ESCALATE", "planning_resolution"),
+    ("sol_planner", "PASS", "none"),
+    ("sol_planner", "BLOCKED", "none"),
+    ("sol_planner", "BLOCKED", "implementation"),
+    ("sol_planner", "BLOCKED", "human_authority"),
+}
+ROUTE_TRANSITIONS = {
+    ("luna_worker", "technical_resolution"): "terra_auditor",
+    ("terra_auditor", "implementation"): "sol_planner",
+    ("terra_auditor", "planning_resolution"): "sol_planner",
+    ("sol_planner", "implementation"): "luna_worker",
+    ("sol_planner", "human_authority"): "user",
+}
 
 
 def error(message: str) -> None:
@@ -40,6 +70,16 @@ def error(message: str) -> None:
 
 def read(relative: str | Path) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def resolve_handoff_route(agent: str, status: str, request: str) -> str:
+    """Resolve one v2 handoff using the authoritative finite transition table."""
+    handoff = (agent, status, request)
+    if handoff not in LEGAL_HANDOFFS:
+        raise ValueError(f"illegal handoff combination: {agent}/{status}/{request}")
+    if request == "none":
+        return "current_coordinator"
+    return ROUTE_TRANSITIONS[(agent, request)]
 
 
 def require_instruction_line(
@@ -85,7 +125,9 @@ def validate_agents() -> None:
             error(f"{relative}: expected sandbox_mode={sandbox!r}")
         if not str(data.get("description", "")).strip():
             error(f"{relative}: description is empty")
+        description = str(data.get("description", ""))
         instructions = str(data.get("developer_instructions", ""))
+        agent_text = f"{description}\n{instructions}"
         language_lines = [
             line.strip()
             for line in instructions.splitlines()
@@ -112,8 +154,15 @@ def validate_agents() -> None:
                 "Before returning PASS",
                 ("scripts/check_scope.py", "scope-check"),
             )
-            if "sol_planner" in instructions:
-                error(f"{relative}: Luna instructions must not name sol_planner")
+            require_instruction_line(
+                relative,
+                instructions,
+                "NEXT is always parent",
+                ("STATUS PASS", "STATUS BLOCKED", "STATUS ESCALATE", "REQUEST technical_resolution"),
+            )
+            for peer in ("sol", "terra"):
+                if re.search(rf"\b{peer}(?:_(?:planner|auditor))?\b", agent_text, re.IGNORECASE):
+                    error(f"{relative}: Luna instructions must not name {peer}")
         elif name == "sol_planner":
             require_instruction_line(
                 relative,
@@ -134,6 +183,21 @@ def validate_agents() -> None:
                 "When assigned an integration audit",
                 ("exact combined commit", "integration_acceptance"),
             )
+            require_instruction_line(
+                relative,
+                instructions,
+                "NEXT is always parent",
+                ("STATUS PASS", "STATUS BLOCKED", "STATUS ESCALATE", "REQUEST implementation", "REQUEST planning_resolution"),
+            )
+            for peer in ("sol", "luna"):
+                if re.search(rf"\b{peer}(?:_(?:planner|worker))?\b", agent_text, re.IGNORECASE):
+                    error(f"{relative}: Terra instructions must not name {peer}")
+        require_instruction_line(
+            relative,
+            instructions,
+            "PROTOCOL, AGENT, STATUS",
+            OUTBOUND_FIELDS,
+        )
 
 
 def markdown_lines(text: str) -> list[tuple[int, str]]:
@@ -177,6 +241,10 @@ def validate_skill() -> None:
         "CONSTRAINTS",
         "NEXT: parent",
         "FAILURE: missing_dispatch",
+        "REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority",
+        "| `luna_worker` | `ESCALATE` | `technical_resolution` | `terra_auditor` |",
+        "| `terra_auditor` | `ESCALATE` | `implementation` | existing `sol_planner` for authorization |",
+        "| `sol_planner` | `BLOCKED` | `human_authority` | user through parent |",
         "The parent may relay it mechanically but must not author, repair, or broaden it",
         "`PLAN_READY` is not an execution status",
         "For change-producing work, send every task to one `sol_planner`",

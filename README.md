@@ -28,7 +28,7 @@
 
 > **Token-efficient** — Reduce unnecessary agent calls and handoff context.
 > **Role-separated** — Sol plans, Luna implements, and Terra validates.
-> **Protocol-driven** — Compact, auditable `lean-dev-router/v1` handoffs.
+> **Protocol-driven** — Compact, auditable `lean-dev-router/v2` handoffs.
 > **Isolated parallelism** — Every writing Luna owns a separate worktree or checkout.
 > **Runtime-independent** — The routing theory is portable beyond Codex and GPT.
 
@@ -65,7 +65,7 @@ Because the subagents use explicitly selected models and follow detailed work as
 Execution authority is a distinct inbound contract. Luna must receive this complete artifact before any implementation tool or write:
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
 TASK_SUMMARY: one bounded objective
@@ -81,19 +81,20 @@ NEXT: parent
 
 Only Sol authors or amends a `DISPATCH`; the parent may relay it unchanged. Missing fields, non-relative write paths, or open major product/architecture decisions make it invalid. Luna then performs no implementation work and returns `BLOCKED / missing_dispatch / NEXT parent` without naming a planning role. A minimal single-step `DISPATCH` preserves the L1 path without weakening the gate.
 
-Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Luna may name Terra only as the single technical-escalation edge; complete worker-to-worker topology anonymity is outside this gate's scope.
+Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Workers request capabilities rather than naming peers; the parent performs a deterministic role-and-request lookup without interpreting the evidence.
 
 All three roles use a separate compact outbound result protocol:
 
 ```text
-PROTOCOL: lean-dev-router/v1
+PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
+REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or `command` -> PASS/FAIL
-NEXT: parent | luna_worker | terra_auditor | sol_planner | none
+NEXT: parent
 SUMMARY: one concise sentence
 ```
 
@@ -103,11 +104,25 @@ SUMMARY: one concise sentence
 - `PASS` — current stage complete
 - `BLOCKED` — required info, authority, or dependency unavailable
 - `ESCALATE` — another role must act
-- `NEXT` — role the coordinator should dispatch next; results always return to the spawning session
+- `REQUEST` — capability required next; never an execution authorization
+- `NEXT` — always `parent`, returning the result to the spawning session
 
 `PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. `PLAN_READY` is not an execution status.
 
-> 🛡️ Sol performs the route when present, otherwise the parent does. The parent must **not** infer success from an incomplete handoff.
+`NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. Only Sol and the parent know concrete topology. The spawning coordinator or parent applies the authoritative role-status-request table in the Skill; invalid combinations are rejected instead of inferred from prose. In particular, `PASS/none` completes the current stage, while `BLOCKED/none` pauses it at the current coordinator without dispatching a new capability.
+
+Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `REQUEST` and removes concrete agent names from `NEXT`. Coordinators must reject mixed-version handoffs instead of guessing missing fields or translating them implicitly.
+
+#### Migrating from v1 to v2
+
+1. Replace the Skill and all three Agent TOML files together; do not mix installed v1 and v2 runtime files.
+2. Replace stored `PROTOCOL: lean-dev-router/v1` templates with `PROTOCOL: lean-dev-router/v2`.
+3. Add `REQUEST` to every outbound result and select only a combination listed in the Skill's role-status-request table.
+4. Replace every named outbound `NEXT` value with `NEXT: parent`; keep inbound write authorization as a complete Sol-issued `DISPATCH`.
+5. Do not resume an in-flight v1 handoff chain as v2. Finish or stop it, then start a fresh v2 coordination session.
+6. Run `python scripts/validate_repo.py` and the repository tests after replacing local runtime files.
+
+> 🛡️ The spawning coordinator or parent performs the fixed role-and-request lookup. It must **not** infer a route or success from an incomplete handoff.
 
 ### 🚧 Hard Entry Gate and Scope Fuse
 
@@ -157,6 +172,7 @@ For such a decision, Sol returns:
 ```text
 STATUS: BLOCKED
 FAILURE: major-decision
+REQUEST: human_authority
 NEXT: parent
 ```
 
@@ -177,10 +193,10 @@ Native Codex subagents are the default. Start every change-producing task with o
 **Before a dependent/write handoff**, verify:
 1. The intended Agent loaded
 2. Its model and reasoning effort are honored
-3. Its first result follows `lean-dev-router/v1`
+3. Its first result follows `lean-dev-router/v2`
 
-If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -288,5 +304,5 @@ The run used **405,908** tokens outside Luna (~**8.6%** of total). This is a rou
 ---
 
 <p align="center">
-  <sub>Built with ⚡ by the routing theory · lean-dev-router/v1</sub>
+  <sub>Built with ⚡ by the routing theory · lean-dev-router/v2</sub>
 </p>
