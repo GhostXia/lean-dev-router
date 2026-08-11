@@ -26,9 +26,11 @@ Agent 返回的出站交接包含状态、失败类型、能力请求、证据�
 
 `PASS`、`BLOCKED`、`ESCALATE` 都只是结果，不能作为写入授权；`PLAN_READY` 也不是执行状态。
 
-升档顺序保持不变：Luna 请求技术解决能力，Terra 请求实施或规划能力，只有 Sol 可以请求用户决策。`REQUEST` 本身不授权写入；任何实施仍须由 Sol 签发完整 `DISPATCH`。
+升档顺序保持不变：Luna 请求技术解决能力，Terra 请求实施或规划能力，只有 Sol 可以请求用户决策。只有 Sol 和父会话知道具体拓扑。`REQUEST` 本身不授权写入；任何实施仍须由 Sol 签发完整 `DISPATCH`。`PASS/none` 表示当前阶段完成，`BLOCKED/none` 表示停在当前协调者处等待信息或依赖变化，不派发新能力。
 
 `lean-dev-router/v2` 与 v1 不兼容：v2 强制要求 `REQUEST`，并禁止在 `NEXT` 中点名具体 Agent。协调者必须拒绝混用版本的交接，不能自动猜测或静默转换。
+
+从 v1 迁移时，应一次性替换 Skill 和三个 Agent TOML，把保存的协议模板改为 v2，为每个出站结果增加合法的 `REQUEST`，并把具名的出站 `NEXT` 改为 `NEXT: parent`。不要把进行中的 v1 交接链直接续接为 v2；结束或停止旧链后，从新的 v2 协调会话开始。
 
 协议的精确定义只维护在英文 Skill 中，避免中英文副本漂移。
 

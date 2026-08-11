@@ -100,7 +100,9 @@ class ValidateRepositoryTests(unittest.TestCase):
                 validate_repo.ERRORS.clear()
                 for relative, source in originals.items():
                     if relative.endswith(role):
-                        source = source.replace("Never name or select another agent", f"Ask {peer}")
+                        source = source.replace(
+                            'description = "', f'description = "Ask {peer}; ', 1
+                        )
                     self.write(relative, source)
 
                 validate_repo.validate_agents()
@@ -128,6 +130,37 @@ class ValidateRepositoryTests(unittest.TestCase):
         validate_repo.validate_markdown()
 
         self.assertEqual(validate_repo.ERRORS, [])
+
+    def test_handoff_route_table_accepts_only_legal_combinations(self) -> None:
+        expected = {
+            ("luna_worker", "PASS", "none"): "current_coordinator",
+            ("luna_worker", "BLOCKED", "none"): "current_coordinator",
+            ("luna_worker", "ESCALATE", "technical_resolution"): "terra_auditor",
+            ("terra_auditor", "PASS", "none"): "current_coordinator",
+            ("terra_auditor", "BLOCKED", "none"): "current_coordinator",
+            ("terra_auditor", "ESCALATE", "implementation"): "sol_planner",
+            ("terra_auditor", "ESCALATE", "planning_resolution"): "sol_planner",
+            ("sol_planner", "PASS", "none"): "current_coordinator",
+            ("sol_planner", "BLOCKED", "none"): "current_coordinator",
+            ("sol_planner", "BLOCKED", "implementation"): "luna_worker",
+            ("sol_planner", "BLOCKED", "human_authority"): "user",
+        }
+        self.assertEqual(validate_repo.LEGAL_HANDOFFS, set(expected))
+        for handoff, destination in expected.items():
+            with self.subTest(handoff=handoff):
+                self.assertEqual(
+                    validate_repo.resolve_handoff_route(*handoff), destination
+                )
+
+        for illegal in (
+            ("luna_worker", "ESCALATE", "human_authority"),
+            ("terra_auditor", "BLOCKED", "implementation"),
+            ("sol_planner", "PASS", "implementation"),
+            ("luna_worker", "ESCALATE", "none"),
+        ):
+            with self.subTest(illegal=illegal):
+                with self.assertRaisesRegex(ValueError, "illegal handoff combination"):
+                    validate_repo.resolve_handoff_route(*illegal)
 
     def test_missing_license_is_reported_without_traceback(self) -> None:
         validate_repo.validate_license()

@@ -109,9 +109,18 @@ SUMMARY: one concise sentence
 
 `PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. `PLAN_READY` is not an execution status.
 
-`NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. The parent applies a fixed transition table: Luna technical resolution goes to Terra; Terra implementation or planning resolution returns to the existing Sol; Sol implementation goes to Luna only with a valid `DISPATCH`; and only Sol may request human authority. Invalid combinations are rejected instead of inferred from prose.
+`NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. Only Sol and the parent know concrete topology. The spawning coordinator or parent applies the authoritative role-status-request table in the Skill; invalid combinations are rejected instead of inferred from prose. In particular, `PASS/none` completes the current stage, while `BLOCKED/none` pauses it at the current coordinator without dispatching a new capability.
 
 Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `REQUEST` and removes concrete agent names from `NEXT`. Coordinators must reject mixed-version handoffs instead of guessing missing fields or translating them implicitly.
+
+#### Migrating from v1 to v2
+
+1. Replace the Skill and all three Agent TOML files together; do not mix installed v1 and v2 runtime files.
+2. Replace stored `PROTOCOL: lean-dev-router/v1` templates with `PROTOCOL: lean-dev-router/v2`.
+3. Add `REQUEST` to every outbound result and select only a combination listed in the Skill's role-status-request table.
+4. Replace every named outbound `NEXT` value with `NEXT: parent`; keep inbound write authorization as a complete Sol-issued `DISPATCH`.
+5. Do not resume an in-flight v1 handoff chain as v2. Finish or stop it, then start a fresh v2 coordination session.
+6. Run `python scripts/validate_repo.py` and the repository tests after replacing local runtime files.
 
 > 🛡️ The spawning coordinator or parent performs the fixed role-and-request lookup. It must **not** infer a route or success from an incomplete handoff.
 

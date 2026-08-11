@@ -37,7 +37,7 @@ NEXT: parent
 - Inbound `DISPATCH` does not use an `AGENT` field. When no narrower constraint is needed, `minimal change only` is a valid non-empty `CONSTRAINTS` entry.
 - Before any implementation tool or write, Luna validates only the contract, not the system topology. Missing or invalid authorization produces `STATUS: BLOCKED`, `FAILURE: missing_dispatch`, and `NEXT: parent`; Luna does not name another agent or edit files.
 - `PASS`, `BLOCKED`, and `ESCALATE` are outbound result statuses and never authorize implementation. `PLAN_READY` is not an execution status.
-- Workers describe the capability required next and never name another worker or the dispatch authority. The parent maps the current `AGENT` plus `REQUEST` mechanically; it does not infer routing from `EVIDENCE`.
+- Workers describe the capability required next and never name another worker or the dispatch authority. Only Sol and the parent know the concrete topology. The spawning coordinator or parent maps `AGENT`, `STATUS`, and `REQUEST` mechanically; it does not infer routing from `EVIDENCE`.
 
 Every delegated result must use this compact outbound protocol; do not invent role-specific output schemas.
 
@@ -57,8 +57,22 @@ SUMMARY: one concise sentence
 - `PASS` means the current role's stage is complete; `BLOCKED` means required information, authority, or dependency is unavailable; `ESCALATE` means another role must act.
 - `FAILURE` is `none` for `PASS`; otherwise choose one primary category.
 - Every repository claim must bind to a concrete relative path and include a short diff summary or command result. Use `path: N/A (planning-only)` only for planning with no repository artifact, `path: N/A (batch coverage)` for assigned-versus-processed item identifiers, `path: N/A (scope-check)` for a repository-wide allow-list result, and `path: N/A (integration-check)` for commands run against the combined integration commit; never invent a path.
-- `REQUEST` is mandatory. Use `none` when no new capability is needed, `implementation` to ask the dispatch authority for an authorized implementation or repair, `technical_resolution` for diagnosis or a local technical solution, `planning_resolution` for an in-scope plan or contract decision, and `human_authority` only for a user-owned decision. A `REQUEST` is never write authorization; Luna still requires a valid `DISPATCH`.
-- `NEXT` is always `parent`. The parent applies only these allowed transitions: Luna `technical_resolution` to Terra; Terra `implementation` or `planning_resolution` to the existing Sol; Sol `implementation` to Luna with a valid `DISPATCH`; and Sol `human_authority` to the user. `none` returns to the current coordinator or completes the current stage. Reject every other role-and-request combination rather than inferring a route from `EVIDENCE`.
+- `REQUEST` is mandatory. Use `none` only when no new capability should be dispatched, `implementation` to ask the dispatch authority for an authorized implementation or repair, `technical_resolution` for diagnosis or a local technical solution, `planning_resolution` for an in-scope plan or contract decision, and `human_authority` only for a user-owned decision. A `REQUEST` is never write authorization; Luna still requires a valid `DISPATCH`.
+- `NEXT` is always `parent`. Apply only the combinations below. `PASS/none` completes the current stage and returns control; `BLOCKED/none` pauses it at the current coordinator until its stated information or dependency changes. Reject every unlisted combination rather than inferring a route from `EVIDENCE`.
+
+| AGENT | STATUS | REQUEST | Mechanical destination |
+|:---|:---|:---|:---|
+| `luna_worker` | `PASS` | `none` | current coordinator, stage complete |
+| `luna_worker` | `BLOCKED` | `none` | current coordinator, stage paused |
+| `luna_worker` | `ESCALATE` | `technical_resolution` | `terra_auditor` |
+| `terra_auditor` | `PASS` | `none` | current coordinator, stage complete |
+| `terra_auditor` | `BLOCKED` | `none` | current coordinator, stage paused |
+| `terra_auditor` | `ESCALATE` | `implementation` | existing `sol_planner` for authorization |
+| `terra_auditor` | `ESCALATE` | `planning_resolution` | existing `sol_planner` |
+| `sol_planner` | `PASS` | `none` | parent, task complete |
+| `sol_planner` | `BLOCKED` | `none` | parent, stage paused |
+| `sol_planner` | `BLOCKED` | `implementation` | `luna_worker`, with a valid `DISPATCH` |
+| `sol_planner` | `BLOCKED` | `human_authority` | user through parent |
 - If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`.
 
 ## Write scope gate

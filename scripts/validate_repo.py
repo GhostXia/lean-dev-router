@@ -42,6 +42,26 @@ OUTBOUND_FIELDS = (
     "NEXT",
     "SUMMARY",
 )
+LEGAL_HANDOFFS = {
+    ("luna_worker", "PASS", "none"),
+    ("luna_worker", "BLOCKED", "none"),
+    ("luna_worker", "ESCALATE", "technical_resolution"),
+    ("terra_auditor", "PASS", "none"),
+    ("terra_auditor", "BLOCKED", "none"),
+    ("terra_auditor", "ESCALATE", "implementation"),
+    ("terra_auditor", "ESCALATE", "planning_resolution"),
+    ("sol_planner", "PASS", "none"),
+    ("sol_planner", "BLOCKED", "none"),
+    ("sol_planner", "BLOCKED", "implementation"),
+    ("sol_planner", "BLOCKED", "human_authority"),
+}
+ROUTE_TRANSITIONS = {
+    ("luna_worker", "technical_resolution"): "terra_auditor",
+    ("terra_auditor", "implementation"): "sol_planner",
+    ("terra_auditor", "planning_resolution"): "sol_planner",
+    ("sol_planner", "implementation"): "luna_worker",
+    ("sol_planner", "human_authority"): "user",
+}
 
 
 def error(message: str) -> None:
@@ -50,6 +70,16 @@ def error(message: str) -> None:
 
 def read(relative: str | Path) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def resolve_handoff_route(agent: str, status: str, request: str) -> str:
+    """Resolve one v2 handoff using the authoritative finite transition table."""
+    handoff = (agent, status, request)
+    if handoff not in LEGAL_HANDOFFS:
+        raise ValueError(f"illegal handoff combination: {agent}/{status}/{request}")
+    if request == "none":
+        return "current_coordinator"
+    return ROUTE_TRANSITIONS[(agent, request)]
 
 
 def require_instruction_line(
@@ -124,6 +154,12 @@ def validate_agents() -> None:
                 "Before returning PASS",
                 ("scripts/check_scope.py", "scope-check"),
             )
+            require_instruction_line(
+                relative,
+                instructions,
+                "NEXT is always parent",
+                ("STATUS PASS", "STATUS BLOCKED", "STATUS ESCALATE", "REQUEST technical_resolution"),
+            )
             for peer in ("sol", "terra"):
                 if re.search(rf"\b{peer}(?:_(?:planner|auditor))?\b", agent_text, re.IGNORECASE):
                     error(f"{relative}: Luna instructions must not name {peer}")
@@ -146,6 +182,12 @@ def validate_agents() -> None:
                 instructions,
                 "When assigned an integration audit",
                 ("exact combined commit", "integration_acceptance"),
+            )
+            require_instruction_line(
+                relative,
+                instructions,
+                "NEXT is always parent",
+                ("STATUS PASS", "STATUS BLOCKED", "STATUS ESCALATE", "REQUEST implementation", "REQUEST planning_resolution"),
             )
             for peer in ("sol", "luna"):
                 if re.search(rf"\b{peer}(?:_(?:planner|worker))?\b", agent_text, re.IGNORECASE):
@@ -200,9 +242,9 @@ def validate_skill() -> None:
         "NEXT: parent",
         "FAILURE: missing_dispatch",
         "REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority",
-        "Luna `technical_resolution` to Terra",
-        "Terra `implementation` or `planning_resolution` to the existing Sol",
-        "Sol `human_authority` to the user",
+        "| `luna_worker` | `ESCALATE` | `technical_resolution` | `terra_auditor` |",
+        "| `terra_auditor` | `ESCALATE` | `implementation` | existing `sol_planner` for authorization |",
+        "| `sol_planner` | `BLOCKED` | `human_authority` | user through parent |",
         "The parent may relay it mechanically but must not author, repair, or broaden it",
         "`PLAN_READY` is not an execution status",
         "For change-producing work, send every task to one `sol_planner`",
