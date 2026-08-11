@@ -171,6 +171,32 @@ def validate_agents() -> None:
                 "Before accepting Luna's PASS",
                 ("scripts/check_scope.py", "SCOPE: PASS", "scope-check"),
             )
+            require_instruction_line(
+                relative,
+                instructions,
+                "Process each independent component result as it arrives",
+                (
+                    "same Sol",
+                    "audit",
+                    "re-audit",
+                    "all-component barrier",
+                    "token-first",
+                    "long parent commands",
+                    "60 seconds",
+                ),
+            )
+            require_instruction_line(
+                relative,
+                instructions,
+                "Use a stable `<component>:<revision>:<stage>` job key",
+                ("queued", "running", "complete", "failed", "partial failure"),
+            )
+            require_instruction_line(
+                relative,
+                instructions,
+                "Keep this coordinator resumable",
+                ("BLOCKED/dependency", "same Sol", "only if unavailable"),
+            )
         else:
             require_instruction_line(
                 relative,
@@ -380,6 +406,13 @@ def validate_skill() -> None:
         "ceil(items / 30)",
         "FAILURE: missing_dispatch",
         "`PLAN_READY` is not an execution status",
+        "Streaming component scheduling",
+        "<component>:<revision>:<stage>",
+        "all-component barrier",
+        "`token-first` may reuse one uninvolved Terra",
+        "long parent commands",
+        "within 60 seconds",
+        "not an outbound result envelope",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")
@@ -406,6 +439,7 @@ def validate_skill() -> None:
         "Handoff protocol",
         "Security and write scope",
         "Integration convergence gate",
+        "Streaming component scheduling",
         "Codex execution and scaling",
         "Human decision gate",
         "Handoff and stop",

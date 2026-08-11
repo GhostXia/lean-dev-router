@@ -41,6 +41,7 @@ NEXT: parent
 - Only Sol may author or amend `DISPATCH`; the parent may relay it unchanged. Every field must be present and non-empty, `PATHS_ALLOW` must contain repository-relative writable paths, and no major product or architecture decision may remain open. Use `minimal change only` when no narrower `CONSTRAINTS` entry is needed.
 - Missing or invalid authorization makes Luna perform no implementation and return `STATUS: BLOCKED`, `FAILURE: missing_dispatch`, and `NEXT: parent`.
 - `PASS`, `BLOCKED`, and `ESCALATE` are outbound results, never write authorization. `PLAN_READY` is not an execution status.
+- `STATUS: DISPATCH` is only Luna write authorization. Assign Terra with task instructions, not an outbound result envelope containing `AGENT` or `STATUS`.
 
 Every delegated result uses this schema:
 
@@ -87,6 +88,13 @@ SUMMARY: one concise sentence
 - Sol coordinates without writing. One Luna integration owner combines accepted commits in order; conflict resolution or compatibility edits require a new bounded `DISPATCH`. Parallel writers require isolated worktrees or checkouts.
 - Whole-task `PASS` requires a clean combined state, complete integration acceptance, and a final scope check from `integration_baseline` to the combined commit. Component `PASS` and component audits are not transitive.
 - Require final Terra review when the user requests it, two or more batches received Terra verification, or integration crosses a material security, data, concurrency, compatibility, migration, or public-contract boundary.
+
+## Streaming component scheduling
+
+- Process each independent component result as it arrives. Return it to the existing Sol, then start or queue that component's next required publish, audit, repair, or re-audit stage without waiting for unrelated siblings. `token-first` may reuse one uninvolved Terra across components, but reuse never creates a sibling wait.
+- Give every component audit or re-audit a stable `<component>:<revision>:<stage>` job key and track `queued`, `running`, `complete`, or `failed`. Reconcile batch spawn results per item; retry only missing or failed keys and never replay a running or complete key.
+- Keep the original Sol resumable until every component, repair, integration, and final gate is terminal. A fallback `BLOCKED/dependency` result is not coordinator completion; replace that Sol only when it is unavailable and record the reason.
+- Only combined integration and final combined-state review use an all-component barrier. When host timestamps are available, record component-ready and next-stage times; with capacity available, relay or queue the next stage within 60 seconds, excluding external compile, CI, or network waits. During long parent commands, keep completion-event consumption responsive or record why a ready job remained queued.
 
 ## Codex execution and scaling
 

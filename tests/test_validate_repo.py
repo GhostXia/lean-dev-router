@@ -328,6 +328,23 @@ class ValidateRepositoryTests(unittest.TestCase):
                 "otherwise the dominant language",
                 "Use English when no natural-language signal exists",
             ),
+            "streaming component scheduling": (
+                "Process each independent component result as it arrives",
+                "<component>:<revision>:<stage>",
+                "queued",
+                "running",
+                "complete",
+                "failed",
+                "all-component barrier",
+                "`token-first` may reuse one uninvolved Terra",
+                "long parent commands",
+                "within 60 seconds",
+            ),
+            "terra assignment envelope": (
+                "STATUS: DISPATCH",
+                "only Luna write authorization",
+                "not an outbound result envelope",
+            ),
         }.items():
             with self.subTest(scenario=scenario):
                 for term in required:
@@ -374,6 +391,26 @@ class ValidateRepositoryTests(unittest.TestCase):
             "nested-spawn fallback": (
                 "If this session cannot spawn nested workers",
                 ("`DISPATCH` manifest", "worker metadata", "integration_worktree"),
+            ),
+            "streaming component scheduling": (
+                "Process each independent component result as it arrives",
+                (
+                    "same Sol",
+                    "audit",
+                    "re-audit",
+                    "all-component barrier",
+                    "token-first",
+                    "long parent commands",
+                    "60 seconds",
+                ),
+            ),
+            "idempotent partial retry": (
+                "Use a stable `<component>:<revision>:<stage>` job key",
+                ("queued", "running", "complete", "failed", "partial failure"),
+            ),
+            "coordinator continuity": (
+                "Keep this coordinator resumable",
+                ("BLOCKED/dependency", "same Sol", "only if unavailable"),
             ),
         }.items():
             with self.subTest(contract=contract):

@@ -79,6 +79,14 @@ git ls-files --others --ignored --exclude-standard
 
 组合提交把第一条命令改为 `git diff --name-only --no-renames <integration-baseline> <combined-commit> --`，并在干净的 integration worktree 中继续检查两类 untracked 路径。所有发现的路径都必须与完整 allow-list 比对并记录等价范围证据；脚本与 fallback 的验收语义相同。
 
+## 流式组件调度
+
+多个互不依赖的组件并行时，每个组件完成后立即返回原 Sol，并启动或排队该组件下一步已授权的发布、审计、返工或复审，不等待无依赖的同批 worker。只有组合集成与最终组合态审计允许设置全组件屏障。`token-first` 可以复用同一名未参与实现的 Terra，但不能因此等待其他组件。
+
+组件审计与复审使用稳定的 `<component>:<revision>:<stage>` 任务键，并记录 `queued`、`running`、`complete` 或 `failed`。批量创建 Agent 部分失败时逐项核对，只重试缺失或失败项，不能重放已经运行或完成的任务。原 Sol 在所有组件、返工、集成和最终门禁结束前保持可恢复；`BLOCKED/dependency` fallback 不代表协调者已经完成。
+
+宿主能提供时间戳时，记录组件就绪与下一阶段启动时间；有空闲容量时应在 60 秒内转交或排队，并把编译、CI、网络等外部等待与可控 handoff 延迟分开报告。parent 执行长命令时仍应及时消费完成事件，否则记录就绪任务继续排队的原因。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
+
 ## 安装
 
 Codex 用户必须把以下英文运行时作为同一版本整体安装：
