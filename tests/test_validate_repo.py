@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +25,11 @@ class ValidateRepositoryTests(unittest.TestCase):
         path = validate_repo.ROOT / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+
+    def validate_skill_source(self, source: str) -> list[str]:
+        self.write(".agents/skills/lean-dev-router/SKILL.md", source)
+        validate_repo.validate_skill()
+        return validate_repo.ERRORS
 
     def test_runtime_files_require_ascii_and_agent_language_rule_is_exact(self) -> None:
         self.write(".agents/runtime.txt", "ASCII only\n")
@@ -152,15 +158,103 @@ class ValidateRepositoryTests(unittest.TestCase):
                     validate_repo.resolve_handoff_route(*handoff), destination
                 )
 
-        for illegal in (
-            ("luna_worker", "ESCALATE", "human_authority"),
-            ("terra_auditor", "BLOCKED", "implementation"),
-            ("sol_planner", "PASS", "implementation"),
-            ("luna_worker", "ESCALATE", "none"),
-        ):
+        combinations = itertools.product(
+            ("luna_worker", "terra_auditor", "sol_planner"),
+            ("PASS", "BLOCKED", "ESCALATE"),
+            (
+                "none",
+                "implementation",
+                "technical_resolution",
+                "planning_resolution",
+                "human_authority",
+            ),
+        )
+        for illegal in set(combinations) - set(expected):
             with self.subTest(illegal=illegal):
                 with self.assertRaisesRegex(ValueError, "illegal handoff combination"):
                     validate_repo.resolve_handoff_route(*illegal)
+
+    def test_skill_protocol_validation_allows_equivalent_prose(self) -> None:
+        source = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+        source = source.replace(
+            "The parent may relay it mechanically but must not author, repair, or broaden it.",
+            "The parent can forward the contract unchanged; creating, fixing, or expanding it remains Sol's responsibility.",
+        )
+
+        self.assertEqual(self.validate_skill_source(source), [])
+
+    def test_skill_protocol_validation_rejects_missing_request(self) -> None:
+        source = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+        source = source.replace(
+            "REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority\n",
+            "",
+            1,
+        )
+
+        errors = self.validate_skill_source(source)
+
+        self.assertTrue(
+            any(
+                "outbound protocol" in message and "REQUEST" in message
+                for message in errors
+            )
+        )
+
+    def test_skill_protocol_validation_rejects_wrong_version(self) -> None:
+        source = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+        source = source.replace(
+            "PROTOCOL: lean-dev-router/v2",
+            "PROTOCOL: lean-dev-router/v1",
+            1,
+        )
+
+        errors = self.validate_skill_source(source)
+
+        self.assertTrue(
+            any(
+                "inbound DISPATCH protocol field PROTOCOL" in message
+                for message in errors
+            )
+        )
+
+    def test_skill_protocol_validation_rejects_illegal_luna_human_route(self) -> None:
+        source = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+        source = source.replace(
+            "| `luna_worker` | `ESCALATE` | `technical_resolution` | `terra_auditor` |",
+            "| `luna_worker` | `ESCALATE` | `human_authority` | `user` |",
+        )
+
+        errors = self.validate_skill_source(source)
+
+        self.assertTrue(
+            any("illegal handoff combination" in message for message in errors)
+        )
+
+    def test_skill_protocol_validation_requires_sol_human_route(self) -> None:
+        source = (
+            self.original_root / ".agents/skills/lean-dev-router/SKILL.md"
+        ).read_text(encoding="utf-8")
+        source = source.replace(
+            "| `sol_planner` | `BLOCKED` | `human_authority` | `user`, through parent |\n",
+            "",
+        )
+
+        errors = self.validate_skill_source(source)
+
+        self.assertTrue(
+            any(
+                "missing handoff route" in message and "human_authority" in message
+                for message in errors
+            )
+        )
 
     def test_missing_license_is_reported_without_traceback(self) -> None:
         validate_repo.validate_license()

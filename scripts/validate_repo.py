@@ -42,26 +42,20 @@ OUTBOUND_FIELDS = (
     "NEXT",
     "SUMMARY",
 )
-LEGAL_HANDOFFS = {
-    ("luna_worker", "PASS", "none"),
-    ("luna_worker", "BLOCKED", "none"),
-    ("luna_worker", "ESCALATE", "technical_resolution"),
-    ("terra_auditor", "PASS", "none"),
-    ("terra_auditor", "BLOCKED", "none"),
-    ("terra_auditor", "ESCALATE", "implementation"),
-    ("terra_auditor", "ESCALATE", "planning_resolution"),
-    ("sol_planner", "PASS", "none"),
-    ("sol_planner", "BLOCKED", "none"),
-    ("sol_planner", "BLOCKED", "implementation"),
-    ("sol_planner", "BLOCKED", "human_authority"),
+HANDOFF_ROUTES = {
+    ("luna_worker", "PASS", "none"): "current_coordinator",
+    ("luna_worker", "BLOCKED", "none"): "current_coordinator",
+    ("luna_worker", "ESCALATE", "technical_resolution"): "terra_auditor",
+    ("terra_auditor", "PASS", "none"): "current_coordinator",
+    ("terra_auditor", "BLOCKED", "none"): "current_coordinator",
+    ("terra_auditor", "ESCALATE", "implementation"): "sol_planner",
+    ("terra_auditor", "ESCALATE", "planning_resolution"): "sol_planner",
+    ("sol_planner", "PASS", "none"): "current_coordinator",
+    ("sol_planner", "BLOCKED", "none"): "current_coordinator",
+    ("sol_planner", "BLOCKED", "implementation"): "luna_worker",
+    ("sol_planner", "BLOCKED", "human_authority"): "user",
 }
-ROUTE_TRANSITIONS = {
-    ("luna_worker", "technical_resolution"): "terra_auditor",
-    ("terra_auditor", "implementation"): "sol_planner",
-    ("terra_auditor", "planning_resolution"): "sol_planner",
-    ("sol_planner", "implementation"): "luna_worker",
-    ("sol_planner", "human_authority"): "user",
-}
+LEGAL_HANDOFFS = set(HANDOFF_ROUTES)
 
 
 def error(message: str) -> None:
@@ -75,11 +69,12 @@ def read(relative: str | Path) -> str:
 def resolve_handoff_route(agent: str, status: str, request: str) -> str:
     """Resolve one v2 handoff using the authoritative finite transition table."""
     handoff = (agent, status, request)
-    if handoff not in LEGAL_HANDOFFS:
-        raise ValueError(f"illegal handoff combination: {agent}/{status}/{request}")
-    if request == "none":
-        return "current_coordinator"
-    return ROUTE_TRANSITIONS[(agent, request)]
+    try:
+        return HANDOFF_ROUTES[handoff]
+    except KeyError as exc:
+        raise ValueError(
+            f"illegal handoff combination: {agent}/{status}/{request}"
+        ) from exc
 
 
 def require_instruction_line(
@@ -218,6 +213,146 @@ def markdown_lines(text: str) -> list[tuple[int, str]]:
     return outside
 
 
+def fenced_blocks(text: str) -> list[str]:
+    """Return Markdown fenced code block bodies without interpreting their prose."""
+    blocks: list[str] = []
+    fence: tuple[str, int] | None = None
+    body: list[str] = []
+    for line in text.splitlines():
+        marker = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if fence is None:
+            if marker:
+                opener = marker.group(1)
+                fence = (opener[0], len(opener))
+                body = []
+            continue
+        if marker:
+            closer = marker.group(1)
+            if (
+                closer[0] == fence[0]
+                and len(closer) >= fence[1]
+                and not marker.group(2).strip()
+            ):
+                blocks.append("\n".join(body))
+                fence = None
+                body = []
+                continue
+        body.append(line)
+    return blocks
+
+
+def protocol_fields(block: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in block.splitlines():
+        match = re.match(r"^([A-Z][A-Z_]*):\s*(.*)$", line)
+        if not match:
+            continue
+        name, value = match.groups()
+        if name in fields:
+            raise ValueError(f"duplicate protocol field {name}")
+        fields[name] = value.strip()
+    return fields
+
+
+def validate_protocol_schema(relative: str, skill: str) -> None:
+    parsed: list[dict[str, str]] = []
+    for block in fenced_blocks(skill):
+        try:
+            fields = protocol_fields(block)
+        except ValueError as exc:
+            error(f"{relative}: {exc}")
+            continue
+        if fields:
+            parsed.append(fields)
+
+    dispatch = next(
+        (fields for fields in parsed if fields.get("STATUS") == "DISPATCH"), None
+    )
+    outbound = next((fields for fields in parsed if "AGENT" in fields), None)
+    schemas = (
+        (
+            "inbound DISPATCH protocol",
+            dispatch,
+            {
+                "PROTOCOL": "lean-dev-router/v2",
+                "STATUS": "DISPATCH",
+                "TARGET": "implementation",
+                "TASK_SUMMARY": None,
+                "BASELINE": None,
+                "PATHS_ALLOW": None,
+                "ACCEPTANCE": None,
+                "CONSTRAINTS": None,
+                "NEXT": "parent",
+            },
+        ),
+        (
+            "outbound protocol",
+            outbound,
+            {
+                "PROTOCOL": "lean-dev-router/v2",
+                "AGENT": "luna_worker | terra_auditor | sol_planner",
+                "STATUS": "PASS | BLOCKED | ESCALATE",
+                "FAILURE": "none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision",
+                "REQUEST": "none | implementation | technical_resolution | planning_resolution | human_authority",
+                "EVIDENCE": None,
+                "NEXT": "parent",
+                "SUMMARY": None,
+            },
+        ),
+    )
+    for label, fields, expected in schemas:
+        if fields is None:
+            error(f"{relative}: missing {label}")
+            continue
+        missing = set(expected) - set(fields)
+        unexpected = set(fields) - set(expected)
+        if missing:
+            error(f"{relative}: {label} missing fields: {', '.join(sorted(missing))}")
+        if unexpected:
+            error(
+                f"{relative}: {label} has unexpected fields: "
+                f"{', '.join(sorted(unexpected))}"
+            )
+        for name, value in expected.items():
+            if value is not None and fields.get(name) != value:
+                error(
+                    f"{relative}: {label} field {name} must be {value!r}"
+                )
+
+
+def validate_handoff_table(relative: str, skill: str) -> None:
+    rows: dict[tuple[str, str, str], str] = {}
+    row_pattern = re.compile(
+        r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*"
+        r"\|\s*`([^`]+)`[^|]*\|\s*$"
+    )
+    for number, line in markdown_lines(skill):
+        match = row_pattern.match(line)
+        if not match:
+            continue
+        agent, status, request, destination = match.groups()
+        handoff = (agent, status, request)
+        if handoff in rows:
+            error(
+                f"{relative}:{number}: duplicate handoff route "
+                f"{agent}/{status}/{request}"
+            )
+            continue
+        rows[handoff] = destination
+        try:
+            expected_destination = resolve_handoff_route(*handoff)
+        except ValueError as exc:
+            error(f"{relative}:{number}: {exc}")
+            continue
+        if destination != expected_destination:
+            error(
+                f"{relative}:{number}: handoff {agent}/{status}/{request} must route "
+                f"to {expected_destination!r}, not {destination!r}"
+            )
+    for handoff in sorted(LEGAL_HANDOFFS - set(rows)):
+        error(f"{relative}: missing handoff route {'/'.join(handoff)}")
+
+
 def validate_skill() -> None:
     relative = ".agents/skills/lean-dev-router/SKILL.md"
     skill = read(relative)
@@ -232,25 +367,14 @@ def validate_skill() -> None:
         "integration_acceptance",
         "python scripts/check_scope.py",
         "ceil(items / 30)",
-        "STATUS: DISPATCH",
-        "TARGET: implementation",
-        "TASK_SUMMARY",
-        "BASELINE",
-        "PATHS_ALLOW",
-        "ACCEPTANCE",
-        "CONSTRAINTS",
-        "NEXT: parent",
         "FAILURE: missing_dispatch",
-        "REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority",
-        "| `luna_worker` | `ESCALATE` | `technical_resolution` | `terra_auditor` |",
-        "| `terra_auditor` | `ESCALATE` | `implementation` | existing `sol_planner` for authorization |",
-        "| `sol_planner` | `BLOCKED` | `human_authority` | user through parent |",
-        "The parent may relay it mechanically but must not author, repair, or broaden it",
         "`PLAN_READY` is not an execution status",
-        "For change-producing work, send every task to one `sol_planner`",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")
+
+    validate_protocol_schema(relative, skill)
+    validate_handoff_table(relative, skill)
 
     headings: list[tuple[int, str]] = []
     for number, line in markdown_lines(skill):
@@ -268,6 +392,7 @@ def validate_skill() -> None:
         "Lean Dev Router",
         "Language",
         "Handoff protocol",
+        "Security and enforcement boundary",
         "Write scope gate",
         "Integration convergence gate",
         "Codex execution mode",

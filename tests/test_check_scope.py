@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts import check_scope
+
 
 CHECK_SCOPE = Path(__file__).resolve().parents[1] / "scripts" / "check_scope.py"
 
@@ -59,6 +61,14 @@ class CheckScopeTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.repo.close()
+
+    def test_allowed_uses_path_component_boundaries(self) -> None:
+        patterns = ("src",)
+
+        self.assertTrue(check_scope.allowed("src", patterns))
+        self.assertTrue(check_scope.allowed("src/file.py", patterns))
+        self.assertFalse(check_scope.allowed("src_backup/file.py", patterns))
+        self.assertFalse(check_scope.allowed("src/file.py.bak", ("src/file.py",)))
 
     def test_worktree_accepts_tracked_standard_and_ignored_paths(self) -> None:
         self.repo.write("seed.txt", "changed\n")
