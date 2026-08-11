@@ -12,7 +12,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
-CJK = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")
+LANGUAGE_RULE = (
+    "Language: Follow the parent task's primary language; when unspecified, use its "
+    "dominant language. Keep code, commands, paths, model IDs, and agent names unchanged."
+)
 LEGACY_PATHS = (
     Path("runtime").joinpath("source"),
     Path("profiles").joinpath("codex"),
@@ -72,8 +75,13 @@ def validate_agents() -> None:
         if not str(data.get("description", "")).strip():
             error(f"{relative}: description is empty")
         instructions = str(data.get("developer_instructions", ""))
-        if "Language:" not in instructions:
-            error(f"{relative}: English language rule is missing")
+        language_lines = [
+            line.strip()
+            for line in instructions.splitlines()
+            if line.strip().startswith("Language:")
+        ]
+        if language_lines != [LANGUAGE_RULE]:
+            error(f"{relative}: English language rule is missing or incorrect")
         if name == "luna_worker":
             require_instruction_line(
                 relative,
@@ -105,12 +113,17 @@ def validate_agents() -> None:
 
 def markdown_lines(text: str) -> list[tuple[int, str]]:
     outside: list[tuple[int, str]] = []
-    fence: str | None = None
+    fence: tuple[str, int] | None = None
     for number, line in enumerate(text.splitlines(), start=1):
         marker = re.match(r"^\s*(```+|~~~+)", line)
         if marker:
-            token = marker.group(1)[0]
-            fence = None if fence == token else token if fence is None else fence
+            opener = marker.group(1)
+            token = opener[0]
+            length = len(opener)
+            if fence is None:
+                fence = (token, length)
+            elif fence[0] == token and length >= fence[1]:
+                fence = None
         elif fence is None:
             outside.append((number, line))
     return outside
@@ -222,8 +235,8 @@ def validate_runtime_language() -> None:
                 continue
             relative = path.relative_to(ROOT).as_posix()
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if CJK.search(line):
-                    error(f"{relative}:{number}: CJK text is not allowed in runtime files")
+                if not line.isascii():
+                    error(f"{relative}:{number}: non-ASCII text is not allowed in runtime files")
 
 
 def validate_markdown() -> None:
@@ -233,24 +246,28 @@ def validate_markdown() -> None:
             continue
         relative = path.relative_to(ROOT).as_posix()
         text = path.read_text(encoding="utf-8")
-        fence: tuple[str, int, str, list[str]] | None = None
+        fence: tuple[str, int, int, str, list[str]] | None = None
         for number, line in enumerate(text.splitlines(), start=1):
             marker = re.match(r"^\s*(```+|~~~+)(.*)$", line)
             if marker:
-                token = marker.group(1)[0]
+                opener = marker.group(1)
+                token = opener[0]
+                length = len(opener)
                 if fence is None:
-                    fence = (token, number, marker.group(2).strip().lower(), [])
-                elif fence[0] == token:
-                    if fence[2] == "python":
+                    fence = (token, length, number, marker.group(2).strip().lower(), [])
+                elif fence[0] == token and length >= fence[1]:
+                    if fence[3] == "python":
                         try:
-                            ast.parse("\n".join(fence[3]))
+                            ast.parse("\n".join(fence[4]))
                         except SyntaxError as exc:
-                            error(f"{relative}:{fence[1]}: invalid Python fence: {exc.msg}")
+                            error(f"{relative}:{fence[2]}: invalid Python fence: {exc.msg}")
                     fence = None
+                else:
+                    fence[4].append(line)
             elif fence is not None:
-                fence[3].append(line)
+                fence[4].append(line)
         if fence is not None:
-            error(f"{relative}:{fence[1]}: unclosed Markdown code fence")
+            error(f"{relative}:{fence[2]}: unclosed Markdown code fence")
         for match in link_pattern.finditer(text):
             target = match.group(1).split(maxsplit=1)[0].strip("<>")
             if target.startswith(("http://", "https://", "#", "mailto:")):
@@ -299,8 +316,18 @@ def validate_repository_contract() -> None:
         for snippet in snippets:
             if snippet not in text:
                 error(f"{relative}: missing contract text {snippet!r}")
-    if not read("LICENSE").startswith("MIT License\n"):
-        error("LICENSE: expected MIT license text")
+    validate_license()
+
+
+def validate_license() -> None:
+    relative = "LICENSE"
+    try:
+        text = read(relative)
+    except (OSError, UnicodeError) as exc:
+        error(f"{relative}: cannot read required file: {exc}")
+        return
+    if not text.startswith("MIT License\n"):
+        error(f"{relative}: expected MIT license text")
 
 
 def main() -> int:

@@ -89,7 +89,7 @@ SUMMARY: one concise sentence
 
 - Let `sol_planner` decide reversible technical trade-offs that stay within the fixed objective, scope, acceptance criteria, and user-authorized policy.
 - Require user authority for changes to the objective, scope, acceptance criteria, direction, philosophy, or product priority; conflicts with explicit user intent; and irreversible or material compatibility, security, privacy, license, migration, or cost commitments.
-- For a user-owned decision, return `STATUS: BLOCKED`, `FAILURE: major-decision`, and `NEXT: parent`. Put up to three viable options, decisive trade-offs, affected paths, and one recommendation in `EVIDENCE`; make `SUMMARY` the single question for the user. Do not add `NEXT: user`: the route is `sol_planner → parent → user`.
+- For a user-owned decision, return `STATUS: BLOCKED`, `FAILURE: major-decision`, and `NEXT: parent`. Put up to three viable options, decisive trade-offs, affected paths, and one recommendation in `EVIDENCE`; make `SUMMARY` the single question for the user. Do not add `NEXT: user`: the route is `sol_planner -> parent -> user`.
 - Pause implementation until the user answers. Resume through the existing Sol coordinator when one exists; otherwise route directly to `luna_worker` when the answer fully fixes the constraints, invoking one Sol only when the plan must be revised.
 
 ## Handoff

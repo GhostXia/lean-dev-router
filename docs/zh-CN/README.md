@@ -72,5 +72,5 @@ Codex 用户复制两组英文运行时文件：
 
 - 运行行为只修改英文 Skill、manifest 和 Agent TOML。
 - 中文材料只解释如何使用和理解项目，不复制整套机器指令。
-- CI 会阻止 CJK 字符重新进入 `.agents/` 与 `agents/`。
+- CI 会阻止非 ASCII 字符重新进入 `.agents/` 与 `agents/`。
 - 修改运行行为后，应运行 `python scripts/validate_repo.py` 与 `python -m unittest discover -s tests -v`。
