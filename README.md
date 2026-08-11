@@ -124,6 +124,12 @@ Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `
 
 > 🛡️ The spawning coordinator or parent performs the fixed role-and-request lookup. It must **not** infer a route or success from an incomplete handoff.
 
+### 🔐 Security and Enforcement Boundary
+
+`DISPATCH` is a protocol authorization statement, not a cryptographic signature or proof of origin. Likewise, `PATHS_ALLOW` and `scripts/check_scope.py` constrain declared scope and detect drift; they do not prevent an agent or process from writing through the operating system.
+
+Terra's read-only guarantee depends on Codex enforcing its configured read-only sandbox. The host sandbox, filesystem permissions, and isolated worktrees remain the final enforcement layer. The parent and Sol are therefore a trusted coordination plane: this protocol does not claim to defend against a malicious or compromised agent that already has host-level write access.
+
 ### 🚧 Hard Entry Gate and Scope Fuse
 
 The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.

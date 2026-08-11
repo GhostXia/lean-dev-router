@@ -62,18 +62,27 @@ SUMMARY: one concise sentence
 
 | AGENT | STATUS | REQUEST | Mechanical destination |
 |:---|:---|:---|:---|
-| `luna_worker` | `PASS` | `none` | current coordinator, stage complete |
-| `luna_worker` | `BLOCKED` | `none` | current coordinator, stage paused |
+| `luna_worker` | `PASS` | `none` | `current_coordinator`, stage complete |
+| `luna_worker` | `BLOCKED` | `none` | `current_coordinator`, stage paused |
 | `luna_worker` | `ESCALATE` | `technical_resolution` | `terra_auditor` |
-| `terra_auditor` | `PASS` | `none` | current coordinator, stage complete |
-| `terra_auditor` | `BLOCKED` | `none` | current coordinator, stage paused |
-| `terra_auditor` | `ESCALATE` | `implementation` | existing `sol_planner` for authorization |
-| `terra_auditor` | `ESCALATE` | `planning_resolution` | existing `sol_planner` |
-| `sol_planner` | `PASS` | `none` | parent, task complete |
-| `sol_planner` | `BLOCKED` | `none` | parent, stage paused |
+| `terra_auditor` | `PASS` | `none` | `current_coordinator`, stage complete |
+| `terra_auditor` | `BLOCKED` | `none` | `current_coordinator`, stage paused |
+| `terra_auditor` | `ESCALATE` | `implementation` | `sol_planner`, authorization required |
+| `terra_auditor` | `ESCALATE` | `planning_resolution` | `sol_planner` |
+| `sol_planner` | `PASS` | `none` | `current_coordinator`, which is the parent at the top level; task complete |
+| `sol_planner` | `BLOCKED` | `none` | `current_coordinator`, which is the parent at the top level; stage paused |
 | `sol_planner` | `BLOCKED` | `implementation` | `luna_worker`, with a valid `DISPATCH` |
-| `sol_planner` | `BLOCKED` | `human_authority` | user through parent |
+| `sol_planner` | `BLOCKED` | `human_authority` | `user`, through parent |
+
 - If a handoff is missing a field or evidence, do not infer success; return one compact correction request with `STATUS: BLOCKED` and `FAILURE: verification`.
+
+## Security and enforcement boundary
+
+- A `DISPATCH` is a protocol-level authorization statement, not a cryptographic signature or proof of origin.
+- `PATHS_ALLOW` and `scripts/check_scope.py` constrain declared scope and detect drift. They do not block writes at the operating-system layer.
+- Terra's read-only guarantee depends on Codex honoring the configured `sandbox_mode = "read-only"` boundary.
+- Host sandboxing, filesystem permissions, and worktree isolation are the final enforcement layer for write access.
+- The parent and Sol form a trusted coordination plane. This protocol does not claim to contain a malicious or compromised agent that already has host-level write access.
 
 ## Write scope gate
 
