@@ -274,6 +274,25 @@ Adapt the file format and model identifiers when using another runtime.
 
 Use `$lean-dev-router` when a task benefits from this routing policy. The Skill deliberately avoids invoking all agents by default and passes only compact handoff information.
 
+### 🧾 Task-Level Audit and Merge Overrides
+
+The v2 routes above are the defaults. For one named task or batch, the user may explicitly require an external auditor, a Draft PR, or a repository-specific merge gate in the parent prompt. These are task-level instructions, not Skill modes or protocol fields, and they are never remembered as future defaults.
+
+Before dispatching work, the parent restates the effective route, audit target, fallback, merge gate, and the task or batch to which the override applies. Luna still returns changed paths, a concise diff summary, command results, scope evidence, risks, and unverified items. An external audit does not authorize writes, replace Sol's `DISPATCH`, weaken acceptance or scope checks, or permit an automatic merge.
+
+If the named auditor is unavailable, produces no inspectable evidence, or reaches no clear conclusion, keep the PR in Draft and fall back to Terra. For security, privacy, licensing, migration, compatibility, public-interface, or data-semantics changes, the parent asks the user whether the external audit is sufficient; without explicit confirmation, retain the default Terra requirement.
+
+The following labels are documentation shorthand only. They do not create runtime modes, add fields to `lean-dev-router/v2`, or change the role-status-request table.
+
+| Shorthand | Copyable task-level instruction |
+|:---|:---|
+| **Standard** | `Use $lean-dev-router defaults for this task. Apply the normal validation gates and do not merge without my explicit instruction.` |
+| **External Audit** | `For this task, use <auditor> to audit <target>. Require inspectable evidence. If the auditor is unavailable or inconclusive, fall back to Terra and keep the PR in Draft. Merge only after <gate>.` |
+| **Fast Draft** | `For this task, implement the bounded change and open a Draft PR after required scope and acceptance checks. Do not add an independent audit unless the v2 defaults require one. Do not merge.` |
+| **Emergency Fix** | `For this named fix only, preserve the v2 authorization, scope, and validation gates; open a Draft PR and use <auditor or Terra> for <risk>. Merge only after <gate> and my explicit approval.` |
+
+These prompts control only the named task. Installing another governance or audit Skill does not activate an override by itself.
+
 ### 📊 Final L3 Test Result
 
 This is a recorded run of the initial L3 idempotent `POST /orders` task revision at [`6d803af`](https://github.com/GhostXia/lean-dev-router/blob/6d803af52d9f651093413036226562f07da4b052/lean-dev-router-l3-idempotent-orders-task.md), using a **Luna High** controller with `$lean-dev-router`. The current reusable task packet is [`lean-dev-router-l3-idempotent-orders-task.md`](lean-dev-router-l3-idempotent-orders-task.md). Figures are transcribed from supplied run screenshots — not a rerun in this repository.
