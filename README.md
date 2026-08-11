@@ -206,6 +206,14 @@ If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST imple
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
+### Streaming component pipeline
+
+Independent components advance as soon as they are ready. Return each result to the existing Sol and start or queue that component's authorized publish, audit, repair, or re-audit stage without waiting for unrelated siblings. Only combined integration and final combined-state review use an all-component barrier. `token-first` may reuse one uninvolved Terra across components, but reuse must not create a sibling wait.
+
+Component audits and re-audits use a stable `<component>:<revision>:<stage>` job key with `queued`, `running`, `complete`, or `failed` state. If a batch spawn partially fails, reconcile each item and retry only missing or failed keys; never replay a running or complete job. Keep the original Sol resumable through component repair, integration, and final gates. A fallback `BLOCKED/dependency` result requests parent relay and does not end coordinator ownership.
+
+When the host exposes timestamps, record component-ready and next-stage times. Start the next stage within 60 seconds when capacity exists; otherwise mark it queued with the reason and start it at the first eligible slot release. Report external compile, CI, and network waits separately from controllable handoff delay, and keep completion-event consumption responsive during long parent commands. Terra assignments are ordinary read-only task instructions: `STATUS: DISPATCH` remains reserved for Luna write authorization and must not be reused as an outbound-style Terra envelope.
+
 > 💡 When available, check `codex --version` before relying on native routing. In the Codex CLI, use `/agent` to inspect agent threads. If the client cannot start or expose the expected native workflow, use the fallback instead of silently substituting the default agent or model.
 
 The native Codex background-agent UI is part of the native subagent workflow. Unrelated background processes or independent sessions are fallback mechanisms, not equivalent parent-child routing. See the [official Codex subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) for current client and custom-agent behavior.
