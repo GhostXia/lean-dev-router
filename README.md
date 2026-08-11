@@ -256,11 +256,27 @@ flowchart LR
 
 ### 🚀 Install
 
-For **Codex**, copy:
+For **Codex**, install this required runtime as one versioned unit:
+
 1. `.agents/skills/lean-dev-router/` → `~/.codex/skills/lean-dev-router/`
 2. The three files in `agents/` → `~/.codex/agents/`
 
-The scope helper is currently repository-local. Any future distributable package must ship it at a stable, resolvable location instead of assuming the target repository contains this project's `scripts/` directory.
+Do not mix a Skill from one release with Agent TOML files from another. Start a fresh Codex task after installation; do not resume an in-flight v1 handoff as v2.
+
+#### Optional Scope Helper
+
+`scripts/check_scope.py` is a repository-level convenience helper, not a required Skill or Agent runtime file. The required invariant is scope evidence before accepting Luna's `PASS`. If the target repository does not contain this helper, use the Git fallback checks documented in [Hard Entry Gate and Scope Fuse](#-hard-entry-gate-and-scope-fuse). Do not assume that installing the Skill adds `scripts/check_scope.py` to unrelated target repositories.
+
+#### Upgrade and Verify
+
+1. Stop or finish any in-flight handoff chain.
+2. Replace the Skill directory and all three Agent TOML files from the same release.
+3. Start a fresh Codex task and verify the intended custom Agent, model, reasoning effort, sandbox, and first `lean-dev-router/v2` result before a dependent or write handoff.
+4. From a clean checkout of this release, run `python scripts/validate_repo.py` and `python -m unittest discover -s tests -v`.
+
+#### Uninstall or Roll Back
+
+To uninstall, remove only the installed `lean-dev-router` Skill directory and the three named Agent TOML files, then start a fresh Codex task. This does not modify target repositories. To roll back, replace both groups with the complete files from one earlier release; never combine versions or resume an in-flight handoff across the change.
 
 Adapt the file format and model identifiers when using another runtime.
 
