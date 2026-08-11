@@ -59,6 +59,55 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertEqual(len(language_errors), 1)
         self.assertIn("luna-worker.toml", language_errors[0])
 
+    def test_luna_requires_complete_dispatch_without_planner_knowledge(self) -> None:
+        agent_paths = (
+            "agents/luna-worker.toml",
+            "agents/sol-planner.toml",
+            "agents/terra-auditor.toml",
+        )
+        originals = {
+            relative: (self.original_root / relative).read_text(encoding="utf-8")
+            for relative in agent_paths
+        }
+
+        for required, replacement in (
+            ("PROTOCOL: lean-dev-router/v1", "PROTOCOL: other/v1"),
+            ("`TASK_SUMMARY`", "`TASK`"),
+            ("NEXT: parent", "NEXT: none"),
+        ):
+            with self.subTest(required=required):
+                validate_repo.ERRORS.clear()
+                for relative, source in originals.items():
+                    if relative.endswith("luna-worker.toml"):
+                        source = source.replace(required, replacement, 1)
+                    self.write(relative, source)
+
+                validate_repo.validate_agents()
+
+                self.assertTrue(
+                    any(
+                        "luna-worker.toml" in message and required.strip("`") in message
+                        for message in validate_repo.ERRORS
+                    )
+                )
+
+        validate_repo.ERRORS.clear()
+        for relative, source in originals.items():
+            if relative.endswith("luna-worker.toml"):
+                source = source.replace(
+                    "do not name another agent", "ask sol_planner"
+                )
+            self.write(relative, source)
+
+        validate_repo.validate_agents()
+
+        self.assertTrue(
+            any(
+                "Luna instructions must not name sol_planner" in message
+                for message in validate_repo.ERRORS
+            )
+        )
+
     def test_four_backtick_fence_wraps_shorter_backtick_fence(self) -> None:
         text = "````\n```\ninside\n````\noutside\n"
 

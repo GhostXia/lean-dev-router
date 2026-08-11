@@ -52,7 +52,7 @@ Because the subagents use explicitly selected models and follow detailed work as
 
 | Work Type | Default Route |
 |:---|:---|
-| 🔧 Bounded implementation, fixes, refactors, tests, docs, config | **Luna** directly; use **Sol** first when ambiguous, decomposable, cross-cutting, or decision-heavy |
+| 🔧 Bounded implementation, fixes, refactors, tests, docs, config | **Sol** issues a minimal single-step `DISPATCH` to **Luna**; harder work receives fuller planning and decomposition |
 | 🔍 Audits, reviews, compliance checks, or release readiness | One or more **Terra** workers first; **Sol** partitions or consolidates when needed; **Luna** handles only authorized remediation |
 | 🐛 Investigations, incidents, performance analysis, debugging | **Terra** establishes evidence and likely causes; **Sol** resolves in-scope technical trade-offs or returns user-owned choices; **Luna** applies the authorized fix |
 | 🔄 Migrations, dependency upgrades, or platform upgrades | **Sol** plans within scope & defines order; **Terra** inventories compatibility & risk; isolated **Luna** worktrees implement; **Terra** verifies |
@@ -60,15 +60,36 @@ Because the subagents use explicitly selected models and follow detailed work as
 
 > ⚠️ This expansion covers **repository-bound engineering work only**. It does not grant authority for production deployment, destructive operations, external commitments, or changes to business/product policy **without explicit user approval**.
 
-### 📡 Handoff Protocol
+### 📡 Dispatch and Handoff Protocol
 
-All three roles use one compact, machine-readable handoff protocol:
+Execution authority is a distinct inbound contract. Luna must receive this complete artifact before any implementation tool or write:
+
+```text
+PROTOCOL: lean-dev-router/v1
+STATUS: DISPATCH
+TARGET: implementation
+TASK_SUMMARY: one bounded objective
+BASELINE: commit hash
+PATHS_ALLOW:
+- relative/path/or/subtree
+ACCEPTANCE:
+- objective check and expected result
+CONSTRAINTS:
+- fixed implementation or compatibility bound
+NEXT: parent
+```
+
+Only Sol authors or amends a `DISPATCH`; the parent may relay it unchanged. Missing fields, non-relative write paths, or open major product/architecture decisions make it invalid. Luna then performs no implementation work and returns `BLOCKED / missing_dispatch / NEXT parent` without naming a planning role. A minimal single-step `DISPATCH` preserves the L1 path without weakening the gate.
+
+Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Luna may name Terra only as the single technical-escalation edge; complete worker-to-worker topology anonymity is outside this gate's scope.
+
+All three roles use a separate compact outbound result protocol:
 
 ```text
 PROTOCOL: lean-dev-router/v1
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
-FAILURE: none | scope | verification | dependency | ambiguity | major-decision
+FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or `command` -> PASS/FAIL
@@ -84,15 +105,17 @@ SUMMARY: one concise sentence
 - `ESCALATE` — another role must act
 - `NEXT` — role the coordinator should dispatch next; results always return to the spawning session
 
+`PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. `PLAN_READY` is not an execution status.
+
 > 🛡️ Sol performs the route when present, otherwise the parent does. The parent must **not** infer success from an incomplete handoff.
 
-### 🧯 Scope Drift Soft Gate
+### 🚧 Hard Entry Gate and Scope Fuse
 
-The primary scope control is still **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
+The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
 
-For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while a baseline commit plus repository-relative `paths_allow` defines what may change. Sol supplies both for routed batches; the parent supplies both for a direct Luna fast path.
+For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in Sol's dispatch defines what may change. The parent cannot create a direct Luna fast path.
 
-Before accepting Luna's `PASS`, the current coordinator—Sol or the direct parent—independently checks tracked, standard untracked, and ignored untracked paths:
+Before accepting Luna's `PASS`, Sol—or the parent mechanically relaying for Sol—independently checks tracked, standard untracked, and ignored untracked paths:
 
 ```bash
 git diff --name-only --no-renames <baseline> --
@@ -139,11 +162,11 @@ NEXT: parent
 
 …with up to **three viable options**, decisive trade-offs, affected paths, **one recommendation**, and **a single question** for the user.
 
-> 📌 The protocol intentionally omits `NEXT: user`. The route is `sol_planner → parent → user`. After the answer, an existing Sol coordinator resumes worker routing; the standalone fast path returns directly to **Luna** when all constraints are fixed.
+> 📌 The protocol intentionally omits `NEXT: user`. The route is `sol_planner → parent → user`. After the answer, the existing Sol coordinator resumes worker routing and issues a new valid `DISPATCH` when all constraints are fixed.
 
 ### 🔌 Codex Execution Mode
 
-Native Codex subagents are the default. Send a clear bounded task directly to one **Luna** only after the parent captures its baseline commit and repository-relative `paths_allow`. For complex, ambiguous, or decomposable work, start one **Sol** coordinator by default and let it partition, dispatch, wait for, and consolidate multiple **Luna** and **Terra** workers.
+Native Codex subagents are the default. Start every change-producing task with one **Sol** coordinator. Sol emits a minimal single-step `DISPATCH` for bounded L1 work, or partitions and coordinates multiple **Luna** and **Terra** workers when the work is complex, ambiguous, or decomposable.
 
 **Key Rules:**
 
@@ -157,7 +180,7 @@ Native Codex subagents are the default. Send a clear bounded task directly to on
 3. Its first result follows `lean-dev-router/v1`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), `depends_on`, and `acceptance`; Luna write entries also contain `baseline` and `paths_allow`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -223,7 +246,7 @@ Adapt the file format and model identifiers when using another runtime.
 
 | Role | Badge | Responsibility |
 |:---|:---:|:---|
-| **sol_planner** | 👑 | Single planner & orchestrator for complex tasks. Scales, directs, and consolidates Luna/Terra workers; returns user-owned decisions to the parent. |
+| **sol_planner** | 👑 | Sole `DISPATCH` author for writes and single planner/orchestrator for complex tasks. Scales, directs, and consolidates Luna/Terra workers; returns user-owned decisions to the parent. |
 | **luna_worker** | ⚡ | Bounded code, test, documentation, and configuration edits. Multiple instances may run in parallel on isolated assignments. |
 | **terra_auditor** | 🔍 | Code audit, technical diagnosis, and validation. Escalate only when it cannot resolve the issue or a major decision is required. |
 
