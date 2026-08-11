@@ -32,6 +32,16 @@ DISPATCH_FIELDS = (
     "CONSTRAINTS",
     "NEXT: parent",
 )
+OUTBOUND_FIELDS = (
+    "PROTOCOL",
+    "AGENT",
+    "STATUS",
+    "FAILURE",
+    "REQUEST",
+    "EVIDENCE",
+    "NEXT",
+    "SUMMARY",
+)
 
 
 def error(message: str) -> None:
@@ -85,7 +95,9 @@ def validate_agents() -> None:
             error(f"{relative}: expected sandbox_mode={sandbox!r}")
         if not str(data.get("description", "")).strip():
             error(f"{relative}: description is empty")
+        description = str(data.get("description", ""))
         instructions = str(data.get("developer_instructions", ""))
+        agent_text = f"{description}\n{instructions}"
         language_lines = [
             line.strip()
             for line in instructions.splitlines()
@@ -112,8 +124,9 @@ def validate_agents() -> None:
                 "Before returning PASS",
                 ("scripts/check_scope.py", "scope-check"),
             )
-            if "sol_planner" in instructions:
-                error(f"{relative}: Luna instructions must not name sol_planner")
+            for peer in ("sol", "terra"):
+                if re.search(rf"\b{peer}(?:_(?:planner|auditor))?\b", agent_text, re.IGNORECASE):
+                    error(f"{relative}: Luna instructions must not name {peer}")
         elif name == "sol_planner":
             require_instruction_line(
                 relative,
@@ -134,6 +147,15 @@ def validate_agents() -> None:
                 "When assigned an integration audit",
                 ("exact combined commit", "integration_acceptance"),
             )
+            for peer in ("sol", "luna"):
+                if re.search(rf"\b{peer}(?:_(?:planner|worker))?\b", agent_text, re.IGNORECASE):
+                    error(f"{relative}: Terra instructions must not name {peer}")
+        require_instruction_line(
+            relative,
+            instructions,
+            "PROTOCOL, AGENT, STATUS",
+            OUTBOUND_FIELDS,
+        )
 
 
 def markdown_lines(text: str) -> list[tuple[int, str]]:
@@ -177,6 +199,10 @@ def validate_skill() -> None:
         "CONSTRAINTS",
         "NEXT: parent",
         "FAILURE: missing_dispatch",
+        "REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority",
+        "Luna `technical_resolution` to Terra",
+        "Terra `implementation` or `planning_resolution` to the existing Sol",
+        "Sol `human_authority` to the user",
         "The parent may relay it mechanically but must not author, repair, or broaden it",
         "`PLAN_READY` is not an execution status",
         "For change-producing work, send every task to one `sol_planner`",

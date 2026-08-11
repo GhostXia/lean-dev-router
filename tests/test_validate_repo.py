@@ -59,7 +59,7 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertEqual(len(language_errors), 1)
         self.assertIn("luna-worker.toml", language_errors[0])
 
-    def test_luna_requires_complete_dispatch_without_planner_knowledge(self) -> None:
+    def test_workers_require_complete_protocol_without_peer_knowledge(self) -> None:
         agent_paths = (
             "agents/luna-worker.toml",
             "agents/sol-planner.toml",
@@ -92,21 +92,32 @@ class ValidateRepositoryTests(unittest.TestCase):
                 )
 
         validate_repo.ERRORS.clear()
+        for role, peer, expected in (
+            ("luna-worker.toml", "terra_auditor", "Luna instructions must not name terra"),
+            ("terra-auditor.toml", "luna_worker", "Terra instructions must not name luna"),
+        ):
+            with self.subTest(role=role, peer=peer):
+                validate_repo.ERRORS.clear()
+                for relative, source in originals.items():
+                    if relative.endswith(role):
+                        source = source.replace("Never name or select another agent", f"Ask {peer}")
+                    self.write(relative, source)
+
+                validate_repo.validate_agents()
+
+                self.assertTrue(
+                    any(expected in message for message in validate_repo.ERRORS)
+                )
+
+        validate_repo.ERRORS.clear()
         for relative, source in originals.items():
             if relative.endswith("luna-worker.toml"):
-                source = source.replace(
-                    "do not name another agent", "ask sol_planner"
-                )
+                source = source.replace("PROTOCOL, AGENT, STATUS, FAILURE, REQUEST", "PROTOCOL, AGENT, STATUS, FAILURE")
             self.write(relative, source)
 
         validate_repo.validate_agents()
 
-        self.assertTrue(
-            any(
-                "Luna instructions must not name sol_planner" in message
-                for message in validate_repo.ERRORS
-            )
-        )
+        self.assertTrue(any("REQUEST" in message for message in validate_repo.ERRORS))
 
     def test_four_backtick_fence_wraps_shorter_backtick_fence(self) -> None:
         text = "````\n```\ninside\n````\noutside\n"

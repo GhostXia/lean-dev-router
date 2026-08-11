@@ -81,7 +81,7 @@ NEXT: parent
 
 Only Sol authors or amends a `DISPATCH`; the parent may relay it unchanged. Missing fields, non-relative write paths, or open major product/architecture decisions make it invalid. Luna then performs no implementation work and returns `BLOCKED / missing_dispatch / NEXT parent` without naming a planning role. A minimal single-step `DISPATCH` preserves the L1 path without weakening the gate.
 
-Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Luna may name Terra only as the single technical-escalation edge; complete worker-to-worker topology anonymity is outside this gate's scope.
+Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Workers request capabilities rather than naming peers; the parent performs a deterministic role-and-request lookup without interpreting the evidence.
 
 All three roles use a separate compact outbound result protocol:
 
@@ -90,10 +90,11 @@ PROTOCOL: lean-dev-router/v1
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
+REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or `command` -> PASS/FAIL
-NEXT: parent | luna_worker | terra_auditor | sol_planner | none
+NEXT: parent
 SUMMARY: one concise sentence
 ```
 
@@ -103,11 +104,14 @@ SUMMARY: one concise sentence
 - `PASS` — current stage complete
 - `BLOCKED` — required info, authority, or dependency unavailable
 - `ESCALATE` — another role must act
-- `NEXT` — role the coordinator should dispatch next; results always return to the spawning session
+- `REQUEST` — capability required next; never an execution authorization
+- `NEXT` — always `parent`, returning the result to the spawning session
 
 `PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. `PLAN_READY` is not an execution status.
 
-> 🛡️ Sol performs the route when present, otherwise the parent does. The parent must **not** infer success from an incomplete handoff.
+`NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. The parent applies a fixed transition table: Luna technical resolution goes to Terra; Terra implementation or planning resolution returns to the existing Sol; Sol implementation goes to Luna only with a valid `DISPATCH`; and only Sol may request human authority. Invalid combinations are rejected instead of inferred from prose.
+
+> 🛡️ The spawning coordinator or parent performs the fixed role-and-request lookup. It must **not** infer a route or success from an incomplete handoff.
 
 ### 🚧 Hard Entry Gate and Scope Fuse
 
@@ -157,6 +161,7 @@ For such a decision, Sol returns:
 ```text
 STATUS: BLOCKED
 FAILURE: major-decision
+REQUEST: human_authority
 NEXT: parent
 ```
 
@@ -179,7 +184,7 @@ Native Codex subagents are the default. Start every change-producing task with o
 2. Its model and reasoning effort are honored
 3. Its first result follows `lean-dev-router/v1`
 
-If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
+If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
 `id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v1`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
