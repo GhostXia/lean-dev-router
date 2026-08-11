@@ -287,11 +287,11 @@ The following labels are documentation shorthand only. They do not create runtim
 | Shorthand | Copyable task-level instruction |
 |:---|:---|
 | **Standard** | `Use $lean-dev-router defaults for this task. Apply the normal validation gates and do not merge without my explicit instruction.` |
-| **External Audit** | `For this task, use <auditor> to audit <target>. Require inspectable evidence. If the auditor is unavailable or inconclusive, fall back to Terra and keep the PR in Draft. Merge only after <gate>.` |
-| **Fast Draft** | `For this task, implement the bounded change and open a Draft PR after required scope and acceptance checks. Do not add an independent audit unless the v2 defaults require one. Do not merge.` |
+| **External Audit** | `For this task, use <auditor> to audit <target>. Preserve all required v2 authorization, scope, acceptance, and validation checks. Require inspectable evidence. If the auditor is unavailable or inconclusive, fall back to Terra and keep the PR in Draft. Merge only after <gate>.` |
+| **Fast Draft** | `For this task, implement the bounded change while preserving all required v2 authorization, scope, acceptance, and validation checks. Open a Draft PR after those checks. Do not add an independent audit unless the v2 defaults require one. Do not merge.` |
 | **Emergency Fix** | `For this named fix only, preserve the v2 authorization, scope, and validation gates; open a Draft PR and use <auditor or Terra> for <risk>. Merge only after <gate> and my explicit approval.` |
 
-These prompts control only the named task. Installing another governance or audit Skill does not activate an override by itself.
+These prompts control only the named task or batch. Installing another governance or audit Skill does not activate an override by itself.
 
 ### 📊 Final L3 Test Result
 
