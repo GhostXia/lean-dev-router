@@ -109,8 +109,15 @@ Codex 用户必须把以下英文运行时作为同一版本整体安装：
 `runtime_guard.py` 随 Skill 安装；可变状态必须放在仓库外的临时目录。
 根目录的 `SKILL.md` 与 `skill-variants/en/SKILL.md` 完全相同，始终是发布用的英文主版本。`skill-variants/zhcn/SKILL.md` 仅用于本机中文测试。可用以下命令覆盖已安装的根 Skill，并随时恢复英文：
 
+启用中文测试版：
+
 ```powershell
 Copy-Item skill-variants/zhcn/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
+```
+
+恢复英文发布版：
+
+```powershell
 Copy-Item skill-variants/en/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
 ```
 
@@ -135,5 +142,5 @@ Copy-Item skill-variants/en/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-ro
 
 - 英文根 Skill 是发布主版本；修改契约时同步维护 `skill-variants/en/SKILL.md` 与测试用的 `skill-variants/zhcn/SKILL.md`。
 - `docs/zh-CN/` 只供人类阅读；可替换测试用的完整中文指令仅位于 `skill-variants/zhcn/SKILL.md`。
-- CI 会阻止非 ASCII 字符重新进入 `.agents/` 与 `agents/`。
+- 除根 `.agents/skills/lean-dev-router/SKILL.md` 外，CI 会阻止非 ASCII 字符进入 `.agents/` 与 `agents/` 的运行时文件。
 - 修改运行行为后，应运行 `python scripts/validate_repo.py` 与 `python -m unittest discover -s tests -v`。

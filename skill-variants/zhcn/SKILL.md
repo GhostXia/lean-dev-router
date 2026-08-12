@@ -5,7 +5,7 @@ description: 由 Sol 规划、父代理调度、Luna 实现、Terra 因果审计
 
 # Lean Dev Router
 
-始终使用足够完成任务的最小代理池。Sol 规划并授权，父代理机械调度，Luna 写入，Terra 审计并解决技术问题。
+始终使用足够完成任务的最小代理池。Sol 规划并授权，父代理机械调度，Luna 写入，Terra 审计并提供因果证据和有界修复建议。
 
 ## 语言
 
@@ -101,7 +101,7 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 每个条目各用一次 `--allow <paths_allow_entry>`。helper 检查 tracked、普通 untracked 和 ignored untracked 路径。helper 不可用时执行文档规定的三项 Git 枚举，不得编造 dirty revision。范围证据缺失或失败时拒绝 `PASS`。
 
-范围通过后才能确定可审计状态。干净提交使用精确 commit SHA。dirty 状态使用 `worktree-sha256:<64 lowercase hex>`，输入为已解析 baseline、授权的 tracked binary diff，以及用安全 framing 编码的授权 untracked 路径与内容。相同状态必须复现相同 revision，任何修复都会改变 revision。拒绝 `<luna-revision>` 等占位符及只含 baseline 的 dirty key。
+范围通过后才能确定可审计状态。干净提交使用精确 commit SHA。dirty 状态使用 `worktree-sha256:<64 lowercase hex>`，输入为已解析 baseline、以 Git 二进制安全格式编码的全部授权 tracked 文本与二进制 diff，以及用安全 framing 编码的授权 untracked 路径与内容。相同状态必须复现相同 revision，任何修复都会改变 revision。拒绝 `<luna-revision>` 等占位符及只含 baseline 的 dirty key。
 
 ## 风险熔断与复现
 
@@ -111,7 +111,7 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 预算内每个失败 gate 最多三次实质不同的尝试。代码、配置、输入、环境、依赖、证据或可检验假设未变时，禁止原样重跑命令。技术不确定性请求 `technical_resolution`；缺工具、权限或网络请求依赖处理；越权写入属于 scope failure；baseline 漂移属于 verification failure。复现证据严格包含 cwd、环境差异、完整命令、退出码和紧凑结果，Terra 原样继承；缺一项则审计不完整。
 
-`PASS` 前的技术诊断须携带 `DISPATCH_ID`、baseline、当前 diff/paths、失败假设与尝试、完整失败/复现证据、契约边界和剩余预算，不要求最终 scope 或 revision。技术证据不足时请求 `planning_resolution`，由父代理返回 Sol。并发测试必须证明目标失败或竞争分支确实发生；sleep 只能用于轮询或兜底 timeout，不能单独作为同步证据。baseline 漂移立即停止写入并产生 verification blocker。
+`PASS` 前的技术诊断须携带 `DISPATCH_ID`、baseline、当前 diff/paths、失败假设与尝试、完整失败/复现证据、契约边界和剩余预算，不要求最终 scope 或 revision。技术证据不足时请求 `technical_resolution`，由父代理交给 Terra 处理。并发测试必须证明目标失败或竞争分支确实发生；sleep 只能用于轮询或兜底 timeout，不能单独作为同步证据。baseline 漂移立即停止写入并产生 verification blocker。
 
 ## 流式处理与预注册审计
 
@@ -130,7 +130,7 @@ Terra 沿因果影响锥读取 `PATHS_ALLOW` 之外的 caller/callee、数据/�
 - **C** 无关的既有缺陷，通常作为不阻塞的 follow-up。
 - **D** 严重安全、数据丢失或兼容性风险，阻塞或升级。
 
-契约不变的修复由 Terra 返回 `REQUEST: implementation`，并携带原 `DISPATCH_ID`、预注册的 `AUDITOR_INSTANCE_ID`、`CONTRACT_EFFECT: unchanged`、位于 `PATHS_ALLOW` 内的 `AFFECTED_PATHS`、违反的验收项和有界修复证据。父代理核对 ID、Luna 证据、预注册审计和默认两轮修复预算，再机械地交回原 Luna。新状态取得新 revision 并重新审计。
+契约不变的修复由 Terra 返回 `REQUEST: implementation`，并携带原 `PLAN_ID`、`DISPATCH_ID`、预注册的 `AUDITOR_INSTANCE_ID`、`CONTRACT_EFFECT: unchanged`、位于 `PATHS_ALLOW` 内的 `AFFECTED_PATHS`、原 `ACCEPTANCE`、顺序递增的 `REPAIR_CYCLE`、新 `REVISION` 和新的 `EVIDENCE_FINGERPRINT`。父代理核对 ID、Luna 证据、预注册审计和默认两轮修复预算，再机械地交回原 Luna。新状态取得新 revision 并重新审计。
 
 任何 scope、plan、acceptance、constraint、公开接口、架构、安全边界、数据格式或资源限制变化，以及歧义或预算耗尽，都回到 Sol。Terra 自身绝不写修复。
 

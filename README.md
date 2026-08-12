@@ -301,8 +301,15 @@ The guard is bundled under the Skill's `scripts/`; keep mutable state in externa
 The root `SKILL.md` and `skill-variants/en/SKILL.md` are identical and remain the release default.
 To test Chinese locally, replace only the installed root Skill; restore English the same way:
 
+Enable the Chinese test variant:
+
 ```powershell
 Copy-Item skill-variants/zhcn/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
+```
+
+Restore the English release default:
+
+```powershell
 Copy-Item skill-variants/en/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
 ```
 

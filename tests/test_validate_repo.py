@@ -97,16 +97,24 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertEqual(self.validate_skill(skill), [])
         chinese = self.source("skill-variants/zhcn/SKILL.md")
         scenarios = {
+            "roles": ("Terra 审计并提供因果证据和有界修复建议",),
             "planning waves": ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "Sol 不持续调度"),
             "direct audit": ("随后直接启动 Terra", "Luna-to-Sol-to-Terra"),
-            "revision": ("worktree-sha256:<64 lowercase hex>", "相同状态必须复现相同 revision", "任何修复都会改变 revision"),
+            "revision": (
+                "worktree-sha256:<64 lowercase hex>", "tracked 文本与二进制 diff",
+                "相同状态必须复现相同 revision", "任何修复都会改变 revision",
+            ),
             "artifacts": ("只授权持久写入", "一次性产物根目录", "产物绝不进入 revision 标识"),
             "fuse": ("MODEL_CALL_LIMIT", "确定性的 `spinning` 信号", "硬预算", "禁止原样重跑命令"),
             "failure routes": ("technical_resolution", "请求依赖处理", "scope failure", "baseline 漂移"),
+            "technical route": ("技术证据不足时请求 `technical_resolution`", "由父代理交给 Terra 处理"),
             "replay": ("cwd、环境差异、完整命令、退出码和紧凑结果",),
             "concurrency": ("证明目标失败或竞争分支确实发生", "轮询或兜底 timeout"),
             "causal audit": ("更宽的 `AUDIT_SCOPE/IMPACT_CONE`", "因果影响锥", "**A**", "**B**", "**C**", "**D**"),
-            "repair": ("CONTRACT_EFFECT: unchanged", "AFFECTED_PATHS", "默认两轮修复预算", "都回到 Sol"),
+            "repair": (
+                "CONTRACT_EFFECT: unchanged", "AFFECTED_PATHS", "REPAIR_CYCLE",
+                "EVIDENCE_FINGERPRINT", "默认两轮修复预算", "都回到 Sol",
+            ),
             "human": ("REQUEST human_authority", "至多给出三个选项", "一个建议和一个问题"),
         }
         for terms in scenarios.values():
