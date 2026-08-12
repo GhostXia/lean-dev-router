@@ -273,6 +273,51 @@ class ValidateRepositoryTests(unittest.TestCase):
                     term,
                 )
 
+    def test_dispatch_budget_labels_must_remain_inside_fenced_packets(self) -> None:
+        sol = self.source("agents/sol-planner.toml")
+        for term in ("MODEL_CALL_LIMIT", "STAGNANT_CALL_LIMIT"):
+            with self.subTest(profile="Sol", term=term):
+                validate_repo.ERRORS.clear()
+                changed = sol.replace(
+                    f"    {term}: <positive integer>\n", "", 1
+                )
+                self.assertIn(term, changed)
+                for relative in (
+                    "agents/luna-worker.toml",
+                    "agents/sol-planner.toml",
+                    "agents/terra-auditor.toml",
+                ):
+                    self.write(relative, changed if relative == "agents/sol-planner.toml" else self.source(relative))
+                validate_repo.validate_agents()
+                self.assertTrue(
+                    any(
+                        "agents/sol-planner.toml" in error and term in error
+                        for error in validate_repo.ERRORS
+                    )
+                )
+
+        root = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        for term, line in (
+            ("MODEL_CALL_LIMIT", "  MODEL_CALL_LIMIT: positive integer\n"),
+            ("STAGNANT_CALL_LIMIT", "  STAGNANT_CALL_LIMIT: positive integer\n"),
+        ):
+            with self.subTest(profile="root Skill", term=term):
+                validate_repo.ERRORS.clear()
+                changed = root.replace(line, "", 1)
+                changed = changed.replace(
+                    "The parent relays it unchanged.",
+                    f"The parent relays it unchanged. Narrative retains {term}.",
+                    1,
+                )
+                self.assertIn(term, changed)
+                errors = self.validate_skill(changed)
+                self.assertTrue(
+                    any(
+                        "root Skill inbound DISPATCH packet" in error and term in error
+                        for error in errors
+                    )
+                )
+
     def test_agent_envelope_next_must_be_parent(self) -> None:
         paths = (
             "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"

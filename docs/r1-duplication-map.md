@@ -32,7 +32,7 @@
 | parent:repair_or_sol | 1 | 1 | 0 | 0 | 0 | 0 | 3 |
 | human_authority | 3 | 3 | 2 | 0 | 0 | 0 | 3 |
 | finding classes A-D | 0 | 0 | 0 | 0 | 4 | 0 | 0 |
-| envelope PROTOCOL|AGENT|STATUS | 0 | 0 | 1 | 1 | 1 | 0 | 0 |
+| envelope PROTOCOL\|AGENT\|STATUS | 0 | 0 | 1 | 1 | 1 | 0 | 0 |
 | fuse 3 attempts/20 min | 0 | 0 | 2 | 2 | 0 | 0 | 1 |
 | replay cwd/env/exit | 3 | 1 | 3 | 3 | 3 | 0 | 0 |
 | spinning/stagnant | 3 | 3 | 0 | 1 | 0 | 5 | 5 |
@@ -41,7 +41,7 @@
 | DISPATCH_WAVE | 1 | 1 | 1 | 0 | 0 | 0 | 3 |
 | EXPANSION_GATE | 1 | 1 | 1 | 0 | 0 | 0 | 3 |
 
-文件规模：
+文件规模（改前基线数据）：
 
 | 文件 | 字符数 | 行数 |
 |---|---:|---:|
