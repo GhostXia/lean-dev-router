@@ -123,6 +123,20 @@ def _has_field(contract: Mapping[str, object], key: str) -> bool:
     return any(str(candidate).casefold() == folded for candidate in contract)
 
 
+def _conflicting_fields(contract: Mapping[str, object]) -> list[str]:
+    """Return case-insensitive field names that occur more than once."""
+    seen: dict[str, str] = {}
+    conflicts: list[str] = []
+    for candidate in contract:
+        name = str(candidate)
+        folded = name.casefold()
+        if folded in seen and folded not in conflicts:
+            conflicts.append(folded)
+        else:
+            seen[folded] = name
+    return conflicts
+
+
 def _non_empty(value: object) -> bool:
     if value is None or isinstance(value, bool):
         return False
@@ -191,7 +205,7 @@ def _repository_paths(value: object, *, allow_empty: bool) -> list[str] | None:
 
 def terra_planner_ineligibility_reasons(contract: Mapping[str, object]) -> list[str]:
     """Return stable, ordered reasons a contract must go directly to Sol."""
-    reasons: list[str] = []
+    reasons = [f"conflicting case-insensitive field {name}" for name in _conflicting_fields(contract)]
     level = str(_contract_value(contract, "LEVEL", "")).strip().upper()
     if level not in TERRA_ELIGIBLE_LEVELS:
         reasons.append("LEVEL must be L1 or L2")
@@ -220,8 +234,8 @@ def terra_planner_ineligibility_reasons(contract: Mapping[str, object]) -> list[
     if max_dispatches != 1:
         reasons.append("MAX_DISPATCHES must equal 1")
     components = _strict_int(_contract_value(contract, "COMPONENT_COUNT"))
-    if components is None or components < 0 or components > 2:
-        reasons.append("COMPONENT_COUNT must be at most 2")
+    if components is None or components < 1 or components > 2:
+        reasons.append("COMPONENT_COUNT must be between 1 and 2")
     depth = _strict_int(_contract_value(contract, "DEPENDENCY_DEPTH"))
     if depth is None or depth < 0 or depth > 1:
         reasons.append("DEPENDENCY_DEPTH must be at most 1")
@@ -300,7 +314,7 @@ def validate_plan_identity(
     plan: Mapping[str, object], *, expected_role: str | None = None
 ) -> list[str]:
     """Validate the immutable identity fields every planner manifest carries."""
-    errors: list[str] = []
+    errors = [f"conflicting case-insensitive field {name}" for name in _conflicting_fields(plan)]
     for field in (
         "PLAN_ID",
         "PLANNER_ROLE",

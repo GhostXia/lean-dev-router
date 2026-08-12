@@ -281,6 +281,15 @@ class ValidateRepositoryTests(unittest.TestCase):
             changed = dict(contract, RISK_FLAGS=[risk])
             self.assertFalse(validate_repo.is_terra_planner_eligible(changed), risk)
 
+        for invalid_components in (0, 3):
+            changed = dict(contract, COMPONENT_COUNT=invalid_components)
+            self.assertFalse(validate_repo.is_terra_planner_eligible(changed))
+            self.assertEqual(validate_repo.route_planner(changed), "sol_planner")
+
+        conflicting = dict(contract, level="L3")
+        self.assertFalse(validate_repo.is_terra_planner_eligible(conflicting))
+        self.assertTrue(any("conflicting" in reason for reason in validate_repo.terra_planner_ineligibility_reasons(conflicting)))
+
         for field in (
             "REQUIRED_PATHS",
             "WRITE_BATCH_COUNT",
@@ -304,6 +313,7 @@ class ValidateRepositoryTests(unittest.TestCase):
             "AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID",
             validate_repo.validate_plan_identity(dict(plan, AUDITOR_INSTANCE_ID="planner-a")),
         )
+        self.assertTrue(validate_repo.validate_plan_identity(dict(plan, plan_id="other")))
         registry = validate_repo.RoleLeaseRegistry()
         self.assertTrue(registry.record_planned("plan-1", "planner-a", "terra_planner"))
         self.assertFalse(registry.lease("plan-1", "planner-a", "sol_planner"))

@@ -36,7 +36,7 @@ The predicate is deterministic and exact: `LEVEL` is L1 or L2;
 `OBJECTIVE_FIXED` is true; `BASELINE`, `SCOPE_ROOTS`, and `ACCEPTANCE` are
 non-empty; `OPEN_MAJOR_DECISIONS` is false; `RISK_FLAGS` is none;
 `EXTERNAL_ACTIONS` is none; `MAX_DISPATCHES` is exactly 1;
-`COMPONENT_COUNT` is at most 2; and `DEPENDENCY_DEPTH` is at most 1. A required path outside `SCOPE_ROOTS`, ambiguity, contract expansion, or more than one
+`COMPONENT_COUNT` is 1 or 2; and `DEPENDENCY_DEPTH` is at most 1. A required path outside `SCOPE_ROOTS`, ambiguity, contract expansion, or more than one
 write batch fails the predicate and routes directly to Sol; there is no routine Terra-to-Sol review.
 `REQUIRED_PATHS`, `WRITE_BATCH_COUNT`, `CONTRACT_EXPANDED`, and `AMBIGUITY`
 must be explicit canonical evidence. `PATHS_ALLOW` is a non-empty list of

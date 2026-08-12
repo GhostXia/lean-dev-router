@@ -24,7 +24,7 @@ Lean Dev Router 用四个职责不同的角色处理仓库内的软件工程任�
 只有以下条件全部满足时才允许快路径：`LEVEL` 为 L1/L2，
 `OBJECTIVE_FIXED` 为 true，`BASELINE`、`SCOPE_ROOTS`、`ACCEPTANCE` 非空，
 `OPEN_MAJOR_DECISIONS` 为 false，`RISK_FLAGS` 与 `EXTERNAL_ACTIONS` 为 none，
-`MAX_DISPATCHES` 等于 1，`COMPONENT_COUNT` 不超过 2，
+`MAX_DISPATCHES` 等于 1，`COMPONENT_COUNT` 为 1 或 2，
 `DEPENDENCY_DEPTH` 不超过 1。必需路径在 `SCOPE_ROOTS` 外、歧义、契约扩展或超过一个写入批次都会直接路由 Sol。
 `REQUIRED_PATHS`、`WRITE_BATCH_COUNT`、`CONTRACT_EXPANDED`、`AMBIGUITY` 必须显式给出；不得依靠缺省值放行。
 `SCOPE_ROOTS`、`PATHS_ALLOW`、`REQUIRED_PATHS` 必须是仓库相对路径列表，且允许或必需路径不得越出 `SCOPE_ROOTS`；畸形字段直接升级 Sol，不得抛错或放行。

@@ -64,7 +64,7 @@ Because the subagents use explicitly selected models and bounded assignments, th
 eligibility predicate is true: `LEVEL` is L1/L2; `OBJECTIVE_FIXED` is true;
 `BASELINE`, `SCOPE_ROOTS`, and `ACCEPTANCE` are non-empty;
 `OPEN_MAJOR_DECISIONS` is false; `RISK_FLAGS` and `EXTERNAL_ACTIONS` are none;
-`MAX_DISPATCHES` is exactly 1; `COMPONENT_COUNT` is at most 2; and
+`MAX_DISPATCHES` is exactly 1; `COMPONENT_COUNT` is 1 or 2; and
 `DEPENDENCY_DEPTH` is at most 1. Ambiguity, contract expansion, a required path
 outside `SCOPE_ROOTS`, or more than one write batch routes directly to Sol with
 no routine Terra-to-Sol review.
