@@ -33,6 +33,11 @@ class ValidateRepositoryTests(unittest.TestCase):
 
     def validate_skill(self, source: str) -> list[str]:
         self.write(".agents/skills/lean-dev-router/SKILL.md", source)
+        self.write("skill-variants/en/SKILL.md", source)
+        self.write(
+            "skill-variants/zhcn/SKILL.md",
+            self.source("skill-variants/zhcn/SKILL.md"),
+        )
         validate_repo.validate_skill()
         return validate_repo.ERRORS
 
@@ -90,22 +95,60 @@ class ValidateRepositoryTests(unittest.TestCase):
     def test_skill_protocol_and_semantic_contract(self) -> None:
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
         self.assertEqual(self.validate_skill(skill), [])
+        chinese = self.source("skill-variants/zhcn/SKILL.md")
         scenarios = {
-            "planning waves": ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "does not continuously schedule"),
-            "direct audit": ("launches Terra directly", "No routine Luna-to-Sol-to-Terra hop"),
-            "revision": ("worktree-sha256:<64 lowercase hex>", "same state reproduces", "repair changes"),
-            "artifacts": ("persistent writes only", "disposable artifact", "never enter revision identity"),
-            "fuse": ("MODEL_CALL_LIMIT", "deterministic `spinning` signal", "hard budget"),
-            "failure routes": ("technical_resolution", "dependency handling", "scope failures", "Baseline drift"),
-            "replay": ("cwd, environment delta, exact command, exit code, and compact result",),
-            "concurrency": ("prove the target failure/competition branch", "polling or a backstop timeout"),
-            "causal audit": ("broader `AUDIT_SCOPE/IMPACT_CONE`", "causal impact cone", "**A**", "**B**", "**C**", "**D**"),
-            "repair": ("CONTRACT_EFFECT: unchanged", "AFFECTED_PATHS", "two-cycle repair budget", "returns to Sol"),
-            "human": ("REQUEST human_authority", "at most three", "one recommendation", "one question"),
+            "roles": ("Terra 审计并提供因果证据和有界修复建议",),
+            "planning waves": ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "Sol 不持续调度"),
+            "direct audit": ("随后直接启动 Terra", "Luna-to-Sol-to-Terra"),
+            "revision": (
+                "worktree-sha256:<64 lowercase hex>", "tracked 文本与二进制 diff",
+                "相同状态必须复现相同 revision", "任何修复都会改变 revision",
+            ),
+            "artifacts": ("只授权持久写入", "一次性产物根目录", "产物绝不进入 revision 标识"),
+            "fuse": ("MODEL_CALL_LIMIT", "确定性的 `spinning` 信号", "硬预算", "禁止原样重跑命令"),
+            "failure routes": ("technical_resolution", "请求依赖处理", "scope failure", "baseline 漂移"),
+            "technical route": ("技术证据不足时请求 `technical_resolution`", "由父代理交给 Terra 处理"),
+            "replay": ("cwd、环境差异、完整命令、退出码和紧凑结果",),
+            "concurrency": ("证明目标失败或竞争分支确实发生", "轮询或兜底 timeout"),
+            "causal audit": ("更宽的 `AUDIT_SCOPE/IMPACT_CONE`", "因果影响锥", "**A**", "**B**", "**C**", "**D**"),
+            "repair": (
+                "CONTRACT_EFFECT: unchanged", "AFFECTED_PATHS", "REPAIR_CYCLE",
+                "EVIDENCE_FINGERPRINT", "默认两轮修复预算", "都回到 Sol",
+            ),
+            "human": ("REQUEST human_authority", "至多给出三个选项", "一个建议和一个问题"),
         }
         for terms in scenarios.values():
             for term in terms:
-                self.assertIn(term, skill)
+                self.assertIn(term, chinese)
+
+    def test_root_skill_is_the_english_variant(self) -> None:
+        root = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        english = self.source("skill-variants/en/SKILL.md")
+        self.assertEqual(root, english)
+        self.assertEqual(self.validate_skill(root), [])
+
+        validate_repo.ERRORS.clear()
+        self.write(".agents/skills/lean-dev-router/SKILL.md", root + "\n")
+        validate_repo.validate_skill()
+        self.assertTrue(any("must exactly match" in error for error in validate_repo.ERRORS))
+
+    def test_chinese_variant_rejects_semantic_anchor_removal(self) -> None:
+        root = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        chinese = self.source("skill-variants/zhcn/SKILL.md")
+        self.write(".agents/skills/lean-dev-router/SKILL.md", root)
+        self.write("skill-variants/en/SKILL.md", root)
+        self.write(
+            "skill-variants/zhcn/SKILL.md",
+            chinese.replace("相同 revision 不得重复审计", "removed", 1),
+        )
+        validate_repo.validate_skill()
+        self.assertTrue(
+            any(
+                "skill-variants/zhcn/SKILL.md" in error
+                and "相同 revision 不得重复审计" in error
+                for error in validate_repo.ERRORS
+            )
+        )
 
     def test_skill_validation_rejects_semantic_anchor_removal(self) -> None:
         original = self.source(".agents/skills/lean-dev-router/SKILL.md")
@@ -230,9 +273,23 @@ class ValidateRepositoryTests(unittest.TestCase):
             self.assertTrue(any(target in error and required in error for error in validate_repo.ERRORS))
 
     def test_skill_stays_within_context_budget(self) -> None:
-        skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
-        self.assertLessEqual(len(skill), 12_000)
-        self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
+        for relative in (
+            ".agents/skills/lean-dev-router/SKILL.md",
+            "skill-variants/zhcn/SKILL.md",
+        ):
+            skill = self.source(relative)
+            self.assertLessEqual(len(skill), 12_000)
+            self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
+
+    def test_chinese_skill_is_allowed_but_runtime_remains_ascii(self) -> None:
+        self.write(".agents/skills/lean-dev-router/SKILL.md", "# 中文\n")
+        self.write("agents/runtime.toml", "name = 'runtime'\n")
+        validate_repo.validate_runtime_language()
+        self.assertEqual(validate_repo.ERRORS, [])
+
+        self.write("agents/runtime.toml", "name = '中文'\n")
+        validate_repo.validate_runtime_language()
+        self.assertTrue(any("agents/runtime.toml" in error for error in validate_repo.ERRORS))
 
     def test_runtime_guard_has_required_contract(self) -> None:
         source = self.source(".agents/skills/lean-dev-router/scripts/runtime_guard.py")
