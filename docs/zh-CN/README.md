@@ -18,7 +18,7 @@ Lean Dev Router 用三个职责不同的角色处理仓库内的软件工程任�
 
 ## 交接协议怎么读
 
-协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空的任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。只有 Sol 可以签发或修改，父会话只能原样转发；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`，也不会点名规划角色。
+协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空且稳定唯一的 `DISPATCH_ID`、任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。该 ID 贯穿 Luna 证据、预注册 Terra 审计和契约内返工核验。只有 Sol 可以签发或修改，父会话只能原样转发；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`。
 
 Agent 返回的出站交接包含状态、失败类型、能力请求、证据、固定的 `NEXT: parent` 和一句摘要。重点检查三件事：
 

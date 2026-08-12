@@ -230,6 +230,31 @@ class CheckScopeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertNotIn("REVISION:", result.stdout)
 
+    def test_clean_worktree_rejects_invalid_allow(self) -> None:
+        result = self.repo.check(
+            "--baseline", self.repo.baseline, "--allow", "../seed.txt", "--revision"
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid allow path", result.stdout)
+        self.assertNotIn("REVISION:", result.stdout)
+
+    def test_changed_tracked_file_under_artifact_root_fails(self) -> None:
+        self.repo.write("build/tracked.txt", "baseline\n")
+        self.repo.git("add", "build/tracked.txt")
+        self.repo.git("commit", "-qm", "track build file")
+        self.repo.baseline = self.repo.git("rev-parse", "HEAD").stdout.strip()
+        self.repo.write("build/tracked.txt", "changed\n")
+
+        result = self.repo.check(
+            "--baseline", self.repo.baseline, "--allow", "build",
+            "--artifact", "build", "--revision",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("build/tracked.txt", result.stdout)
+        self.assertNotIn("REVISION:", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -68,6 +68,7 @@ Execution authority is a distinct inbound contract. Luna must receive this compl
 PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
+DISPATCH_ID: stable unique component/write identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -156,7 +157,7 @@ Component success is not transitive. When two or more write batches form one del
 
 Before dispatch, Sol defines shared contracts, dependency order, `integration_worktree`, `integration_owner`, `integration_baseline`, `integration_paths_allow`, and `integration_acceptance`. The integration allow-list starts as the exact union of accepted batch allow-lists and changes only through an authorized Luna integration-repair batch.
 
-The parent schedules integration without modifying the tree. One Luna acts as `integration_owner` and combines accepted commits in dependency order; a parent fallback may perform only conflict-free mechanical merges. Conflict resolution or compatibility edits require a new Sol-authorized Luna write batch.
+The parent schedules integration without modifying the tree or merging commits. The authorized `integration_owner` Luna combines accepted commits in dependency order. If that Luna cannot proceed, the parent returns the state to Sol; conflict resolution or compatibility edits require a new Sol-authorized Luna write batch.
 
 Before whole-task `PASS`, require a clean integration worktree and verify that every tracked path from `integration_baseline` to the combined commit plus every standard and ignored untracked path is covered by `integration_paths_allow`. Enumerate the two untracked classes with `git ls-files --others --exclude-standard` and `git ls-files --others --ignored --exclude-standard`. Record that result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`.
 
@@ -204,7 +205,7 @@ Native Codex subagents are the default. Start every change-producing task with *
 3. Its first result follows `lean-dev-router/v2`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically. It calls Sol again only at an expansion gate, an undefined transition, a contract change, or a user-owned decision. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 

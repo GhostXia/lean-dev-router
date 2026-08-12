@@ -54,6 +54,7 @@ Luna may write only after receiving this complete inbound contract:
 PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
+DISPATCH_ID: stable unique component/write identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -65,7 +66,8 @@ CONSTRAINTS:
 NEXT: parent
 ```
 
-The parent relays it unchanged. Every field is non-empty, paths are repository
+The parent relays it unchanged. Every field is non-empty, `DISPATCH_ID` is
+unique and stable for that write lifecycle, paths are repository
 relative, and no major decision remains. A Terra assignment is an ordinary
 read-only instruction, not an outbound result envelope (only Luna write
 authorization) and never `STATUS: DISPATCH`. Missing authorization makes Luna
@@ -162,7 +164,8 @@ exist, start within 60 seconds if capacity exists, otherwise record the queue
 reason and start at the first eligible slot release. Keep event consumption
 responsive during long parent commands and report external waits separately.
 
-Sol preregisters each audit with component, dependencies, revision/job-key
+Sol preregisters each audit with the same `DISPATCH_ID`, component,
+dependencies, revision/job-key
 rule, `TASK_OBJECTIVE`, `CHANGE_SCOPE`, broader `AUDIT_SCOPE/IMPACT_CONE`,
 acceptance, replay evidence, and out-of-scope policy. After Luna `PASS`, the
 parent verifies scope, concrete revision, dependencies, replay, and audit
@@ -185,7 +188,8 @@ path, evidence, causality, severity, blocking decision, and ownership:
 For a contract-preserving repair Terra returns `REQUEST: implementation` with
 the original `DISPATCH_ID`, `CONTRACT_EFFECT: unchanged`, `AFFECTED_PATHS`
 inside `PATHS_ALLOW`, violated acceptance, and bounded repair evidence. Parent
-checks those facts and the default two-cycle repair budget, then mechanically
+matches the ID to Luna evidence and the preregistered audit, checks those facts
+and the default two-cycle repair budget, then mechanically
 returns the original Luna. The new state gets a new revision and re-audit.
 Any change to scope, plan, acceptance, constraints, public interface,
 architecture, security boundary, data format, resource limit, or an ambiguous

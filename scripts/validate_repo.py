@@ -25,6 +25,7 @@ DISPATCH_FIELDS = (
     "PROTOCOL: lean-dev-router/v2",
     "STATUS: DISPATCH",
     "TARGET: implementation",
+    "DISPATCH_ID",
     "TASK_SUMMARY",
     "BASELINE",
     "PATHS_ALLOW",
@@ -129,7 +130,21 @@ def validate_agents() -> None:
         ]
         if language_lines != [LANGUAGE_RULE]:
             error(f"{relative}: English language rule is missing or incorrect")
-        common = OUTBOUND_FIELDS + ("NEXT is always parent",)
+        envelope = next(
+            (
+                line.strip()
+                for line in instructions.splitlines()
+                if "outbound result envelope:" in line
+            ),
+            None,
+        )
+        if envelope is None:
+            error(f"{relative}: missing outbound result envelope")
+        else:
+            next_field = re.search(r"\bNEXT:\s*([a-z_]+)", envelope)
+            if next_field is None or next_field.group(1) != "parent":
+                error(f"{relative}: outbound result envelope NEXT must equal parent")
+        common = OUTBOUND_FIELDS
         role_terms = {
             "luna_worker": DISPATCH_FIELDS + (
                 "PLAN_READY", "missing_dispatch", "scripts/check_scope.py",
@@ -237,6 +252,7 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 "PROTOCOL": "lean-dev-router/v2",
                 "STATUS": "DISPATCH",
                 "TARGET": "implementation",
+                "DISPATCH_ID": None,
                 "TASK_SUMMARY": None,
                 "BASELINE": None,
                 "PATHS_ALLOW": None,
@@ -273,6 +289,8 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 f"{relative}: {label} has unexpected fields: "
                 f"{', '.join(sorted(unexpected))}"
             )
+        if label == "inbound DISPATCH protocol" and not fields.get("DISPATCH_ID"):
+            error(f"{relative}: inbound DISPATCH protocol DISPATCH_ID must be non-empty")
         for name, value in expected.items():
             if value is not None and fields.get(name) != value:
                 error(

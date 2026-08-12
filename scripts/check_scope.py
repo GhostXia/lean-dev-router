@@ -159,7 +159,7 @@ def scope_paths(
     standard, ignored = _untracked_paths()
     all_paths = tracked + standard + ignored
     retained_artifacts = sorted(
-        {path for path in standard + ignored if matches_any(path, artifacts)}
+        {path for path in all_paths if matches_any(path, artifacts)}
     )
     extras = sorted({path for path in all_paths if not allowed(path, allow)})
     # Declared disposable files are never silently accepted while retained in
@@ -294,10 +294,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        allow = tuple(normalize_allow_entry(item) for item in args.allow)
         artifacts = tuple(normalize_artifact_entry(item) for item in args.artifacts)
         tracked, standard_untracked, ignored_untracked, extras = scope_paths(
             args.baseline,
-            tuple(args.allow),
+            allow,
             end=args.end,
             artifacts=artifacts,
         )
@@ -320,7 +321,7 @@ def main() -> int:
     try:
         revision = compute_worktree_revision(
             args.baseline,
-            tuple(args.allow),
+            allow,
             end=args.end,
             artifacts=artifacts,
             scope_result=(tracked, standard_untracked, ignored_untracked, extras),

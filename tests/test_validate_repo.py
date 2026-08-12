@@ -125,6 +125,18 @@ class ValidateRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(any("illegal handoff" in e for e in self.validate_skill(illegal)))
 
+    def test_dispatch_id_must_be_present_and_non_empty(self) -> None:
+        original = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        for replacement in ("", "DISPATCH_ID:\n"):
+            validate_repo.ERRORS.clear()
+            changed = original.replace(
+                "DISPATCH_ID: stable unique component/write identifier\n",
+                replacement,
+                1,
+            )
+            errors = self.validate_skill(changed)
+            self.assertTrue(any("DISPATCH_ID" in error for error in errors))
+
     def test_agent_profiles_preserve_role_boundaries(self) -> None:
         originals = {
             path: self.source(path) for path in (
@@ -147,6 +159,24 @@ class ValidateRepositoryTests(unittest.TestCase):
                 self.write(other, source.replace(term, "removed", 1) if other == path else source)
             validate_repo.validate_agents()
             self.assertTrue(any(path in error and term in error for error in validate_repo.ERRORS))
+
+    def test_agent_envelope_next_must_be_parent(self) -> None:
+        paths = (
+            "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"
+        )
+        for target in paths:
+            validate_repo.ERRORS.clear()
+            for path in paths:
+                source = self.source(path)
+                if path == target:
+                    marker = "NEXT: parent | SUMMARY"
+                    self.assertIn(marker, source)
+                    source = source.replace(marker, "NEXT: sol_planner | SUMMARY", 1)
+                self.write(path, source)
+            validate_repo.validate_agents()
+            self.assertTrue(
+                any(target in error and "envelope NEXT" in error for error in validate_repo.ERRORS)
+            )
 
     def test_skill_stays_within_context_budget(self) -> None:
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
