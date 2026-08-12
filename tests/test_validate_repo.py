@@ -249,6 +249,30 @@ class ValidateRepositoryTests(unittest.TestCase):
             validate_repo.validate_agents()
             self.assertTrue(any(path in error and term in error for error in validate_repo.ERRORS))
 
+    def test_sol_profile_requires_complete_dispatch_producer_schema(self) -> None:
+        required = ("AGENT: sol_planner",) + validate_repo.SOL_PRODUCTION_SCHEMA
+        for term in required:
+            with self.subTest(term=term):
+                validate_repo.ERRORS.clear()
+                for relative in (
+                    "agents/luna-worker.toml",
+                    "agents/sol-planner.toml",
+                    "agents/terra-auditor.toml",
+                ):
+                    source = self.source(relative)
+                    if relative == "agents/sol-planner.toml":
+                        self.assertIn(term, source)
+                        source = source.replace(term, "removed")
+                    self.write(relative, source)
+                validate_repo.validate_agents()
+                self.assertTrue(
+                    any(
+                        "agents/sol-planner.toml" in error and term in error
+                        for error in validate_repo.ERRORS
+                    ),
+                    term,
+                )
+
     def test_agent_envelope_next_must_be_parent(self) -> None:
         paths = (
             "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"

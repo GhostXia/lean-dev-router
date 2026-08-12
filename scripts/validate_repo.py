@@ -38,6 +38,14 @@ DISPATCH_FIELDS = (
     "BUDGET",
     "NEXT: parent",
 )
+BUDGET_FIELDS = (
+    "MODEL_CALL_LIMIT",
+    "HYPOTHESIS_LIMIT",
+    "MODEL_ACTIVE_SECONDS_LIMIT",
+    "REPAIR_CYCLE_LIMIT",
+    "STAGNANT_CALL_LIMIT",
+)
+SOL_PRODUCTION_SCHEMA = DISPATCH_FIELDS + BUDGET_FIELDS
 OUTBOUND_FIELDS = (
     "PROTOCOL",
     "AGENT",
@@ -158,7 +166,8 @@ def validate_agents() -> None:
                 "pre-PASS route", "current diff/paths", "exact failure/replay",
                 "MODEL_CALL_LIMIT", "STAGNANT_CALL_LIMIT", "runtime guard",
             ),
-            "sol_planner": (
+            "sol_planner": SOL_PRODUCTION_SCHEMA + (
+                "AGENT: sol_planner",
                 "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
                 "not continuously schedule", "Preregister Terra",
                 "IMPACT_CONE", "worktree-sha256:<64 lowercase hex>",
@@ -437,12 +446,9 @@ def validate_skill() -> None:
     if read(root) != read(english):
         error(f"{root}: must exactly match {english}")
 
-    # R1: the root skill is the single source of truth for the full DISPATCH
-    # schema; agent profiles carry only role-specific restrictions.
-    core_schema = DISPATCH_FIELDS + (
-        "MODEL_CALL_LIMIT", "HYPOTHESIS_LIMIT", "MODEL_ACTIVE_SECONDS_LIMIT",
-        "REPAIR_CYCLE_LIMIT", "STAGNANT_CALL_LIMIT",
-    )
+    # The Skill documents shared protocol semantics; Sol's profile owns packet
+    # production, while runtime_guard.py enforces concrete task packets.
+    core_schema = SOL_PRODUCTION_SCHEMA
     root_text = read(root)
     for term in core_schema:
         if term not in root_text:

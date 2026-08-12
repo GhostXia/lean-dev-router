@@ -55,7 +55,13 @@
 
 ## R1-info 结果（瘦身后）
 
-角色文件只保留禁区与差分规则；完整 DISPATCH/BUDGET/revision/repair schema 由根 Skill（单一事实源）+ `runtime_guard.py` 承载，`validate_repo.py` 现在要求根 Skill 含全部 `DISPATCH_FIELDS` 与预算字段名，不再要求 toml 重复整表。
+这些承载点有不同职责，不能互相替代：
+
+- 协议文档：根 Skill 及其 English/Chinese 变体记录 v2 的公共语义、字段和路由。
+- Sol packet production：`agents/sol-planner.toml` 保留一份紧凑的完整 DISPATCH/BUDGET 生产模板，并固定 `AGENT: sol_planner`；它不继承或声称接收完整 Skill。
+- Runtime enforcement：`.agents/skills/lean-dev-router/scripts/runtime_guard.py` 对实际任务包、预算、revision、重试和审计状态作确定性检查。
+- Concrete task packets：实际 `DISPATCH` 的 ID、baseline、路径、验收和预算值由 Sol/父代理在任务运行时填入，不应伪装成静态文档字段。
+- Static regression checks：`scripts/validate_repo.py` 检查公共 Skill 文档和各角色应承担的静态契约；Luna/Terra 不需要复制 Sol 的生产模板。
 
 | 文件 | 改前字符 | 改后字符 | 变化 |
 |---|---:|---:|---:|
@@ -64,4 +70,4 @@
 | terra-auditor.toml | 4,383 | 3,114 | −28.9% |
 | 合计 | 13,945 | 8,020 | −42.5% |
 
-校验要求：65 tests（1 skip Windows）通过；`validate_repo.py` 通过；所有角色禁区锚点、结果信封、LANGUAGE_RULE 保持不变。
+校验要求：`python -m unittest discover -s tests -v` 与 `python scripts/validate_repo.py` 通过；所有角色禁区锚点、结果信封、LANGUAGE_RULE 保持不变。
