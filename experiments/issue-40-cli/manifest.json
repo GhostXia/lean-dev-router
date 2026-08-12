@@ -1,0 +1,295 @@
+{
+ "experiment": "issue-40-short-test-cli",
+ "model": "deepseek-v4-flash",
+ "reasoning_effort": "max (config default)",
+ "results": [
+  {
+   "cell": [
+    "E0",
+    "en",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 45.14,
+   "session_id": null,
+   "log_file": "run_E0_en_r1.log"
+  },
+  {
+   "cell": [
+    "C0",
+    "en",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 55.79,
+   "session_id": null,
+   "log_file": "run_C0_en_r1.log"
+  },
+  {
+   "cell": [
+    "C1",
+    "en",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 87.56,
+   "session_id": null,
+   "log_file": "run_C1_en_r1.log"
+  },
+  {
+   "cell": [
+    "C0",
+    "zh",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 44.38,
+   "session_id": null,
+   "log_file": "run_C0_zh_r1.log"
+  },
+  {
+   "cell": [
+    "C1",
+    "zh",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 61.48,
+   "session_id": null,
+   "log_file": "run_C1_zh_r1.log"
+  },
+  {
+   "cell": [
+    "E1",
+    "en",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 129.21,
+   "session_id": null,
+   "log_file": "run_E1_en_r1.log"
+  },
+  {
+   "cell": [
+    "E0",
+    "zh",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 86.17,
+   "session_id": null,
+   "log_file": "run_E0_zh_r1.log"
+  },
+  {
+   "cell": [
+    "C0",
+    "en",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 66.3,
+   "session_id": null,
+   "log_file": "run_C0_en_r2.log"
+  },
+  {
+   "cell": [
+    "E1",
+    "zh",
+    1
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 99.6,
+   "session_id": null,
+   "log_file": "run_E1_zh_r1.log"
+  },
+  {
+   "cell": [
+    "C1",
+    "en",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 61.29,
+   "session_id": null,
+   "log_file": "run_C1_en_r2.log"
+  },
+  {
+   "cell": [
+    "E0",
+    "en",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 53.94,
+   "session_id": null,
+   "log_file": "run_E0_en_r2.log"
+  },
+  {
+   "cell": [
+    "E1",
+    "en",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 63.5,
+   "session_id": null,
+   "log_file": "run_E1_en_r2.log"
+  },
+  {
+   "cell": [
+    "C0",
+    "zh",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 58.15,
+   "session_id": null,
+   "log_file": "run_C0_zh_r2.log"
+  },
+  {
+   "cell": [
+    "C1",
+    "zh",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 96.83,
+   "session_id": null,
+   "log_file": "run_C1_zh_r2.log"
+  },
+  {
+   "cell": [
+    "C0",
+    "en",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 45.96,
+   "session_id": null,
+   "log_file": "run_C0_en_r3.log"
+  },
+  {
+   "cell": [
+    "E1",
+    "zh",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 82.0,
+   "session_id": null,
+   "log_file": "run_E1_zh_r2.log"
+  },
+  {
+   "cell": [
+    "E0",
+    "zh",
+    2
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 103.17,
+   "session_id": null,
+   "log_file": "run_E0_zh_r2.log"
+  },
+  {
+   "cell": [
+    "E0",
+    "en",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 49.89,
+   "session_id": null,
+   "log_file": "run_E0_en_r3.log"
+  },
+  {
+   "cell": [
+    "C1",
+    "en",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 61.76,
+   "session_id": null,
+   "log_file": "run_C1_en_r3.log"
+  },
+  {
+   "cell": [
+    "C0",
+    "zh",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 60.98,
+   "session_id": null,
+   "log_file": "run_C0_zh_r3.log"
+  },
+  {
+   "cell": [
+    "C1",
+    "zh",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 69.3,
+   "session_id": null,
+   "log_file": "run_C1_zh_r3.log"
+  },
+  {
+   "cell": [
+    "E1",
+    "en",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 113.68,
+   "session_id": null,
+   "log_file": "run_E1_en_r3.log"
+  },
+  {
+   "cell": [
+    "E1",
+    "zh",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 51.24,
+   "session_id": null,
+   "log_file": "run_E1_zh_r3.log"
+  },
+  {
+   "cell": [
+    "E0",
+    "zh",
+    3
+   ],
+   "ok": false,
+   "returncode": 0,
+   "elapsed_s": 121.15,
+   "session_id": null,
+   "log_file": "run_E0_zh_r3.log"
+  }
+ ]
+}

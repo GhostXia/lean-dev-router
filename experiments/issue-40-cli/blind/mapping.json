@@ -1,0 +1,146 @@
+[
+ {
+  "blind_id": "S01",
+  "cell_id": "cli_E1_zh_r2",
+  "variant": "E1",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S02",
+  "cell_id": "cli_E1_en_r3",
+  "variant": "E1",
+  "language": "en"
+ },
+ {
+  "blind_id": "S03",
+  "cell_id": "cli_E0_zh_r3",
+  "variant": "E0",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S04",
+  "cell_id": "cli_C1_zh_r2",
+  "variant": "C1",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S05",
+  "cell_id": "cli_E0_en_r1",
+  "variant": "E0",
+  "language": "en"
+ },
+ {
+  "blind_id": "S06",
+  "cell_id": "cli_C0_zh_r3",
+  "variant": "C0",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S07",
+  "cell_id": "cli_E1_zh_r3",
+  "variant": "E1",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S08",
+  "cell_id": "cli_C0_zh_r1",
+  "variant": "C0",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S09",
+  "cell_id": "cli_E0_en_r2",
+  "variant": "E0",
+  "language": "en"
+ },
+ {
+  "blind_id": "S10",
+  "cell_id": "cli_C0_en_r3",
+  "variant": "C0",
+  "language": "en"
+ },
+ {
+  "blind_id": "S11",
+  "cell_id": "cli_C1_en_r3",
+  "variant": "C1",
+  "language": "en"
+ },
+ {
+  "blind_id": "S12",
+  "cell_id": "cli_C0_en_r1",
+  "variant": "C0",
+  "language": "en"
+ },
+ {
+  "blind_id": "S13",
+  "cell_id": "cli_E1_en_r2",
+  "variant": "E1",
+  "language": "en"
+ },
+ {
+  "blind_id": "S14",
+  "cell_id": "cli_E0_zh_r1",
+  "variant": "E0",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S15",
+  "cell_id": "cli_E1_zh_r1",
+  "variant": "E1",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S16",
+  "cell_id": "cli_C1_zh_r3",
+  "variant": "C1",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S17",
+  "cell_id": "cli_C0_zh_r2",
+  "variant": "C0",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S18",
+  "cell_id": "cli_C1_en_r1",
+  "variant": "C1",
+  "language": "en"
+ },
+ {
+  "blind_id": "S19",
+  "cell_id": "cli_C1_zh_r1",
+  "variant": "C1",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S20",
+  "cell_id": "cli_C1_en_r2",
+  "variant": "C1",
+  "language": "en"
+ },
+ {
+  "blind_id": "S21",
+  "cell_id": "cli_C0_en_r2",
+  "variant": "C0",
+  "language": "en"
+ },
+ {
+  "blind_id": "S22",
+  "cell_id": "cli_E0_zh_r2",
+  "variant": "E0",
+  "language": "zh"
+ },
+ {
+  "blind_id": "S23",
+  "cell_id": "cli_E1_en_r1",
+  "variant": "E1",
+  "language": "en"
+ },
+ {
+  "blind_id": "S24",
+  "cell_id": "cli_E0_en_r3",
+  "variant": "E0",
+  "language": "en"
+ }
+]

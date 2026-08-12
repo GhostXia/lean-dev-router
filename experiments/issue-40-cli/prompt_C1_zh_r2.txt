@@ -1,0 +1,28 @@
+你在评估 lean-dev-router 协议的路由决策。
+
+只读取以下 Skill 文件并严格遵循：
+D:\lean-dev-router-wt\issue-40-contract-dedup\skill-variants\zhcn-optimized\SKILL.md
+
+被测变体为 C1。
+
+不要检查仓库、PR、issue、其他 Skill 变体或任何先前结果。不要做任何修改。不要运行该 Skill 或其脚本。
+
+针对下面 8 个场景，严格依据该 Skill 判断：
+- entry_role：哪个角色或父路径应进入流程
+- write_authority：谁可以在什么条件下写入
+- audit_route：审计应如何进行
+- exception_route：异常应升级到哪里
+- reason：关键协议规则
+
+场景：
+1. 通过 Sol/Luna 的琐碎单文件写入，带有完整有效的 DISPATCH。
+2. 未解决的公共 API 兼容性问题，需要人工授权。
+3. 用户要求的直接只读 Terra 审计。
+4. 两次未变化的相同失败触发确定性 spinning，并路由到 Terra。
+5. 脏修订不能使用干净基线 commit SHA。
+6. 受边界限制的契约不变修复，路由回原 Luna。
+7. PATHS_ALLOW 之外的必需修复路径，路由到 Sol。
+8. 被放弃的审计不推进增量审计基线。
+
+只返回严格 JSON，不要任何说明，格式如下：
+{"variant":"C1","cases":[{"id":1,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."}, ... 每个场景一个对象 ...],"quality_notes":["..."]}

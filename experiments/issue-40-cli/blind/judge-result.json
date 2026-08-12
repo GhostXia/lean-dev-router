@@ -1,0 +1,173 @@
+{
+ "scores": [
+  {
+   "id": "S01",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S02",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S03",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S04",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S05",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S06",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S07",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S08",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S09",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S10",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S11",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S12",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S13",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S14",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S15",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S16",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S17",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S18",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S19",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S20",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S21",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S22",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S23",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  },
+  {
+   "id": "S24",
+   "correctness": 10,
+   "precision": 10,
+   "completeness": 10,
+   "material_errors": []
+  }
+ ],
+ "summary": "All 24 samples faithfully implement the eight protocol scenarios: Sol-authored DISPATCH as the sole write authorization for Luna, human authority required for unresolved public-API compatibility, direct read-only Terra audits, deterministic-spinning latch with technical resolution routed to Terra, worktree-sha256 dirty-revision gating before any Terra audit, mechanical unchanged-contract repair by the original Luna with re-audit, out-of-PATHS_ALLOW scope changes routed to Sol with no write authority, and abandoned audits never advancing the incremental baseline. No material semantic errors were found in any sample."
+}

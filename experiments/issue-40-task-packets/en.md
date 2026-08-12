@@ -1,0 +1,28 @@
+You are evaluating routing decisions for the lean-dev-router protocol.
+
+Read ONLY this skill file and follow it exactly:
+{{SKILL_PATH}}
+
+This variant under test is {{VARIANT}}.
+
+Do not inspect the repository, PRs, issues, other skill variants, or prior results. Do not make any edits. Do not run the skill or its scripts.
+
+For each of the 8 scenarios below, determine strictly from the skill:
+- entry_role: which role or parent path should enter the flow
+- write_authority: who may write, and under what condition
+- audit_route: how the audit should proceed
+- exception_route: where exceptions escalate
+- reason: the key protocol rule
+
+Scenarios:
+1. Trivial one-file repository write through Sol/Luna with a complete valid DISPATCH.
+2. Unresolved public API compatibility question requiring human authority.
+3. Direct read-only Terra audit requested by the user.
+4. Two unchanged identical failures trigger deterministic spinning and route to Terra.
+5. Dirty revision cannot use a clean baseline commit SHA.
+6. Bounded unchanged-contract repair routed to the original Luna.
+7. Required repair outside PATHS_ALLOW routes to Sol.
+8. Abandoned audit does not advance the incremental baseline.
+
+Return strict JSON only, with no commentary, in exactly this shape:
+{"variant":"{{VARIANT}}","cases":[{"id":1,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."}, ... one object per scenario ...],"quality_notes":["..."]}
