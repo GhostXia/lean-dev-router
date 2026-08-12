@@ -46,7 +46,7 @@ I currently use Codex, so this repository uses GPT model identifiers as concrete
 
 For further token savings, this router can be combined with projects such as [Caveman](https://github.com/juliusbrussee/caveman), which reduce unnecessary verbosity in engineering workflows. **Lean Dev Router** reduces unnecessary agent calls and handoff context; **Caveman** reduces unnecessary prose in agent responses. Together, they can help maximize token efficiency while preserving the technical content that matters. This project currently does not plan to duplicate response-compression features already provided by such projects.
 
-Because the subagents use explicitly selected models and follow detailed work assignments, the main conversation can often use **Luna High** or an even lower-cost model. One **Sol** coordinator handles complex planning and cross-task coordination when needed; the main conversation remains the user-facing control surface and mechanical fallback relay.
+Because the subagents use explicitly selected models and bounded assignments, the main conversation can often use a lower-cost model. **Sol** owns engineering planning and authorization, while the parent conversation is the mechanical runtime scheduler and user-facing control surface. Sol is called again only at a declared expansion or exception gate.
 
 ### 🧭 Engineering Lifecycle Entry Points
 
@@ -68,6 +68,7 @@ Execution authority is a distinct inbound contract. Luna must receive this compl
 PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
+DISPATCH_ID: stable unique component/write identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -109,7 +110,7 @@ SUMMARY: one concise sentence
 
 `PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. `PLAN_READY` is not an execution status.
 
-`NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. Only Sol and the parent know concrete topology. The spawning coordinator or parent applies the authoritative role-status-request table in the Skill; invalid combinations are rejected instead of inferred from prose. In particular, `PASS/none` completes the current stage, while `BLOCKED/none` pauses it at the current coordinator without dispatching a new capability.
+`NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. The parent applies the authoritative state table mechanically; invalid combinations are rejected instead of inferred from prose. Sol owns engineering decisions but does not continuously schedule routine events.
 
 Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `REQUEST` and removes concrete agent names from `NEXT`. Coordinators must reject mixed-version handoffs instead of guessing missing fields or translating them implicitly.
 
@@ -144,9 +145,11 @@ git ls-files --others --exclude-standard
 git ls-files --others --ignored --exclude-standard
 ```
 
-If any path falls outside `paths_allow`, Luna's original handoff remains part of the evidence, but its `PASS` is not accepted. Record `FAILURE: scope`; return obvious drive-by changes to Luna for trimming, and use Terra only when an extra path's technical necessity is unclear. Sol may explicitly amend or split the batch only within the fixed objective and acceptance criteria. Changes to user-owned scope or acceptance still use the user decision gate.
+If any path falls outside `paths_allow`, Luna's original handoff remains evidence but its `PASS` is rejected with `FAILURE: scope`. The parent does not invent cleanup authority: an undefined cleanup or technically necessary extra path returns to Sol; Terra may first establish necessity when causality is unclear. Changes to user-owned scope or acceptance still use the user decision gate.
 
-There is no automatic ignore list: expected snapshots, lockfiles, generated files, or formatter output must be authorized in advance. This check is orthogonal to CI—CI asks whether the change is correct under its encoded checks; the scope gate asks whether the batch was authorized to touch those paths. Green tests do not prove that a batch stayed within its delegated write set. An in-scope `PASS` does **not** require Terra review, and a gate that rarely triggers is evidence of good decomposition rather than a reason to remove it.
+There is no automatic ignore list. `PATHS_ALLOW` covers persistent outputs only. Build output should use external scratch; a repository-local disposable artifact root must be declared, clean at preflight, and removed before scope passes. Retained or undeclared standard/ignored untracked paths fail and artifacts never enter revision identity.
+
+Run the helper with `--revision` after listing every allow entry. A clean committed state resolves to its exact commit SHA. A dirty authorized state resolves to `worktree-sha256:<64 lowercase hex>` over its baseline, tracked binary diffs, and standard/ignored untracked paths and contents. The same state reproduces the same revision and every repair changes it; placeholders and baseline-only dirty keys are rejected.
 
 ### 🧩 Integration Convergence Gate
 
@@ -154,7 +157,7 @@ Component success is not transitive. When two or more write batches form one del
 
 Before dispatch, Sol defines shared contracts, dependency order, `integration_worktree`, `integration_owner`, `integration_baseline`, `integration_paths_allow`, and `integration_acceptance`. The integration allow-list starts as the exact union of accepted batch allow-lists and changes only through an authorized Luna integration-repair batch.
 
-Sol coordinates without modifying the integration tree. One Luna acts as `integration_owner` and combines accepted commits in dependency order; a parent fallback may perform only conflict-free mechanical merges. Conflict resolution or compatibility edits become a new bounded Luna write batch. Integrate incrementally, running narrow cross-batch checks after each dependent batch or independent wave.
+The parent schedules integration without modifying the tree or merging commits. The authorized `integration_owner` Luna combines accepted commits in dependency order. If that Luna cannot proceed, the parent returns the state to Sol; conflict resolution or compatibility edits require a new Sol-authorized Luna write batch.
 
 Before whole-task `PASS`, require a clean integration worktree and verify that every tracked path from `integration_baseline` to the combined commit plus every standard and ignored untracked path is covered by `integration_paths_allow`. Enumerate the two untracked classes with `git ls-files --others --exclude-standard` and `git ls-files --others --ignored --exclude-standard`. Record that result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`.
 
@@ -184,11 +187,11 @@ NEXT: parent
 
 …with up to **three viable options**, decisive trade-offs, affected paths, **one recommendation**, and **a single question** for the user.
 
-> 📌 The protocol intentionally omits `NEXT: user`. The route is `sol_planner → parent → user`. After the answer, the existing Sol coordinator resumes worker routing and issues a new valid `DISPATCH` when all constraints are fixed.
+> 📌 The protocol intentionally omits `NEXT: user`. The route is `sol_planner → parent → user`. After the answer, Sol incorporates the decision and issues the next valid planning wave or `DISPATCH`.
 
 ### 🔌 Codex Execution Mode
 
-Native Codex subagents are the default. Start every change-producing task with one **Sol** coordinator. Sol emits a minimal single-step `DISPATCH` for bounded L1 work, or partitions and coordinates multiple **Luna** and **Terra** workers when the work is complex, ambiguous, or decomposable.
+Native Codex subagents are the default. Start every change-producing task with **Sol** planning. Sol emits a minimal single-step `DISPATCH` for bounded L1 work, or a compact `PLAN_MANIFEST` containing global invariants, the currently ready `DISPATCH_WAVE`, preregistered audits, and an `EXPANSION_GATE`. It does not pre-expand distant work.
 
 **Key Rules:**
 
@@ -202,15 +205,21 @@ Native Codex subagents are the default. Start every change-producing task with o
 3. Its first result follows `lean-dev-router/v2`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
-The parent executes it mechanically and returns compact results to the same Sol. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
+The parent executes it mechanically. It calls Sol again only at an expansion gate, an undefined transition, a contract change, or a user-owned decision. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
 ### Streaming component pipeline
 
-Independent components advance as soon as they are ready. Return each result to the existing Sol and start or queue that component's authorized publish, audit, repair, or re-audit stage without waiting for unrelated siblings. Only combined integration and final combined-state review use an all-component barrier. `token-first` may reuse one uninvolved Terra across components, but reuse must not create a sibling wait.
+Independent components advance as soon as they are ready. The parent starts or queues each manifest-authorized audit, repair, or re-audit without waiting for unrelated siblings and without a routine Sol round-trip. Only combined integration and final combined-state review use an all-component barrier. `token-first` may reuse one uninvolved Terra across components, but reuse must not create a sibling wait.
 
-Component audits and re-audits use a stable `<component>:<revision>:<stage>` job key with `queued`, `running`, `complete`, or `failed` state. If a batch spawn partially fails, reconcile each item and retry only missing or failed keys; never replay a running or complete job. Keep the original Sol resumable through component repair, integration, and final gates. A fallback `BLOCKED/dependency` result requests parent relay and does not end coordinator ownership.
+Component audits and re-audits use a stable `<component>:<revision>:<stage>` job key with `queued`, `running`, `complete`, or `failed` state. If a batch spawn partially fails, reconcile each item and retry only missing or failed keys; never replay a running or complete job. Sol remains available for declared planning and exception gates, not as the routine event loop.
+
+Sol preregisters Terra's objective, change scope, broader causal impact cone, acceptance, dependencies, revision rule, and replay evidence. After Luna `PASS`, the parent verifies those gates and launches Terra directly. Terra reads causal neighbors beyond `PATHS_ALLOW` and classifies outside findings: A change-caused acceptance defect, B necessary omitted scope, C unrelated existing issue, or D severe security/data-loss/compatibility risk. A bounded unchanged-contract repair may return mechanically to the original Luna; scope, plan, acceptance, public-interface, architecture, security, data-format, resource-limit, ambiguity, or exhausted-budget changes return to Sol.
+
+When every manifest-declared scope, revision, audit, repair, integration, and final gate is terminal and passing, the parent may summarize completion without another Sol round-trip.
+
+Expensive, concurrent, flaky, environment-sensitive, or uncertain gates use a declared fuse: by default three materially distinct attempts and twenty model-active minutes. External compile, CI, test, and network waits are excluded, but commands keep explicit timeouts. An unchanged command cannot be retried without changed state, new evidence, or a new testable hypothesis.
 
 When the host exposes timestamps, record component-ready and next-stage times. Start the next stage within 60 seconds when capacity exists; otherwise mark it queued with the reason and start it at the first eligible slot release. Report external compile, CI, and network waits separately from controllable handoff delay, and keep completion-event consumption responsive during long parent commands. Terra assignments are ordinary read-only task instructions: `STATUS: DISPATCH` remains reserved for Luna write authorization and must not be reused as an outbound-style Terra envelope.
 
@@ -218,9 +227,9 @@ When the host exposes timestamps, record component-ready and next-stage times. S
 
 The native Codex background-agent UI is part of the native subagent workflow. Unrelated background processes or independent sessions are fallback mechanisms, not equivalent parent-child routing. See the [official Codex subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) for current client and custom-agent behavior.
 
-### ⚙️ Default Single-Sol Worker Scheduling
+### ⚙️ Parent Scheduling and Single-Sol Planning
 
-Use **one Sol coordinator** for each routed task by default. Sol chooses the number and mix of Luna and Terra workers from task size, volume, independence, dependency depth, and risk. It assigns bounded work, manages ordering and concurrency, waits for workers, verifies coverage, and consolidates their compact results.
+Use **one Sol planner** for each routed task by default. Sol chooses the worker pool and declares bounded waves; the parent manages ordering, concurrency, waits, scope/revision gates, and manifest-defined transitions without making engineering decisions.
 
 > 🚨 **Luna and Terra never create additional agents or expand their own assignments.** Use multiple Sol coordinators only when the user explicitly requests them: the parent creates them with **non-overlapping orchestration scopes**, and no Sol may spawn a peer Sol.
 
@@ -232,16 +241,20 @@ Use **one Sol coordinator** for each routed task by default. Sol chooses the num
 
 The cap covers Luna and Terra workers combined and is a routing heuristic, not a concurrency guarantee. For uniform item sets, start with `min(mode cap, ceil(items / 30))`, then adjust for complexity and risk. Keep dependent stages sequential and use disjoint waves if fewer workers start. Each worker receives an exact non-overlapping assignment; Sol verifies complete coverage and empty intersections. Every parallel Luna writer uses a dedicated worktree or independent checkout on its own branch; Sol decides integration order and assigns one Luna as integration owner.
 
-**Example:** A latency-first audit of 282 merged PRs uses **1 Sol coordinator** + **10 Terra auditors** with roughly 28–29 PRs each. Sol waits for every batch, verifies coverage, merges and deduplicates findings, then assigns high-risk or conflicting candidates to different Terra auditors for peer verification. A development task can similarly use multiple Luna workers in isolated worktrees, plus Terra workers for diagnosis or independent verification.
+**Example:** A latency-first audit of 282 merged PRs may use **1 Sol planner** + **10 Terra auditors** in bounded waves. The parent consumes each completion and advances declared transitions; Sol is recalled only for expansion, conflicting evidence, or a decision not already encoded in the manifest.
 
 > 💡 From personal experience: worktrees are recommended for batching independent tasks in parallel — especially when handling multiple PRs simultaneously. Give each task its own worktree and branch; **avoid** parallel worktrees for tightly dependent tasks or changes that must share the same working state.
 
 ```mermaid
 flowchart LR
-    P[parent] --> S[sol_planner × 1]
-    S --> L[luna_worker × N<br/>isolated writes]
-    S --> T[terra_auditor × N<br/>audit / diagnosis]
-    S --> D[parent → user<br/>user-owned decisions only]
+    U[user] --> P[parent state machine]
+    P --> S[sol_planner<br/>plan / authorize / decide]
+    S --> P
+    P --> L[luna_worker × N<br/>isolated writes]
+    L --> P
+    P --> T[terra_auditor × N<br/>causal audit]
+    T --> P
+    P --> U
 
     style P fill:#1e293b,stroke:#334155,color:#fff
     style S fill:#f59e0b,stroke:#d97706,color:#000

@@ -8,15 +8,17 @@
 
 Lean Dev Router 用三个职责不同的角色处理仓库内的软件工程任务：
 
-- `sol_planner`：复杂任务的规划与调度者，负责拆分、排序、归并证据，并把属于用户的重大选择交还用户。
+- `sol_planner`：工程方案与授权者，负责拆分、契约、预注册审计和例外决策，但不持续调度运行时事件。
 - `luna_worker`：仅在收到完整的标准 `DISPATCH` 后，按其中的任务摘要、基线、允许写入路径、验收和约束实施改动。
-- `terra_auditor`：进行只读审计、诊断和验证，并为 Luna 无法解决的技术问题提供最小修复建议。
+- `terra_auditor`：沿因果影响面进行只读审计、诊断和验证，并给出不带写授权的最小修复建议。
+
+父会话是机械状态机：按 Sol 已声明的 manifest 启动、排队和转交，不在没有用户指令时自行作工程决策。Sol 的规划采用有界波次：每次只输出全局不变量、当前可执行的 `DISPATCH_WAVE` 与下一次 `EXPANSION_GATE`；父会话只在该门或例外发生时再次请求 Sol，避免一次性计划过长带来的偏差。
 
 目标不是每次都调用全部角色，而是用满足任务需要的最小组合完成工作。所有写入任务先由 Sol 签发开工契约：边界清楚的 L1 改动只需最小单步 `DISPATCH`，模糊、跨模块或需要分批集成的任务则由 Sol 完整规划；审计和诊断仍可从 Terra 开始。
 
 ## 交接协议怎么读
 
-协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空的任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。只有 Sol 可以签发或修改，父会话只能原样转发；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`，也不会点名规划角色。
+协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空且稳定唯一的 `DISPATCH_ID`、任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。该 ID 贯穿 Luna 证据、预注册 Terra 审计和契约内返工核验。只有 Sol 可以签发或修改，父会话只能原样转发；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`。
 
 Agent 返回的出站交接包含状态、失败类型、能力请求、证据、固定的 `NEXT: parent` 和一句摘要。重点检查三件事：
 
@@ -26,7 +28,7 @@ Agent 返回的出站交接包含状态、失败类型、能力请求、证据�
 
 `PASS`、`BLOCKED`、`ESCALATE` 都只是结果，不能作为写入授权；`PLAN_READY` 也不是执行状态。
 
-升档顺序保持不变：Luna 请求技术解决能力，Terra 请求实施或规划能力，只有 Sol 可以请求用户决策。只有 Sol 和父会话知道具体拓扑。`REQUEST` 本身不授权写入；任何实施仍须由 Sol 签发完整 `DISPATCH`。`PASS/none` 表示当前阶段完成，`BLOCKED/none` 表示停在当前协调者处等待信息或依赖变化，不派发新能力。
+升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验范围、稳定 revision、依赖与 replay；若 Sol 已预注册审计，则直接启动 Terra。Terra 发现不改变原契约且仍在 `PATHS_ALLOW` 内的缺陷时，父会话可在返工预算内直接交回原 Luna；涉及范围、方案、验收、公共接口、架构、安全边界、数据格式、资源限制或歧义时才回 Sol。只有 Sol 可以请求用户决策。
 
 `lean-dev-router/v2` 与 v1 不兼容：v2 强制要求 `REQUEST`，并禁止在 `NEXT` 中点名具体 Agent。协调者必须拒绝混用版本的交接，不能自动猜测或静默转换。
 
@@ -48,7 +50,8 @@ Agent 返回的出站交接包含状态、失败类型、能力请求、证据�
 python scripts/check_scope.py \
   --baseline <baseline-commit> \
   --allow src \
-  --allow tests
+  --allow tests \
+  --revision
 ```
 
 组合提交模式示例：
@@ -67,6 +70,10 @@ python scripts/check_scope.py \
 - `SCOPE: FAIL`，退出码 `1`：存在范围外路径。
 - `SCOPE: BLOCKED`，退出码 `2`：Git、提交或其他依赖不可用。
 
+范围通过后，干净提交输出精确 commit SHA；脏工作树输出 `worktree-sha256:<64位小写十六进制>`，覆盖基线、授权 tracked diff 以及授权的普通/ignored untracked 路径与内容。相同状态必须得到相同 revision，任何返工必须改变 revision。禁止用 `<luna-revision>` 或基线 SHA 冒充脏状态标识。
+
+`PATHS_ALLOW` 只授权持久产物。构建输出应放在仓库外；必须留在仓库中的一次性 artifact 要预先声明、开工前为空，并在范围检查前清除。保留或未声明的普通/ignored untracked 文件都会失败，artifact 不参与 revision。
+
 脚本使用 Git 的 NUL 分隔输出读取路径，因此不会把中文、空格、换行或其他特殊字符误当成显示层转义文本。
 
 脚本不可用时，协调者仍必须执行等价的 Git fallback 检查。工作树批次分别枚举 tracked、普通 untracked 和 ignored untracked 路径：
@@ -81,9 +88,13 @@ git ls-files --others --ignored --exclude-standard
 
 ## 流式组件调度
 
-多个互不依赖的组件并行时，每个组件完成后立即返回原 Sol，并启动或排队该组件下一步已授权的发布、审计、返工或复审，不等待无依赖的同批 worker。只有组合集成与最终组合态审计允许设置全组件屏障。`token-first` 可以复用同一名未参与实现的 Terra，但不能因此等待其他组件。
+多个互不依赖的组件并行时，父会话在每个结果到达时立即执行 manifest 中已声明的下一步，不等待无依赖的同批 worker，也不例行回 Sol。只有组合集成与最终组合态审计允许设置全组件屏障。`token-first` 可以复用同一名未参与实现的 Terra，但不能因此等待其他组件。
 
-组件审计与复审使用稳定的 `<component>:<revision>:<stage>` 任务键，并记录 `queued`、`running`、`complete` 或 `failed`。批量创建 Agent 部分失败时逐项核对，只重试缺失或失败项，不能重放已经运行或完成的任务。原 Sol 在所有组件、返工、集成和最终门禁结束前保持可恢复；`BLOCKED/dependency` fallback 不代表协调者已经完成。
+组件审计与复审使用稳定的 `<component>:<revision>:<stage>` 任务键，并记录 `queued`、`running`、`complete` 或 `failed`。批量创建 Agent 部分失败时逐项核对，只重试缺失或失败项，不能重放已经运行或完成的任务。Sol 保留为方案与例外决策端，不作为常驻运行时协调者。
+
+Terra 的读取范围必须宽于改动范围：沿调用关系、数据/错误/资源流、配置、平台兼容、并发、安全、性能与测试调查。范围外发现分为 A（改动导致的验收缺陷）、B（完成目标所需但遗漏的路径）、C（无关既存问题，通常仅跟进）、D（严重安全/数据丢失/兼容风险）。A 可在原契约内返 Luna；B 与契约变化回 Sol；D 阻断或升级。
+
+对于昂贵、并发、易抖动、环境敏感或不确定的门禁，默认熔断器是三次“实质不同”的尝试与二十分钟模型主动处理时间；外部编译、CI、网络等待不计入主动时间，但命令必须有 timeout。没有代码、配置、输入、环境、依赖或可检验假设变化时，不得原样重跑命令。
 
 宿主能提供时间戳时，记录组件就绪与下一阶段启动时间。有空闲容量时应在 60 秒内启动；否则记录排队状态与原因，并在第一个符合条件的槽位释放时启动。把编译、CI、网络等外部等待与可控 handoff 延迟分开报告，parent 执行长命令时仍应及时消费完成事件。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
 

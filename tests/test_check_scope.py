@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -69,6 +70,10 @@ class CheckScopeTests(unittest.TestCase):
         self.assertTrue(check_scope.allowed("src/file.py", patterns))
         self.assertFalse(check_scope.allowed("src_backup/file.py", patterns))
         self.assertFalse(check_scope.allowed("src/file.py.bak", ("src/file.py",)))
+        with self.assertRaises(ValueError):
+            check_scope.allowed("src/file.py", ("../src",))
+        with self.assertRaises(ValueError):
+            check_scope.allowed("src/file.py", ("/src",))
 
     def test_worktree_accepts_tracked_standard_and_ignored_paths(self) -> None:
         self.repo.write("seed.txt", "changed\n")
@@ -129,6 +134,22 @@ class CheckScopeTests(unittest.TestCase):
         self.assertIn(f"end={end}", result.stdout)
         self.assertIn("tracked=1", result.stdout)
 
+    def test_end_revision_requires_clean_worktree(self) -> None:
+        self.repo.write("committed.txt")
+        self.repo.git("add", "committed.txt")
+        self.repo.git("commit", "-qm", "end")
+        end = self.repo.git("rev-parse", "HEAD").stdout.strip()
+        self.repo.write("committed.txt", "local change\n")
+
+        result = self.repo.check(
+            "--baseline", self.repo.baseline, "--end", end,
+            "--allow", "committed.txt", "--revision",
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--end revision requires a clean worktree", result.stdout)
+        self.assertNotIn("REVISION:", result.stdout)
+
     @unittest.skipIf(os.name == "nt", "Windows filenames cannot contain these characters")
     def test_nul_framing_preserves_newline_and_backslash_names(self) -> None:
         self.repo.write("odd/new\nline.txt")
@@ -148,6 +169,91 @@ class CheckScopeTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("SCOPE: BLOCKED; failure=dependency", result.stdout)
+
+    def revision(self, *allow: str) -> subprocess.CompletedProcess[str]:
+        args = ["--baseline", self.repo.baseline]
+        for path in allow:
+            args.extend(("--allow", path))
+        return self.repo.check(*args, "--revision")
+
+    def test_clean_revision_is_exact_head(self) -> None:
+        result = self.revision("seed.txt")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"REVISION: {self.repo.baseline}\n", result.stdout)
+
+    def test_dirty_revision_is_stable_and_changes_with_tracked_repair(self) -> None:
+        self.repo.write("seed.txt", "first repair\n")
+        first = self.revision("seed.txt")
+        repeated = self.revision("seed.txt")
+        self.repo.write("seed.txt", "second repair\n")
+        changed = self.revision("seed.txt")
+
+        pattern = r"REVISION: (worktree-sha256:[0-9a-f]{64})"
+        first_id = re.search(pattern, first.stdout).group(1)
+        self.assertEqual(first_id, re.search(pattern, repeated.stdout).group(1))
+        self.assertNotEqual(first_id, re.search(pattern, changed.stdout).group(1))
+
+    def test_untracked_and_ignored_content_affect_revision(self) -> None:
+        self.repo.write("new/item.txt", "one\n")
+        self.repo.write("ignored/cache.txt", "alpha\n")
+        first = self.revision("new", "ignored")
+        self.repo.write("ignored/cache.txt", "beta\n")
+        second = self.revision("new", "ignored")
+
+        pattern = r"REVISION: (worktree-sha256:[0-9a-f]{64})"
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertNotEqual(
+            re.search(pattern, first.stdout).group(1),
+            re.search(pattern, second.stdout).group(1),
+        )
+
+    def test_unauthorized_or_retained_artifact_never_gets_revision(self) -> None:
+        self.repo.write("build/cache.bin")
+        unauthorized = self.revision("seed.txt")
+        declared = self.repo.check(
+            "--baseline", self.repo.baseline, "--allow", "build",
+            "--artifact", "build", "--revision",
+        )
+
+        for result in (unauthorized, declared):
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("SCOPE: FAIL", result.stdout)
+            self.assertNotIn("REVISION:", result.stdout)
+
+    def test_placeholder_baseline_is_blocked_without_revision(self) -> None:
+        result = self.repo.check(
+            "--baseline", "<luna-revision>", "--allow", "seed.txt", "--revision"
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertNotIn("REVISION:", result.stdout)
+
+    def test_clean_worktree_rejects_invalid_allow(self) -> None:
+        result = self.repo.check(
+            "--baseline", self.repo.baseline, "--allow", "../seed.txt", "--revision"
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid allow path", result.stdout)
+        self.assertNotIn("REVISION:", result.stdout)
+
+    def test_changed_tracked_file_under_artifact_root_fails(self) -> None:
+        self.repo.write("build/tracked.txt", "baseline\n")
+        self.repo.git("add", "build/tracked.txt")
+        self.repo.git("commit", "-qm", "track build file")
+        self.repo.baseline = self.repo.git("rev-parse", "HEAD").stdout.strip()
+        self.repo.write("build/tracked.txt", "changed\n")
+
+        result = self.repo.check(
+            "--baseline", self.repo.baseline, "--allow", "build",
+            "--artifact", "build", "--revision",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("build/tracked.txt", result.stdout)
+        self.assertNotIn("REVISION:", result.stdout)
 
 
 if __name__ == "__main__":

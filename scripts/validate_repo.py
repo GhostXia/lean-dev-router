@@ -25,6 +25,7 @@ DISPATCH_FIELDS = (
     "PROTOCOL: lean-dev-router/v2",
     "STATUS: DISPATCH",
     "TARGET: implementation",
+    "DISPATCH_ID",
     "TASK_SUMMARY",
     "BASELINE",
     "PATHS_ALLOW",
@@ -43,17 +44,17 @@ OUTBOUND_FIELDS = (
     "SUMMARY",
 )
 HANDOFF_ROUTES = {
-    ("luna_worker", "PASS", "none"): "current_coordinator",
-    ("luna_worker", "BLOCKED", "none"): "current_coordinator",
-    ("luna_worker", "ESCALATE", "technical_resolution"): "terra_auditor",
-    ("terra_auditor", "PASS", "none"): "current_coordinator",
-    ("terra_auditor", "BLOCKED", "none"): "current_coordinator",
-    ("terra_auditor", "ESCALATE", "implementation"): "sol_planner",
-    ("terra_auditor", "ESCALATE", "planning_resolution"): "sol_planner",
-    ("sol_planner", "PASS", "none"): "current_coordinator",
-    ("sol_planner", "BLOCKED", "none"): "current_coordinator",
-    ("sol_planner", "BLOCKED", "implementation"): "luna_worker",
-    ("sol_planner", "BLOCKED", "human_authority"): "user",
+    ("luna_worker", "PASS", "none"): "parent:manifest_gate",
+    ("luna_worker", "BLOCKED", "none"): "parent:pause",
+    ("luna_worker", "ESCALATE", "technical_resolution"): "parent:terra",
+    ("terra_auditor", "PASS", "none"): "parent:manifest_gate",
+    ("terra_auditor", "BLOCKED", "none"): "parent:pause",
+    ("terra_auditor", "ESCALATE", "implementation"): "parent:repair_or_sol",
+    ("terra_auditor", "ESCALATE", "planning_resolution"): "parent:sol",
+    ("sol_planner", "PASS", "none"): "parent:manifest_gate",
+    ("sol_planner", "BLOCKED", "none"): "parent:pause",
+    ("sol_planner", "BLOCKED", "implementation"): "parent:luna",
+    ("sol_planner", "BLOCKED", "human_authority"): "parent:user",
 }
 LEGAL_HANDOFFS = set(HANDOFF_ROUTES)
 
@@ -122,7 +123,6 @@ def validate_agents() -> None:
             error(f"{relative}: description is empty")
         description = str(data.get("description", ""))
         instructions = str(data.get("developer_instructions", ""))
-        agent_text = f"{description}\n{instructions}"
         language_lines = [
             line.strip()
             for line in instructions.splitlines()
@@ -130,96 +130,49 @@ def validate_agents() -> None:
         ]
         if language_lines != [LANGUAGE_RULE]:
             error(f"{relative}: English language rule is missing or incorrect")
-        if name == "luna_worker":
-            require_instruction_line(
-                relative,
-                instructions,
-                "Before any implementation tool or write",
-                DISPATCH_FIELDS + ("PLAN_READY",),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "If the inbound contract is missing or invalid",
-                ("FAILURE: missing_dispatch", "NEXT: parent", "do not name another agent"),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "Before returning PASS",
-                ("scripts/check_scope.py", "scope-check"),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "NEXT is always parent",
-                ("STATUS PASS", "STATUS BLOCKED", "STATUS ESCALATE", "REQUEST technical_resolution"),
-            )
-            for peer in ("sol", "terra"):
-                if re.search(rf"\b{peer}(?:_(?:planner|auditor))?\b", agent_text, re.IGNORECASE):
-                    error(f"{relative}: Luna instructions must not name {peer}")
-        elif name == "sol_planner":
-            require_instruction_line(
-                relative,
-                instructions,
-                "Before every Luna write call",
-                DISPATCH_FIELDS + ("Only you may author or amend",),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "Before accepting Luna's PASS",
-                ("scripts/check_scope.py", "SCOPE: PASS", "scope-check"),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "Process each independent component result as it arrives",
-                (
-                    "same Sol",
-                    "audit",
-                    "re-audit",
-                    "all-component barrier",
-                    "token-first",
-                    "long parent commands",
-                    "60 seconds",
-                    "first eligible slot release",
-                ),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "Use a stable `<component>:<revision>:<stage>` job key",
-                ("queued", "running", "complete", "failed", "partial failure"),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "Keep this coordinator resumable",
-                ("BLOCKED/dependency", "same Sol", "only if unavailable"),
-            )
-        else:
-            require_instruction_line(
-                relative,
-                instructions,
-                "When assigned an integration audit",
-                ("exact combined commit", "integration_acceptance"),
-            )
-            require_instruction_line(
-                relative,
-                instructions,
-                "NEXT is always parent",
-                ("STATUS PASS", "STATUS BLOCKED", "STATUS ESCALATE", "REQUEST implementation", "REQUEST planning_resolution"),
-            )
-            for peer in ("sol", "luna"):
-                if re.search(rf"\b{peer}(?:_(?:planner|worker))?\b", agent_text, re.IGNORECASE):
-                    error(f"{relative}: Terra instructions must not name {peer}")
-        require_instruction_line(
-            relative,
-            instructions,
-            "PROTOCOL, AGENT, STATUS",
-            OUTBOUND_FIELDS,
+        envelope = next(
+            (
+                line.strip()
+                for line in instructions.splitlines()
+                if "outbound result envelope:" in line
+            ),
+            None,
         )
+        if envelope is None:
+            error(f"{relative}: missing outbound result envelope")
+        else:
+            next_field = re.search(r"\bNEXT:\s*([a-z_]+)", envelope)
+            if next_field is None or next_field.group(1) != "parent":
+                error(f"{relative}: outbound result envelope NEXT must equal parent")
+        common = OUTBOUND_FIELDS
+        role_terms = {
+            "luna_worker": DISPATCH_FIELDS + (
+                "PLAN_READY", "missing_dispatch", "scripts/check_scope.py",
+                "worktree-sha256:<64 lowercase hex>", "repair budget",
+                "Never plan the task, authorize writes, schedule peers, or request human authority.",
+                "pre-PASS route", "current diff/paths", "exact failure/replay",
+            ),
+            "sol_planner": DISPATCH_FIELDS + (
+                "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
+                "not continuously schedule", "Preregister Terra",
+                "IMPACT_CONE", "worktree-sha256:<64 lowercase hex>",
+                "three materially distinct attempts", "human_authority",
+                "externally measurable latency", "sleep is only polling",
+            ),
+            "terra_auditor": (
+                "Never edit, authorize a write, schedule peers, or request human authority.",
+                "AUDIT_SCOPE/IMPACT_CONE", "callers/callees", "A =", "B =",
+                "C =", "D =", "DISPATCH_ID", "CONTRACT_EFFECT: unchanged",
+                "AFFECTED_PATHS", "ESCALATE/implementation",
+                "ESCALATE/planning_resolution",
+                "sleep alone is not synchronization proof",
+                "pre-PASS technical-resolution", "does not require final scope or revision",
+                "never BLOCKED/none",
+            ),
+        }
+        for term in common + role_terms[name]:
+            if term not in instructions:
+                error(f"{relative}: missing required instruction {term!r}")
 
 
 def markdown_lines(text: str) -> list[tuple[int, str]]:
@@ -304,6 +257,7 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 "PROTOCOL": "lean-dev-router/v2",
                 "STATUS": "DISPATCH",
                 "TARGET": "implementation",
+                "DISPATCH_ID": None,
                 "TASK_SUMMARY": None,
                 "BASELINE": None,
                 "PATHS_ALLOW": None,
@@ -340,6 +294,8 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 f"{relative}: {label} has unexpected fields: "
                 f"{', '.join(sorted(unexpected))}"
             )
+        if label == "inbound DISPATCH protocol" and not fields.get("DISPATCH_ID"):
+            error(f"{relative}: inbound DISPATCH protocol DISPATCH_ID must be non-empty")
         for name, value in expected.items():
             if value is not None and fields.get(name) != value:
                 error(
@@ -398,23 +354,28 @@ def validate_skill() -> None:
         error(f"{relative}: missing YAML-style frontmatter")
     for required in (
         "name: lean-dev-router",
-        "path: N/A (batch coverage)",
+        "N/A (batch coverage)",
         "integration_owner",
         "integration_baseline",
         "integration_paths_allow",
         "integration_acceptance",
         "python scripts/check_scope.py",
-        "ceil(items / 30)",
         "FAILURE: missing_dispatch",
-        "`PLAN_READY` is not an execution status",
-        "Streaming component scheduling",
+        "PLAN_MANIFEST",
+        "DISPATCH_WAVE",
+        "EXPANSION_GATE",
+        "does not continuously schedule",
+        "Streaming and preregistered audit",
         "<component>:<revision>:<stage>",
         "all-component barrier",
-        "`token-first` may reuse one uninvolved Terra",
+        "reuse one uninvolved Terra",
         "long parent commands",
         "within 60 seconds",
         "first eligible slot release",
         "not an outbound result envelope",
+        "worktree-sha256:<64 lowercase hex>",
+        "CONTRACT_EFFECT: unchanged",
+        "parent:repair_or_sol",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")
@@ -437,14 +398,15 @@ def validate_skill() -> None:
     expected_titles = {
         "Lean Dev Router",
         "Language",
-        "Engineering entry and route",
-        "Handoff protocol",
-        "Security and write scope",
-        "Integration convergence gate",
-        "Streaming component scheduling",
-        "Codex execution and scaling",
-        "Human decision gate",
-        "Handoff and stop",
+        "Authority and entry",
+        "Bounded planning waves",
+        "Protocol",
+        "Scope, artifacts, and revision",
+        "Risk fuse and replay",
+        "Streaming and preregistered audit",
+        "Terra causal audit and repair",
+        "Integration",
+        "Execution and human gate",
     }
     actual_titles = {title for _, title in headings}
     for title in sorted(expected_titles - actual_titles):
