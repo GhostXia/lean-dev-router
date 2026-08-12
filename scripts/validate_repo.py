@@ -151,14 +151,14 @@ def validate_agents() -> None:
                 error(f"{relative}: outbound result envelope NEXT must equal parent")
         common = OUTBOUND_FIELDS
         role_terms = {
-            "luna_worker": DISPATCH_FIELDS + (
+            "luna_worker": (
                 "PLAN_READY", "missing_dispatch", "scripts/check_scope.py",
                 "worktree-sha256:<64 lowercase hex>", "repair budget",
                 "Never plan the task, authorize writes, schedule peers, or request human authority.",
                 "pre-PASS route", "current diff/paths", "exact failure/replay",
                 "MODEL_CALL_LIMIT", "STAGNANT_CALL_LIMIT", "runtime guard",
             ),
-            "sol_planner": DISPATCH_FIELDS + (
+            "sol_planner": (
                 "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
                 "not continuously schedule", "Preregister Terra",
                 "IMPACT_CONE", "worktree-sha256:<64 lowercase hex>",
@@ -436,6 +436,17 @@ def validate_skill() -> None:
     optimized_chinese = "skill-variants/zhcn-optimized/SKILL.md"
     if read(root) != read(english):
         error(f"{root}: must exactly match {english}")
+
+    # R1: the root skill is the single source of truth for the full DISPATCH
+    # schema; agent profiles carry only role-specific restrictions.
+    core_schema = DISPATCH_FIELDS + (
+        "MODEL_CALL_LIMIT", "HYPOTHESIS_LIMIT", "MODEL_ACTIVE_SECONDS_LIMIT",
+        "REPAIR_CYCLE_LIMIT", "STAGNANT_CALL_LIMIT",
+    )
+    root_text = read(root)
+    for term in core_schema:
+        if term not in root_text:
+            error(f"{root}: core contract schema missing {term!r}")
 
     common = (
         "name: lean-dev-router",

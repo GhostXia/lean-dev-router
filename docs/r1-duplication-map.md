@@ -52,3 +52,16 @@
 | terra.toml | 4,383 | 25 |
 | runtime_guard.py | 34,247 | 778 |
 | validate_repo.py | 30,144 | 789 |
+
+## R1-info 结果（瘦身后）
+
+角色文件只保留禁区与差分规则；完整 DISPATCH/BUDGET/revision/repair schema 由根 Skill（单一事实源）+ `runtime_guard.py` 承载，`validate_repo.py` 现在要求根 Skill 含全部 `DISPATCH_FIELDS` 与预算字段名，不再要求 toml 重复整表。
+
+| 文件 | 改前字符 | 改后字符 | 变化 |
+|---|---:|---:|---:|
+| sol-planner.toml | 5,315 | 2,576 | −51.5% |
+| luna-worker.toml | 4,247 | 2,330 | −45.1% |
+| terra-auditor.toml | 4,383 | 3,114 | −28.9% |
+| 合计 | 13,945 | 8,020 | −42.5% |
+
+校验要求：65 tests（1 skip Windows）通过；`validate_repo.py` 通过；所有角色禁区锚点、结果信封、LANGUAGE_RULE 保持不变。
