@@ -105,9 +105,9 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 ## 风险熔断与复现
 
-首次调用 Luna 前，父代理仅一次执行 `<skill-dir>/scripts/runtime_guard.py start --state <external-scratch-state>` 并传入 `DISPATCH`。后续 `repair` 与 `audit` 共用该状态，禁止重启；Exit 2 means zero target calls。`BUDGET` 是每个角色/阶段的 hard budget，上限为 8 次调用、4 个假设、1200 秒模型主动时间、2 轮修复和 2 次停滞调用，Sol 只能收紧。外部等待不计主动时间，但命令必须设置 timeout。
+首次调用 Luna 前，父代理仅一次执行 `<skill-dir>/scripts/runtime_guard.py start --state <external-scratch-state>` 并传入 `DISPATCH`。后续 `repair` 与 `audit` 共用该状态，禁止重启；Exit 2 表示目标调用数为零。`BUDGET` 是每个角色/阶段的硬预算，上限为 8 次调用、4 个假设、1200 秒模型主动时间、2 轮修复和 2 次停滞调用，Sol 只能收紧。外部等待不计主动时间，但命令必须设置 timeout。
 
-每个 `event` 记录身份、revision/stage、调用、wall/active time、上游尝试、全部 token/cache families、假设、命令/错误、进展/证据与终止原因；guard 推导 uncached 与总 token。无新进展的重复失败必须停止；两次停滞是 deterministic `spinning` signal。停止状态锁存到 revision、契约或证据变化。Luna 预算耗尽转 Terra，Terra 预算耗尽转 Sol。Parent never repairs or writes after Luna failure/interruption。
+每个 `event` 记录身份、revision/stage、调用、wall/active time、上游尝试、全部 token/cache families、假设、命令/错误、进展/证据与终止原因；guard 推导 uncached 与总 token。无新进展的重复失败必须停止；两次停滞构成确定性的 `spinning` 信号。停止状态锁存到 revision、契约或证据变化。Luna 预算耗尽转 Terra，Terra 预算耗尽转 Sol。父代理在 Luna 失败或中断后绝不修复或写入。
 
 预算内每个失败 gate 最多三次实质不同的尝试。代码、配置、输入、环境、依赖、证据或可检验假设未变时，禁止原样重跑命令。技术不确定性请求 `technical_resolution`；缺工具、权限或网络请求依赖处理；越权写入属于 scope failure；baseline 漂移属于 verification failure。复现证据严格包含 cwd、环境差异、完整命令、退出码和紧凑结果，Terra 原样继承；缺一项则审计不完整。
 
@@ -119,7 +119,7 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 Sol 为每次审计预注册相同 `DISPATCH_ID`、组件、依赖、revision/job-key 规则、`TASK_OBJECTIVE`、`CHANGE_SCOPE`、更宽的 `AUDIT_SCOPE/IMPACT_CONE`、验收、复现证据和越界策略。Luna `PASS` 后，父代理验证 scope、具体 revision、依赖、复现证据和审计契约，随后直接启动 Terra，不经过常规 Luna-to-Sol-to-Terra 跳转。前置条件不完整或未定义时回到 Sol。
 
-用 `runtime_guard.py audit` 登记；same revision is never 重复审计。首次完整审计，后续 revision 只审 delta 与既有发现。提前终止时父代理记录 `ACTION: abandon` 及原因，路由至 Sol，且 never updates the incremental-audit baseline。
+用 `runtime_guard.py audit` 登记；相同 revision 不得重复审计。首次完整审计，后续 revision 只审 delta 与既有发现。提前终止时父代理记录 `ACTION: abandon` 及原因，路由至 Sol，且绝不更新增量审计基线。
 
 ## Terra 因果审计与修复
 

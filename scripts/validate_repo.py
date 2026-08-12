@@ -397,12 +397,11 @@ def validate_skill() -> None:
         "runtime_guard.py start",
         "runtime_guard.py audit",
         "ACTION: abandon",
-        "never updates the",
-        "incremental-audit baseline",
-        "Exit 2 means zero target calls",
-        "deterministic `spinning` signal",
-        "Parent never repairs or writes",
-        "same revision is never",
+        "绝不更新增量审计基线",
+        "Exit 2 表示目标调用数为零",
+        "确定性的 `spinning` 信号",
+        "父代理在 Luna 失败或中断后绝不修复或写入",
+        "相同 revision 不得重复审计",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")
