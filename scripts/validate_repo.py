@@ -148,19 +148,13 @@ def _non_empty(value: object) -> bool:
     return bool(value)
 
 
-def _items(value: object) -> set[str]:
-    """Normalize list-like risk/action fields for the eligibility predicate."""
-    if value is None:
-        return set()
-    if isinstance(value, str):
-        values = re.split(r"[,\s]+", value.strip()) if value.strip() else []
-    elif isinstance(value, Mapping):
-        values = list(value)
-    elif isinstance(value, Sequence) or isinstance(value, (set, frozenset)):
-        values = list(value)
-    else:
-        values = [value]
-    return {str(item).strip().casefold() for item in values if str(item).strip()}
+def _none_items(value: object) -> bool:
+    """Match the runtime guard's exact risk/action representation."""
+    if value is None or value == [] or value == "none":
+        return True
+    return isinstance(value, list) and all(
+        isinstance(item, str) and item.strip().casefold() == "none" for item in value
+    )
 
 
 def _strict_int(value: object) -> int | None:
@@ -168,36 +162,33 @@ def _strict_int(value: object) -> int | None:
         return None
     if isinstance(value, int):
         return value
-    if isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
-        return int(value.strip())
     return None
 
 
 def _path_inside(path: str, roots: set[str]) -> bool:
-    normalized = path.replace("\\", "/").strip("/")
-    if not normalized:
-        return True
     for root in roots:
-        candidate = root.replace("\\", "/").strip("/")
-        if candidate in {"", "."} or normalized == candidate or normalized.startswith(candidate + "/"):
+        if root == "." or path == root or path.startswith(root.rstrip("/") + "/"):
             return True
     return False
 
 
 def _repository_paths(value: object, *, allow_empty: bool) -> list[str] | None:
     """Return canonical repository-relative paths or None for malformed evidence."""
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+    if not isinstance(value, list):
         return None
     paths: list[str] = []
     for item in value:
         if not isinstance(item, str) or not item.strip():
             return None
         normalized = item.replace("\\", "/").strip()
+        if normalized == ".":
+            paths.append(normalized)
+            continue
         parts = normalized.split("/")
         if (
             normalized.startswith("/")
-            or re.match(r"^[A-Za-z]:", normalized)
-            or any(part in {"", ".."} for part in parts)
+            or (len(normalized) > 1 and normalized[1] == ":")
+            or any(part in {"", ".", ".."} for part in parts)
         ):
             return None
         paths.append(normalized)
@@ -220,15 +211,11 @@ def terra_planner_ineligibility_reasons(contract: Mapping[str, object]) -> list[
 
     if not _has_field(contract, "RISK_FLAGS"):
         reasons.append("RISK_FLAGS must be none")
-    risk_flags = _items(_contract_value(contract, "RISK_FLAGS"))
-    risk_flags.discard("none")
-    if risk_flags:
+    if not _none_items(_contract_value(contract, "RISK_FLAGS")):
         reasons.append("RISK_FLAGS must be none")
     if not _has_field(contract, "EXTERNAL_ACTIONS"):
         reasons.append("EXTERNAL_ACTIONS must be none")
-    actions = _items(_contract_value(contract, "EXTERNAL_ACTIONS"))
-    actions.discard("none")
-    if actions:
+    if not _none_items(_contract_value(contract, "EXTERNAL_ACTIONS")):
         reasons.append("EXTERNAL_ACTIONS must be none")
 
     max_dispatches = _strict_int(_contract_value(contract, "MAX_DISPATCHES"))

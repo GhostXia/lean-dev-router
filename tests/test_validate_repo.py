@@ -294,6 +294,16 @@ class ValidateRepositoryTests(unittest.TestCase):
             self.assertFalse(validate_repo.is_terra_planner_eligible(changed))
             self.assertEqual(validate_repo.route_planner(changed), "sol_planner")
 
+        for field in ("MAX_DISPATCHES", "COMPONENT_COUNT", "DEPENDENCY_DEPTH"):
+            changed = dict(contract, **{field: str(contract[field])})
+            self.assertFalse(validate_repo.is_terra_planner_eligible(changed), field)
+            self.assertEqual(validate_repo.route_planner(changed), "sol_planner", field)
+
+        for field in ("RISK_FLAGS", "EXTERNAL_ACTIONS"):
+            changed = dict(contract, **{field: {"none": True}})
+            self.assertFalse(validate_repo.is_terra_planner_eligible(changed), field)
+            self.assertEqual(validate_repo.route_planner(changed), "sol_planner", field)
+
         conflicting = dict(contract, level="L3")
         self.assertFalse(validate_repo.is_terra_planner_eligible(conflicting))
         self.assertTrue(any("conflicting" in reason for reason in validate_repo.terra_planner_ineligibility_reasons(conflicting)))
@@ -374,6 +384,11 @@ class ValidateRepositoryTests(unittest.TestCase):
 
         malformed_scope_cases = (
             dict(dispatch, PATHS_ALLOW=["outside/write.py"]),
+            dict(dispatch, PATHS_ALLOW=["/src/service.py"]),
+            dict(dispatch, PATHS_ALLOW=["1:/service.py"]),
+            dict(dispatch, PATHS_ALLOW=["src/"]),
+            dict(dispatch, PATHS_ALLOW=["src/./service.py"]),
+            dict(dispatch, PATHS_ALLOW=("src/service.py",)),
             dict(dispatch, REQUIRED_PATHS=True),
             dict(dispatch, SCOPE_ROOTS=1),
         )
