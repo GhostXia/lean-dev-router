@@ -40,6 +40,8 @@ material-compatibility、concurrency、irreversible 与 material-cost changes。
 
 协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空且稳定唯一的 `DISPATCH_ID`、`PLAN_ID`、`PLANNER_ROLE`、`PLANNER_INSTANCE_ID`、`AUDITOR_INSTANCE_ID`、任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。该 ID 贯穿 Luna 证据、预注册 Terra 审计和契约内返工核验。Sol 签发或修改例外契约；符合谓词的 `terra_planner` 可发出一个有界契约，父会话只能原样转发，Luna 会验证规划者权限和身份；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`。
 
+每个契约还必须携带模型调用、不同假设、模型主动时间、返工轮次和停滞调用的正整数 `BUDGET`。父会话在 spawn 前用随 Skill 安装的 `runtime_guard.py start` 校验 Sol 或精确符合条件的 Terra 契约；后续 event、repair 和 audit 共用仓库外状态文件。校验失败时子代理调用数为零。
+
 Agent 返回的出站交接包含状态、失败类型、能力请求、证据、固定的 `NEXT: parent` 和一句摘要。重点检查三件事：
 
 1. 状态为成功时，失败类型必须为空。
@@ -126,6 +128,7 @@ Codex 用户必须把以下英文运行时作为同一版本整体安装：
 2. `agents/` 下的四个 TOML 文件到 Codex 的 Agent 配置目录。
 
 不得混用不同版本的 Skill 与 Agent TOML。安装后启动新的 Codex 任务；不得把仍在进行的 v1 handoff 直接恢复为 v2。
+`runtime_guard.py` 随 Skill 安装，可变状态必须放在仓库外的临时目录。
 
 ### 可选范围检查工具
 

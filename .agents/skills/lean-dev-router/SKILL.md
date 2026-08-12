@@ -5,8 +5,7 @@ description: Route repository engineering through deterministic Terra planning, 
 
 # Lean Dev Router
 
-Use the smallest sufficient pool. The parent schedules mechanically; Luna writes;
-Terra audits; Sol owns exceptions and user decisions.
+Use the smallest pool. Parent schedules; Luna writes; Terra audits; Sol owns exceptions.
 
 ## Language
 
@@ -16,19 +15,17 @@ commands, paths, model IDs, and agent names unchanged.
 
 ## Authority and entry
 
-- Start change-producing work with one read-only `terra_planner` classification.
-  It derives the canonical eligibility evidence from the user objective and
-  repository; eligible work continues there, while a failed predicate routes
-  directly to Sol. The parent does not classify the task.
+- Start changes with one read-only `terra_planner` classification derived from
+  the objective and repository. Eligible work continues there; failure routes
+  directly to Sol. Parent does not classify.
 - `terra_planner` directly replaces routine Sol planning only for the exact
   eligible L1/L2 predicate below. It is read-only, cannot schedule or wait,
   implement, audit, amend after execution, or request `human_authority`.
 - `sol_planner` plans every failed predicate, L3 task, ambiguity, required path
   outside `SCOPE_ROOTS`, contract expansion, more than one write batch, risk,
   or major decision. There is no routine Terra-to-Sol review hop.
-- The parent does not make engineering decisions or continuously schedule;
-  Sol does not continuously schedule workers. Deployment, destructive action,
-  external commitment, and product policy remain user-authorized.
+- Parent makes no engineering decisions; Sol does not continuously schedule.
+  Deployment, destructive action, external commitment, and policy remain user-authorized.
 
 ## Terra planner eligibility and identity
 
@@ -43,32 +40,27 @@ must be explicit canonical evidence. `PATHS_ALLOW` is a non-empty list of
 repository-relative paths inside `SCOPE_ROOTS`; malformed or missing evidence
 routes to Sol.
 
-Risk flags are `security`, `privacy`, `public-contract`,
+Risk flags: `security`, `privacy`, `public-contract`,
 `data-schema-or-migration`, `destructive`, `production`,
 `external-commitment`, `license`, `material-compatibility`, `concurrency`,
-`irreversible`, and `material-cost` (including material-cost changes). Any
-risk-bearing Terra route is invalid; Sol retains L3 and exception authority.
+`irreversible`, and `material-cost`. Risk routes are invalid; Sol owns L3/exceptions.
 
-Every finite plan carries `PLAN_ID`, `PLANNER_ROLE`, and
-`PLANNER_INSTANCE_ID`; the role is `terra_planner`. One `AGENT_INSTANCE_ID`
+Every plan carries `PLAN_ID`, `PLANNER_ROLE`, and `PLANNER_INSTANCE_ID`; the
+role is `terra_planner`. One `AGENT_INSTANCE_ID`
 has one immutable role lease per `PLAN_ID`. `AUDITOR_INSTANCE_ID` differs from
 `PLANNER_INSTANCE_ID` and cannot have planned or implemented that `PLAN_ID`.
 Luna validates planner authority and identity in `DISPATCH`; Terra audit stays
 independent and read-only.
 
-For an eligible contract Terra may inspect read-only, analyze, issue one bounded
-Luna `DISPATCH`, preregister an independent audit, and emit a finite manifest.
-It cannot amend after execution, audit, implement, schedule/wait, or request
-human authority. A failed predicate routes directly to Sol without routine
-Terra-to-Sol review.
+Eligible Terra may inspect, issue one Luna `DISPATCH`, preregister an audit,
+and emit a finite manifest. It cannot implement, audit,
+schedule/wait, amend after execution, or request authority.
 
 ## Bounded planning waves
 
-Sol emits a compact `PLAN_MANIFEST` with global invariants and the ready
-`DISPATCH_WAVE`; entries declare id, worktree, dependencies, revision, replay,
-audit, transitions, routes, and `EXPANSION_GATE`. Terra emits the same finite
-shape only after eligibility. The parent requests Sol only at that gate or an
-exception and never pre-expands distant work.
+Sol emits `PLAN_MANIFEST` invariants plus ready `DISPATCH_WAVE`; entries declare
+worktree, dependencies, revision, replay, audit, routes, and `EXPANSION_GATE`.
+Eligible Terra emits the same finite shape. Parent never pre-expands work.
 
 ## Protocol
 
@@ -92,16 +84,20 @@ ACCEPTANCE:
 - objective check and expected result
 CONSTRAINTS:
 - fixed implementation or compatibility bound
+BUDGET:
+  MODEL_CALL_LIMIT: positive integer
+  HYPOTHESIS_LIMIT: positive integer
+  MODEL_ACTIVE_SECONDS_LIMIT: positive integer
+  REPAIR_CYCLE_LIMIT: positive integer
+  STAGNANT_CALL_LIMIT: positive integer
 NEXT: parent
 ```
 
 Every field is non-empty, paths are repository-relative, and no major decision
-remains. `PLAN_ID`, `PLANNER_ROLE`, `PLANNER_INSTANCE_ID`, and
-`AUDITOR_INSTANCE_ID` are required planner identity fields; Terra dispatches
-must carry all four. Luna rejects missing planner authority/identity, role reuse, risk-bearing
-Terra routes, writable profiles, and `FAILURE: missing_dispatch`; a result is
-never authorization. A Terra assignment is an ordinary read-only instruction,
-not an outbound result envelope.
+remains. Planner/auditor identity fields are required. Luna rejects missing
+authority, role reuse, risk-bearing Terra routes, or writable profiles with
+`FAILURE: missing_dispatch`; results never authorize writes. A Terra assignment
+is a read-only instruction, not an outbound result envelope.
 
 Every role returns this compact schema:
 
@@ -161,6 +157,19 @@ it. Reject placeholders and baseline-only dirty keys.
 
 ## Risk fuse and replay
 
+Before the first Luna call, parent passes the complete DISPATCH once to
+`<skill-dir>/scripts/runtime_guard.py start --state <external-scratch-state>`.
+Use `event`, `repair`, and `audit` against that state; never restart it.
+Exit 2 means zero target calls. The guard validates Sol dispatches and the exact
+eligible Terra fast path before spawning.
+
+`BUDGET` is a hard budget per role/stage: at most 8 calls, 4 hypotheses, 1200
+model-active seconds, 2 repairs, and 2 stagnant calls; a planner may only
+shrink it. Every call records tokens/cache, time, attempts, progress, and outcome.
+Repeated failure without progress stops; two stagnant calls are the
+deterministic `spinning` signal. A stop latches until revision, contract, or
+evidence changes. Parent never repairs or writes after Luna failure.
+
 Expensive, concurrent, flaky, environment-sensitive, or uncertain gates use
 three materially distinct attempts and twenty model-active minutes per failing
 gate. External waits are excluded but commands retain timeouts. Do not rerun an
@@ -180,10 +189,16 @@ The scheduler may reuse one uninvolved Terra only when it creates no sibling
 wait. With capacity, start within 60 seconds; otherwise record the reason and
 start at the first eligible slot release. Keep events responsive during long parent commands.
 
-Sol or eligible Terra preregisters `TASK_OBJECTIVE`, `CHANGE_SCOPE`, broader `AUDIT_SCOPE/IMPACT_CONE`, acceptance, dependencies, revision/job-key rule,
-out-of-scope policy, and replay. After Luna `PASS`, the parent verifies those
+Sol or eligible Terra preregisters the same `DISPATCH_ID`, `TASK_OBJECTIVE`,
+`CHANGE_SCOPE`, broader `AUDIT_SCOPE/IMPACT_CONE`, acceptance, dependencies,
+revision/job-key rule, out-of-scope policy, replay, and the same or tighter
+`BUDGET`. After Luna `PASS`, the parent verifies those
 gates and starts the preregistered Terra audit directly. Terra planner only
 preregisters; it does not launch or schedule the audit. No routine Luna-to-Sol-to-Terra hop is used.
+Register each audit through `runtime_guard.py audit`; the same revision is never
+repeated. First audit is full; later revisions cover delta and findings. On
+early termination, parent records `ACTION: abandon` and reason, routes to Sol,
+and never updates the incremental-audit baseline.
 
 ## Terra causal audit and repair
 

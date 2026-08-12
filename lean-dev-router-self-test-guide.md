@@ -87,6 +87,8 @@ Starting commit hash: <hash>
 
 For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C, the authorized planner places them with task summary, planner identity, objective acceptance, and fixed constraints in a standard inbound `DISPATCH`; the parent may relay but not author or amend it. In a direct-Luna Group B run, the parent supplies the packet because the router is not in use. Paths needed only for reading remain context and do not become write authorization.
 
+In Group C, include exact model-call, hypothesis, model-active, repair, and stagnation budgets. Run the installed Skill's `scripts/runtime_guard.py start` before spawning Luna and record every subsequent model call as an event.
+
 ### Example (L2)
 
 ```text
@@ -166,6 +168,15 @@ or a reused role identity). The result must be direct `sol_planner`; do not add 
 routine Terra-to-Sol review call. Keep these controls separate from acceptance
 task costs and report them with the same replay evidence.
 
+### 4.3 Runtime budget and spinning controls
+
+Use an external scratch state file. Confirm an incomplete dispatch exits 2 with
+zero child calls. Verify that call, hypothesis, active-time, repair, and stagnant
+ceilings cannot be raised or exceeded; repeated failure without changed progress
+stops; a stopped stage needs changed revision, contract, or evidence; parent and
+Terra writes are rejected; duplicate audit revisions do not run; and abandoned
+audits do not become incremental baselines.
+
 ## 5. Metrics
 
 ### 5.1 Cost / token metrics
@@ -177,7 +188,11 @@ Count the complete run: parent session plus every child Agent/session. Do not co
 | Metric | How to record |
 |--------|----------------|
 | Input tokens | From usage UI / logs |
+| Cached / cache-creation input | Record separately; derive uncached input |
 | Output tokens | From usage UI / logs |
+| Reasoning output tokens | From usage UI / logs |
+| Wall / model-active seconds | Per role and stage |
+| Upstream attempts / termination | From guard snapshot |
 | Total tokens | Input + output |
 | Turns | Number of user/agent exchanges until delivery |
 | Agent calls | Count of Terra planner / Sol / Luna / Terra auditor invocations |
