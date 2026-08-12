@@ -26,11 +26,16 @@ DISPATCH_FIELDS = (
     "STATUS: DISPATCH",
     "TARGET: implementation",
     "DISPATCH_ID",
+    "PLAN_ID",
+    "PLANNER_ROLE",
+    "PLANNER_INSTANCE_ID",
+    "AUDITOR_INSTANCE_ID",
     "TASK_SUMMARY",
     "BASELINE",
     "PATHS_ALLOW",
     "ACCEPTANCE",
     "CONSTRAINTS",
+    "BUDGET",
     "NEXT: parent",
 )
 OUTBOUND_FIELDS = (
@@ -151,6 +156,7 @@ def validate_agents() -> None:
                 "worktree-sha256:<64 lowercase hex>", "repair budget",
                 "Never plan the task, authorize writes, schedule peers, or request human authority.",
                 "pre-PASS route", "current diff/paths", "exact failure/replay",
+                "MODEL_CALL_LIMIT", "STAGNANT_CALL_LIMIT", "runtime guard",
             ),
             "sol_planner": DISPATCH_FIELDS + (
                 "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
@@ -158,6 +164,7 @@ def validate_agents() -> None:
                 "IMPACT_CONE", "worktree-sha256:<64 lowercase hex>",
                 "three materially distinct attempts", "human_authority",
                 "externally measurable latency", "sleep is only polling",
+                "MODEL_CALL_LIMIT", "STAGNANT_CALL_LIMIT", "hard parent-enforced ceiling",
             ),
             "terra_auditor": (
                 "Never edit, authorize a write, schedule peers, or request human authority.",
@@ -168,6 +175,7 @@ def validate_agents() -> None:
                 "sleep alone is not synchronization proof",
                 "pre-PASS technical-resolution", "does not require final scope or revision",
                 "never BLOCKED/none",
+                "AUDITOR_INSTANCE_ID", "incremental audit", "hard-budget telemetry",
             ),
         }
         for term in common + role_terms[name]:
@@ -258,11 +266,16 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 "STATUS": "DISPATCH",
                 "TARGET": "implementation",
                 "DISPATCH_ID": None,
+                "PLAN_ID": None,
+                "PLANNER_ROLE": "sol_planner",
+                "PLANNER_INSTANCE_ID": None,
+                "AUDITOR_INSTANCE_ID": None,
                 "TASK_SUMMARY": None,
                 "BASELINE": None,
                 "PATHS_ALLOW": None,
                 "ACCEPTANCE": None,
                 "CONSTRAINTS": None,
+                "BUDGET": None,
                 "NEXT": "parent",
             },
         ),
@@ -294,8 +307,13 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 f"{relative}: {label} has unexpected fields: "
                 f"{', '.join(sorted(unexpected))}"
             )
-        if label == "inbound DISPATCH protocol" and not fields.get("DISPATCH_ID"):
-            error(f"{relative}: inbound DISPATCH protocol DISPATCH_ID must be non-empty")
+        if label == "inbound DISPATCH protocol":
+            for name in (
+                "DISPATCH_ID", "PLAN_ID", "PLANNER_ROLE",
+                "PLANNER_INSTANCE_ID", "AUDITOR_INSTANCE_ID",
+            ):
+                if not fields.get(name):
+                    error(f"{relative}: inbound DISPATCH protocol {name} must be non-empty")
         for name, value in expected.items():
             if value is not None and fields.get(name) != value:
                 error(
@@ -376,6 +394,12 @@ def validate_skill() -> None:
         "worktree-sha256:<64 lowercase hex>",
         "CONTRACT_EFFECT: unchanged",
         "parent:repair_or_sol",
+        "runtime_guard.py start",
+        "runtime_guard.py audit",
+        "Exit 2 means zero target calls",
+        "deterministic `spinning` signal",
+        "Parent never repairs or writes",
+        "same revision is never",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")
@@ -414,6 +438,45 @@ def validate_skill() -> None:
     for number, line in markdown_lines(skill):
         if line.strip() in expected_titles and not line.startswith("#"):
             error(f"{relative}:{number}: bare heading {line.strip()!r}")
+
+
+def validate_runtime_guard() -> None:
+    relative = ".agents/skills/lean-dev-router/scripts/runtime_guard.py"
+    try:
+        source = read(relative)
+    except OSError as exc:
+        error(f"{relative}: cannot read runtime guard: {exc}")
+        return
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        error(f"{relative}: invalid Python: {exc.msg}")
+        return
+    allowed_imports = {
+        "__future__", "argparse", "hashlib", "json", "math", "sys",
+        "dataclasses", "pathlib", "typing",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = {alias.name.split(".", 1)[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            names = {str(node.module).split(".", 1)[0]}
+        else:
+            continue
+        for name in names - allowed_imports:
+            error(f"{relative}: non-standard or undeclared import {name!r}")
+    for term in (
+        "validate_dispatch", "validate_repair", "MODEL_CALL_LIMIT",
+        "HYPOTHESIS_LIMIT", "MODEL_ACTIVE_SECONDS_LIMIT", "REPAIR_CYCLE_LIMIT",
+        "STAGNANT_CALL_LIMIT", "repeated_failure_without_new_evidence",
+        '"spinning"', "unauthorized_writer", "duplicate_audit_revision",
+        "uncached_input_tokens", "total_tokens", "EVIDENCE_FINGERPRINT",
+        "CONTRACT_VERSION", 'sub.add_parser("start"', 'sub.add_parser("event"',
+        'sub.add_parser("repair"', 'sub.add_parser("audit"',
+        'sub.add_parser("schema"',
+    ):
+        if term not in source:
+            error(f"{relative}: missing runtime gate {term!r}")
 
 
 def parse_manifest(text: str) -> dict[str, dict[str, str]]:
@@ -568,6 +631,7 @@ def validate_license() -> None:
 def main() -> int:
     validate_agents()
     validate_skill()
+    validate_runtime_guard()
     validate_manifest()
     validate_runtime_language()
     validate_markdown()

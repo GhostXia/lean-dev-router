@@ -69,6 +69,10 @@ PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
 DISPATCH_ID: stable unique component/write identifier
+PLAN_ID: stable plan identifier
+PLANNER_ROLE: sol_planner
+PLANNER_INSTANCE_ID: immutable planner instance identifier
+AUDITOR_INSTANCE_ID: independent auditor instance identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -77,6 +81,12 @@ ACCEPTANCE:
 - objective check and expected result
 CONSTRAINTS:
 - fixed implementation or compatibility bound
+BUDGET:
+  MODEL_CALL_LIMIT: positive integer
+  HYPOTHESIS_LIMIT: positive integer
+  MODEL_ACTIVE_SECONDS_LIMIT: positive integer
+  REPAIR_CYCLE_LIMIT: positive integer
+  STAGNANT_CALL_LIMIT: positive integer
 NEXT: parent
 ```
 
@@ -129,11 +139,13 @@ Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `
 
 `DISPATCH` is a protocol authorization statement, not a cryptographic signature or proof of origin. Likewise, `PATHS_ALLOW` and `scripts/check_scope.py` constrain declared scope and detect drift; they do not prevent an agent or process from writing through the operating system.
 
-Terra's read-only guarantee depends on Codex enforcing its configured read-only sandbox. The host sandbox, filesystem permissions, and isolated worktrees remain the final enforcement layer. The parent and Sol are therefore a trusted coordination plane: this protocol does not claim to defend against a malicious or compromised agent that already has host-level write access.
+Terra's read-only guarantee depends on Codex enforcing its configured read-only sandbox. The runtime guard rejects non-Luna write events but is a coordination gate, not an OS sandbox. Filesystem permissions and isolated worktrees remain the final enforcement layer; the protocol does not defend against a malicious process with host-level write access.
 
 ### 🚧 Hard Entry Gate and Scope Fuse
 
 The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
+
+Before the first Luna call, the parent feeds the complete JSON dispatch once to the installed Skill's `scripts/runtime_guard.py start --state <external-scratch-state>`. Repair and audit packets use their subcommands against that same state; restarting is rejected. Exit code 2 means no target child is spawned. The guard persists identity leases, finite budgets, latches, repair cycles, audit revision keys, and per-role/stage telemetry outside the target repository. Run `runtime_guard.py schema` for required fields and `snapshot --state ...` for accumulated telemetry.
 
 For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in Sol's dispatch defines what may change. The parent cannot create a direct Luna fast path.
 
@@ -205,7 +217,7 @@ Native Codex subagents are the default. Start every change-producing task with *
 3. Its first result follows `lean-dev-router/v2`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `PLAN_ID`, `PLANNER_ROLE`, `PLANNER_INSTANCE_ID`, `AUDITOR_INSTANCE_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, `BUDGET`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically. It calls Sol again only at an expansion gate, an undefined transition, a contract change, or a user-owned decision. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -213,13 +225,13 @@ The parent executes it mechanically. It calls Sol again only at an expansion gat
 
 Independent components advance as soon as they are ready. The parent starts or queues each manifest-authorized audit, repair, or re-audit without waiting for unrelated siblings and without a routine Sol round-trip. Only combined integration and final combined-state review use an all-component barrier. `token-first` may reuse one uninvolved Terra across components, but reuse must not create a sibling wait.
 
-Component audits and re-audits use a stable `<component>:<revision>:<stage>` job key with `queued`, `running`, `complete`, or `failed` state. If a batch spawn partially fails, reconcile each item and retry only missing or failed keys; never replay a running or complete job. Sol remains available for declared planning and exception gates, not as the routine event loop.
+Component audits use a stable `<component>:<revision>:<stage>` job key. Register each through the runtime guard: the same revision is never audited twice. A changed revision gets an incremental audit of its delta, unresolved findings, and affected cone; the initial audit covers the full declared cone. If a batch spawn partially fails, retry only missing or failed keys. Sol remains an exception gate, not the routine event loop.
 
 Sol preregisters Terra's objective, change scope, broader causal impact cone, acceptance, dependencies, revision rule, and replay evidence. After Luna `PASS`, the parent verifies those gates and launches Terra directly. Terra reads causal neighbors beyond `PATHS_ALLOW` and classifies outside findings: A change-caused acceptance defect, B necessary omitted scope, C unrelated existing issue, or D severe security/data-loss/compatibility risk. A bounded unchanged-contract repair may return mechanically to the original Luna; scope, plan, acceptance, public-interface, architecture, security, data-format, resource-limit, ambiguity, or exhausted-budget changes return to Sol.
 
 When every manifest-declared scope, revision, audit, repair, integration, and final gate is terminal and passing, the parent may summarize completion without another Sol round-trip.
 
-Expensive, concurrent, flaky, environment-sensitive, or uncertain gates use a declared fuse: by default three materially distinct attempts and twenty model-active minutes. External compile, CI, test, and network waits are excluded, but commands keep explicit timeouts. An unchanged command cannot be retried without changed state, new evidence, or a new testable hypothesis.
+Every dispatch declares positive integer ceilings for model calls, distinct hypotheses, model-active seconds, repair cycles, and stagnant calls. Runtime maxima are 8, 4, 1200, 2, and 2; Sol may only tighten them. After each call the parent records wall/model-active seconds, upstream attempts, token families, hypothesis, command/error, and progress/evidence. Repeating the same failure without progress stops immediately; two stagnant calls are `spinning`. Exhaustion latches the stage until revision, contract version, or evidence changes. Luna exhaustion routes to Terra, Terra exhaustion to Sol; parent never writes a repair.
 
 When the host exposes timestamps, record component-ready and next-stage times. Start the next stage within 60 seconds when capacity exists; otherwise mark it queued with the reason and start it at the first eligible slot release. Report external compile, CI, and network waits separately from controllable handoff delay, and keep completion-event consumption responsive during long parent commands. Terra assignments are ordinary read-only task instructions: `STATUS: DISPATCH` remains reserved for Luna write authorization and must not be reused as an outbound-style Terra envelope.
 
@@ -267,7 +279,7 @@ flowchart LR
 
 | Path | Description |
 |:---|:---|
-| `.agents/skills/lean-dev-router/` | The lightweight routing Skill |
+| `.agents/skills/lean-dev-router/` | Routing Skill plus its standard-library runtime guard |
 | `agents/` | Example Agent config files: `luna_worker`, `sol_planner`, `terra_auditor` |
 | `docs/zh-CN/` | Chinese documentation for human readers only |
 | `lean-dev-router-self-test-guide.md` | Controlled guide for measuring token savings, quality, and routing overhead |
@@ -283,6 +295,7 @@ For **Codex**, install this required runtime as one versioned unit:
 2. The three files in `agents/` → `~/.codex/agents/`
 
 Do not mix a Skill from one release with Agent TOML files from another. Start a fresh Codex task after installation; do not resume an in-flight v1 handoff as v2.
+The guard is bundled under the Skill's `scripts/`; keep mutable state in external scratch.
 
 #### Optional Scope Helper
 

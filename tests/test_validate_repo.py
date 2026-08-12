@@ -87,7 +87,7 @@ class ValidateRepositoryTests(unittest.TestCase):
             "direct audit": ("launches Terra directly", "No routine Luna-to-Sol-to-Terra hop"),
             "revision": ("worktree-sha256:<64 lowercase hex>", "same state reproduces", "repair changes"),
             "artifacts": ("persistent writes only", "disposable artifact", "never enter revision identity"),
-            "fuse": ("three materially distinct attempts", "twenty", "unchanged command"),
+            "fuse": ("MODEL_CALL_LIMIT", "deterministic `spinning` signal", "hard budget"),
             "failure routes": ("technical_resolution", "dependency handling", "scope failures", "Baseline drift"),
             "replay": ("cwd, environment delta, exact command, exit code, and compact result",),
             "concurrency": ("prove the target failure/competition branch", "polling or a backstop timeout"),
@@ -225,6 +225,20 @@ class ValidateRepositoryTests(unittest.TestCase):
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
         self.assertLessEqual(len(skill), 12_000)
         self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
+
+    def test_runtime_guard_is_executable_and_required(self) -> None:
+        source = self.source(".agents/skills/lean-dev-router/scripts/runtime_guard.py")
+        self.write(".agents/skills/lean-dev-router/scripts/runtime_guard.py", source)
+        validate_repo.validate_runtime_guard()
+        self.assertEqual(validate_repo.ERRORS, [])
+
+        validate_repo.ERRORS.clear()
+        self.write(
+            ".agents/skills/lean-dev-router/scripts/runtime_guard.py",
+            source.replace("duplicate_audit_revision", "removed", 1),
+        )
+        validate_repo.validate_runtime_guard()
+        self.assertTrue(any("duplicate_audit_revision" in error for error in validate_repo.ERRORS))
 
     def test_four_backtick_fence_wraps_shorter_fence(self) -> None:
         self.assertEqual(
