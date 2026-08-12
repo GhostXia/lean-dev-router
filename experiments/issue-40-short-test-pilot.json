@@ -1,0 +1,1456 @@
+{
+ "experiment": "issue-40-short-test-pilot",
+ "note": "14 valid runs from original thread with original encrypted prompt (prompt text not recoverable). Controlled matrix rerun was blocked by subagent messaging failure in forked thread.",
+ "samples": [
+  {
+   "id": "m40_c1_en_r1",
+   "variant": "C1",
+   "language": "en",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-26-54-019ff4dd-f345-7ba3-8942-c29a894b2b92.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:26:54.650Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:27:01.165Z",
+     "input_tokens": 21536,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1312,
+     "output_tokens": 151,
+     "reasoning_output_tokens": 20,
+     "total_tokens": 21687
+    },
+    {
+     "timestamp": "2026-08-12T07:27:36.533Z",
+     "input_tokens": 24419,
+     "cached_input_tokens": 21248,
+     "uncached_input_tokens": 3171,
+     "output_tokens": 1673,
+     "reasoning_output_tokens": 877,
+     "total_tokens": 26092
+    }
+   ],
+   "final_output": {
+    "variant": "C1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker under a complete DISPATCH limited to the exact file",
+      "audit_route": "parent scope/revision gate, then independent terra_auditor audit",
+      "exception_route": "return any contract-changing or incomplete state to sol_planner",
+      "reason": "Even a trivial repository change enters through Sol, while only Luna may write and the deterministic checks leave no human decision open."
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "none until human authority resolves compatibility; then authorized luna_worker batches and integration",
+      "audit_route": "stream each accepted component to Terra, then run all declared integration/final audits",
+      "exception_route": "sol_planner BLOCKED/major-decision/REQUEST human_authority -> parent:user",
+      "reason": "Unresolved public API compatibility is a material scope and acceptance decision that Sol cannot choose."
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "none; edits are forbidden",
+      "audit_route": "independent read-only causal audit of the existing diff and bounded impact cone",
+      "exception_route": "REQUEST planning_resolution -> parent:sol only if planning or authorization becomes necessary",
+      "reason": "An explicit diagnostic audit may start at Terra and expanded read scope never grants write authority."
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "existing DISPATCH only; further unchanged replay is prohibited",
+      "audit_route": "no acceptance audit until changed revision, contract, or evidence unlocks execution",
+      "exception_route": "deterministic spinning; luna_worker ESCALATE/technical_resolution -> parent:terra",
+      "reason": "Two identical failures with unchanged state constitute stagnation, and unchanged commands must not be replayed."
+     },
+     {
+      "id": 5,
+      "entry_role": "parent:manifest_gate",
+      "write_authority": "the prior authorized luna_worker write remains the only permitted write",
+      "audit_route": "reject before Terra; recompute the dirty revision as worktree-sha256:<64 lowercase hex> and revalidate scope",
+      "exception_route": "return to luna_worker as FAILURE: verification for corrected output",
+      "reason": "A dirty authorized worktree cannot identify its revision with the clean baseline commit hash."
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "original luna_worker after the parent validates the repair envelope",
+      "audit_route": "audit the new repair revision again; same-revision audit reuse is forbidden",
+      "exception_route": "terra_auditor ESCALATE/implementation -> parent:repair_or_sol -> original Luna",
+      "reason": "This is an in-scope class A defect with unchanged contract, unchanged acceptance, and remaining repair budget."
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "none until Sol authorizes the missing path in a new or revised DISPATCH",
+      "audit_route": "record the scope-omission finding as blocking; audit the resulting new revision after replanning",
+      "exception_route": "terra_auditor ESCALATE/planning_resolution -> parent:sol",
+      "reason": "A necessary path outside PATHS_ALLOW is a class B scope omission, so repair cannot be routed directly to Luna."
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor for r2; sol_planner after abandonment",
+      "write_authority": "only luna_worker under the authorization that produces r3",
+      "audit_route": "r2 never becomes the incremental baseline; audit r3 from the last successfully completed audit baseline, covering its delta and unresolved findings, and promote r3 only after completion",
+      "exception_route": "record r2 ACTION: abandon and route to sol_planner",
+      "reason": "A terminated audit after bounded retry exhaustion is failed, and failed or abandoned audits never advance the incremental-audit baseline."
+     }
+    ],
+    "quality_notes": [
+     "Only the specified zhcn-optimized SKILL.md was consulted.",
+     "No files were modified.",
+     "Role names, protocol outcomes, revision rules, and repair routing preserve the Skill's exact contract semantics."
+    ]
+   }
+  },
+  {
+   "id": "m40_e0_zh_r1",
+   "variant": "E0",
+   "language": "zh",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-27-11-019ff4de-3590-7eb0-bab8-7d2ef4be00e0.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:27:11.634Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:27:17.932Z",
+     "input_tokens": 21594,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1370,
+     "output_tokens": 145,
+     "reasoning_output_tokens": 25,
+     "total_tokens": 21739
+    },
+    {
+     "timestamp": "2026-08-12T07:28:04.687Z",
+     "input_tokens": 24423,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 4199,
+     "output_tokens": 2249,
+     "reasoning_output_tokens": 942,
+     "total_tokens": 26672
+    }
+   ],
+   "final_output": {
+    "variant": "E0",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "仅 luna_worker 在收到完整有效的 DISPATCH 后可写入指定单文件。",
+      "audit_route": "Luna PASS 后，父级验证 scope、revision、replay 与预注册审计条件，再直接启动 terra_auditor。",
+      "exception_route": "任何不完整或改变契约的状态返回 sol_planner；Luna 缺少 DISPATCH 则返回 FAILURE: missing_dispatch。",
+      "reason": "仓库变更必须由 Sol 定界，但目标明确且无重大决策，可直接形成最小单批次 DISPATCH。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "重大兼容性决策解决前无人获写权限；用户决定并由 Sol 固化契约后，三个 luna_worker 批次按依赖写入，另由一个 Luna 执行授权集成。",
+      "audit_route": "各批次按预注册契约接受 Terra 审计；集成态还须通过最终 scope、完整 acceptance 及声明的最终审计。",
+      "exception_route": "Sol 返回 BLOCKED/major-decision/REQUEST human_authority，经 parent:user 获取决定后再由 Sol 编写或修订 DISPATCH 与集成契约。",
+      "reason": "公共 API 向后兼容会实质改变范围和验收，属于用户重大决策，且多批次必须声明依赖与集成契约。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 始终只读，用户也明确禁止编辑。",
+      "audit_route": "Terra 直接对现有 diff 及其 causal impact cone 做独立因果审计并提交证据化结果。",
+      "exception_route": "需要规划判断时以 REQUEST: planning_resolution 路由 parent:sol；任何修复建议都不构成写授权，禁止实际修复。",
+      "reason": "纯诊断或审计允许从 Terra 进入，而只读指令不是 STATUS: DISPATCH。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "原有效 DISPATCH 的权限仍受风险熔断约束；spinning 锁存后不得继续调用或写入，直至 revision、contract 或 evidence 改变。",
+      "audit_route": "Luna 停止后由父级将技术失败证据路由 terra_auditor 处理。",
+      "exception_route": "两次相同指纹的停滞失败触发确定性 spinning；不得原样第三次重试，且父级不得自行修复或写入。",
+      "reason": "两个 stagnant calls 已达到硬上限，重复失败且无进展必须熔断并由 Terra 技术解析。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "文件写入可由有效 DISPATCH 与 PATHS_ALLOW 授权，但该 PASS 不被接受。",
+      "audit_route": "在父级取得通过 scope 检查的具体 worktree-sha256:<64 lowercase hex> 前，不得启动 Terra 审计。",
+      "exception_route": "父级拒绝 baseline-only dirty key，并要求原 Luna 以 FAILURE: verification 更正结果；修复 revision 证据后才能继续。",
+      "reason": "脏工作树不能用干净 baseline commit SHA 表示，任何 baseline-only dirty revision 都违反可复现 revision 身份规则。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "Terra 无写权；父级核对 DISPATCH_ID、AUDITOR_INSTANCE_ID、CONTRACT_EFFECT: unchanged、AFFECTED_PATHS 和预算后，将修复机械地交回原 luna_worker。",
+      "audit_route": "修复生成新 revision，随后 Terra 对该后续 revision 审计 delta 与既有 findings。",
+      "exception_route": "若身份、路径、契约效果或预算任一不符，则不走直接修复并返回 sol_planner。",
+      "reason": "这是 A 类变更导致的验收缺陷，且修复在原范围内、契约不变并有剩余 repair budget。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "当前契约下无人可写该额外路径；Terra 只读，原 Luna 的 PATHS_ALLOW 也不授权它。",
+      "audit_route": "Terra 记录路径、证据、因果性、严重度、阻断结论和 ownership，按 B 类发现结束当前修复路径。",
+      "exception_route": "Terra 返回 ESCALATE/REQUEST: planning_resolution，经 parent:sol 重新定界；若涉及重大决策，再由 Sol 请求 human_authority。",
+      "reason": "必要修复路径遗漏属于范围缺口，必须由 Sol 修订契约，不能由 Terra 或 Luna自行扩权。"
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor（r2），随后因异常转 sol_planner",
+      "write_authority": "r2 审计阶段无写权；r3 只能由 luna_worker 在有效 DISPATCH 下产生。",
+      "audit_route": "r2 标记 ACTION: abandon 且绝不更新增量审计基线；r3 从最后一次成功完成的审计 revision 起覆盖累计 delta 与 findings，若此前无成功审计则对 r3 做 full audit。",
+      "exception_route": "Terra 重试耗尽路由 sol_planner；Sol 解决异常并授权后续实现，父级再为 r3 注册新的 revision job key，不能把未完成的 r2 当作已审计基线。",
+      "reason": "早终止审计不得推进 incremental-audit baseline，因此 r3 必须承接自最后成功基线以来包含 r2、r3 的全部未审计变化。"
+     }
+    ],
+    "quality_notes": [
+     "所有写入均以完整有效的 lean-dev-router/v2 DISPATCH 为前提；PASS、BLOCKED、ESCALATE 本身均不授权写入。",
+     "审计读范围可扩展到 causal impact cone，但不会扩大 PATHS_ALLOW 或赋予 Terra 写权限。"
+    ]
+   }
+  },
+  {
+   "id": "m40_e1_en_r1",
+   "variant": "E1",
+   "language": "en",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-27-28-019ff4de-7856-7322-bcc5-0613a516f86f.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:27:28.732Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:27:35.114Z",
+     "input_tokens": 21535,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1311,
+     "output_tokens": 139,
+     "reasoning_output_tokens": 19,
+     "total_tokens": 21674
+    },
+    {
+     "timestamp": "2026-08-12T07:28:09.798Z",
+     "input_tokens": 24027,
+     "cached_input_tokens": 21248,
+     "uncached_input_tokens": 2779,
+     "output_tokens": 1567,
+     "reasoning_output_tokens": 710,
+     "total_tokens": 25594
+    }
+   ],
+   "final_output": {
+    "variant": "E1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker under one complete DISPATCH limited to the exact path",
+      "audit_route": "Parent validates Luna PASS, scope, and concrete revision, then starts the preregistered terra_auditor directly",
+      "exception_route": "Any incomplete or contract-changing state returns to sol_planner",
+      "reason": "Even a trivial repository write enters through Sol, while its fully deterministic contract permits a single bounded Luna implementation."
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "None until the compatibility decision is resolved and Sol issues complete dependent-batch DISPATCH contracts",
+      "audit_route": "Not started until the human decision, implementation revisions, dependency gates, and preregistered audits are valid",
+      "exception_route": "sol_planner returns BLOCKED/major-decision/REQUEST human_authority to parent:user",
+      "reason": "Unresolved public API compatibility is a material scope and acceptance decision that only the user may authorize through Sol."
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "None; Terra is read-only and the user forbids edits",
+      "audit_route": "Direct independent causal audit of the existing diff",
+      "exception_route": "Report findings without editing; any planning need routes to sol_planner and Terra exhaustion also routes to Sol",
+      "reason": "Read-only diagnosis and audit may enter directly through Terra without a write plan."
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "Existing DISPATCH only, but no unchanged third target call is permitted",
+      "audit_route": "Luna escalates technical evidence to terra_auditor rather than replaying the unchanged failure",
+      "exception_route": "Stop immediately on the repeated fingerprint and return ESCALATE/technical_resolution to parent:terra",
+      "reason": "The unchanged second failure trips the deterministic repeated-failure latch."
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "Existing PATHS_ALLOW remains the only write authority",
+      "audit_route": "No Terra audit starts until scope passes and the dirty state has a concrete worktree-sha256 revision",
+      "exception_route": "Parent rejects PASS; Luna corrects its result with FAILURE verification and supplies the valid dirty revision",
+      "reason": "A baseline commit hash is valid only for a clean state and cannot identify an authorized dirty worktree."
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor -> original luna_worker",
+      "write_authority": "Original Luna repairs only the in-scope affected paths under the unchanged original contract",
+      "audit_route": "Parent validates the A finding and repair envelope, dispatches the original Luna mechanically, then re-audits the new revision",
+      "exception_route": "Terra returns ESCALATE/implementation to parent:repair_or_sol; invalid identity, evidence, paths, or budget routes Sol",
+      "reason": "This is the defined contract-preserving class-A repair path with scope and repair budget intact."
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "None for the absent path; new Sol authorization is required",
+      "audit_route": "Terra records the necessary omitted-scope finding and does not initiate repair",
+      "exception_route": "Terra returns ESCALATE/planning_resolution to parent:sol",
+      "reason": "A required path outside PATHS_ALLOW is a scope change, which Terra and Luna cannot authorize."
+     },
+     {
+      "id": 8,
+      "entry_role": "sol_planner after r2 abandonment",
+      "write_authority": "Only a valid Sol-issued DISPATCH authorizes the later r3 implementation",
+      "audit_route": "Record r2 ACTION: abandon without advancing the baseline; audit r3 against the last successfully completed audit revision plus unresolved findings, or fully if none exists",
+      "exception_route": "Terra retry exhaustion routes Sol; r2 remains failed and cannot be reused as an incremental baseline",
+      "reason": "Only a completed audit advances the incremental-audit baseline, so the terminated r2 contributes unresolved findings but no baseline state."
+     }
+    ],
+    "quality_notes": [
+     "All repository writes enter through Sol and are performed only by Luna under a complete DISPATCH.",
+     "Terra remains read-only; contract-preserving class-A repair is the sole mechanical return to the original Luna.",
+     "Incremental audit state advances only after successful completion, never after abandonment."
+    ]
+   }
+  },
+  {
+   "id": "m40_c0_zh_r1",
+   "variant": "C0",
+   "language": "zh",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-30-05-019ff4e0-df6b-7ba2-836b-d10d22089172.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:30:06.180Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:30:19.572Z",
+     "input_tokens": 21511,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1287,
+     "output_tokens": 168,
+     "reasoning_output_tokens": 37,
+     "total_tokens": 21679
+    },
+    {
+     "timestamp": "2026-08-12T07:30:58.832Z",
+     "input_tokens": 24984,
+     "cached_input_tokens": 21248,
+     "uncached_input_tokens": 3736,
+     "output_tokens": 1794,
+     "reasoning_output_tokens": 613,
+     "total_tokens": 26778
+    }
+   ],
+   "final_output": {
+    "variant": "C0",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "仅 sol_planner 可签发完整 DISPATCH；luna_worker 据此写入单个获授权文件。",
+      "audit_route": "Luna PASS 并通过 scope、revision、证据和预注册契约校验后，父代理直接启动独立 terra_auditor。",
+      "exception_route": "契约缺失、不完整或发生变化时返回 sol_planner。",
+      "reason": "凡产生改动的任务都必须先由 Sol 授权；低风险和单文件不豁免该入口。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "当前不得授权 Luna 写入；必须先解决公共 API 兼容性这一重大决策，之后 Sol 才能为各批次及集成签发契约。",
+      "audit_route": "决策完成后，各 revision 由 Terra 审计，最终组合状态还须执行预注册的集成审计。",
+      "exception_route": "sol_planner 以 BLOCKED/major-decision/REQUEST human_authority 路由至用户。",
+      "reason": "实质性兼容性决定属于用户门禁；三个写入批次还必须声明共享契约、依赖顺序和集成参数。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 只读，且用户明确禁止编辑。",
+      "audit_route": "由独立 terra_auditor 直接审计当前 diff，并沿有界因果影响锥收集证据。",
+      "exception_route": "若需要规划、授权或重大决策则路由 sol_planner；不得将修复直接交给 Luna。",
+      "reason": "明确的独立审计优先从 Terra 开始，审计读范围可以扩大但不会产生写权限。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "原 DISPATCH 的写权限不自动失效，但当前状态已锁存停止，禁止原样重试或继续写入。",
+      "audit_route": "Luna 以 ESCALATE/technical_resolution 交父代理路由 terra_auditor 处理技术不确定性。",
+      "exception_route": "parent:terra；只有 revision、契约或证据变化后才可解除 spinning 锁存，Terra 预算耗尽则转 Sol。",
+      "reason": "两次无新进展的相同失败构成确定性 spinning 信号，必须停止重复尝试。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "仅限原有效 DISPATCH，但该结果不能完成写入生命周期或获准进入审计。",
+      "audit_route": "不得启动 Terra 审计；先由原 Luna 以 FAILURE: verification 修正结果并生成 dirty 状态的 worktree-sha256 revision。",
+      "exception_route": "若无法补全具体 dirty revision 或其他前置条件，父代理返回 sol_planner。",
+      "reason": "脏工作树不能用干净 baseline commit SHA 标识；只含 baseline 的 dirty key 必须拒绝，范围与具体 revision 校验失败即不能接受 PASS。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "Terra 无写权限；父代理核对修复字段、ID、证据、预注册审计和预算后，将修复机械交回原 luna_worker。",
+      "audit_route": "原 Luna 在 PATHS_ALLOW 内修复，产生新 revision；随后由 Terra 对新 revision 重新审计。",
+      "exception_route": "terra_auditor 以 ESCALATE/implementation 路由 parent:repair_or_sol；本场景满足条件，走 repair 到原 Luna。",
+      "reason": "这是改动引起的 A 类验收缺陷，且 contract 不变、范围内并有修复预算，符合有界修复路径。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；原 Luna 的授权不覆盖 PATHS_ALLOW 外路径，Terra 也不能授权或实施修复。",
+      "audit_route": "Terra 记录越界路径、证据、因果关系、严重性、阻塞决定和责任归属。",
+      "exception_route": "terra_auditor 以 ESCALATE/planning_resolution 路由 parent:sol，由 Sol 重新规划范围与契约。",
+      "reason": "必要修复路径遗漏属于 B 类发现；扩大审计读取范围不等于扩大写入权限。"
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；审计阶段只读。",
+      "audit_route": "r3 只能以上一次成功完成并被接受的审计 revision 为增量基线，审查 r3 delta 与既有发现；若不存在成功基线，则对 r3 做首次完整审计。",
+      "exception_route": "r2 abandon 必须记录原因并路由 sol_planner；不得把 r2 写入增量基线。",
+      "reason": "提前终止或重试耗尽后 abandon 的审计绝不更新增量审计基线，新 revision 不能继承未完成审计的覆盖结论。"
+     }
+    ],
+    "quality_notes": [
+     "所有写入授权均来自 sol_planner 创建或修改的完整 DISPATCH；PASS、BLOCKED、ESCALATE 和 Terra 建议本身都不授权写入。",
+     "审计启动以 scope、具体 revision、依赖、复现证据和预注册审计契约完整为前提。"
+    ]
+   }
+  },
+  {
+   "id": "m40_e1_zh_r1",
+   "variant": "E1",
+   "language": "zh",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-30-24-019ff4e1-2855-70f1-852a-70c54a926dcc.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:30:24.887Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:30:39.466Z",
+     "input_tokens": 21512,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1288,
+     "output_tokens": 144,
+     "reasoning_output_tokens": 69,
+     "total_tokens": 21656
+    },
+    {
+     "timestamp": "2026-08-12T07:31:26.007Z",
+     "input_tokens": 23959,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 3735,
+     "output_tokens": 1906,
+     "reasoning_output_tokens": 707,
+     "total_tokens": 25865
+    }
+   ],
+   "final_output": {
+    "variant": "E1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "仅 luna_worker 在收到字段完整、无重大决策的 DISPATCH 后，可写入 PATHS_ALLOW 所列单文件。",
+      "audit_route": "Luna PASS 后，父节点校验范围、revision、replay 与预登记审计合同，再直接交 terra_auditor 审计。",
+      "exception_route": "任何合同缺失、歧义或范围变化均退回 sol_planner。",
+      "reason": "仓库改动必须经 Sol 授权；任务虽低风险且单文件，也不能绕过完整 DISPATCH 和审计门。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "当前无写权限；待用户决定公共 API 兼容策略后，由 Sol 为各批次及集成批次签发完整 DISPATCH，Luna 才能按各自 PATHS_ALLOW 写入。",
+      "audit_route": "决定完成后按依赖流式审计各组件，并对合并状态执行声明的集成与最终审计。",
+      "exception_route": "sol_planner 返回 BLOCKED/major-decision/REQUEST human_authority，经父节点路由给用户。",
+      "reason": "公共接口向后兼容属于重大兼容性承诺，不能由 Sol 或 Luna自行决定。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 严格只读，用户也明确禁止编辑。",
+      "audit_route": "Terra 直接对当前 diff 做独立因果审计，并将 PASS、BLOCKED 或发现证据返回父节点。",
+      "exception_route": "需要实施时请求 implementation，由父节点走 repair_or_sol；涉及规划或授权变化时请求 planning_resolution 并转 Sol。",
+      "reason": "直接审计可从 Terra 开始，且 Terra 不具备写权限。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "原 DISPATCH 的 PATHS_ALLOW 内权限被停机门闩中止，不得继续进行相同调用或写入尝试。",
+      "audit_route": "判定为确定性 spinning，Luna 耗尽路径由父节点转 terra_auditor 做 technical_resolution。",
+      "exception_route": "若 Terra 仍无法在合同内解决或其预算耗尽，则转 sol_planner。",
+      "reason": "revision、contract、evidence 均未变化时，两次停滞调用触发确定性 spinning；门闩仅在三者之一变化后清除。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "仍仅限原 PATHS_ALLOW，但该 PASS 不被接受，也不产生新的写授权。",
+      "audit_route": "不得启动 Terra 审计；父节点须先拒绝 baseline SHA，并要求提供基于授权脏状态计算的 worktree-sha256 revision。",
+      "exception_route": "以 FAILURE: verification 退回原角色纠正；若 baseline 漂移或无法形成有效 revision，则停止写入并按验证失败处理。",
+      "reason": "干净状态才可用精确 commit SHA；脏工作树必须使用规范的 worktree-sha256，baseline-only 键无效。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "Terra 无写权；父节点验证身份、证据、审计注册、路径和预算后，仅将修复权机械地交回原 luna_worker，且限原 PATHS_ALLOW。",
+      "audit_route": "Terra 返回 REQUEST: implementation；Luna 完成合同不变的 A 类修复并产生新 revision 后，由 Terra 重新审计该 revision。",
+      "exception_route": "身份、证据、路径、预算任一校验失败，或修复引起合同、接口、架构等变化时，转 sol_planner。",
+      "reason": "这是改动引起的 A 类验收缺陷，且修复保持合同、在原范围内并有剩余 repair budget，符合有界修复闭环。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 只读，原 Luna 也无权写 PATHS_ALLOW 之外的路径。",
+      "audit_route": "将发现记录为必要遗漏范围及其因果证据，返回 REQUEST: planning_resolution。",
+      "exception_route": "父节点转 sol_planner，由 Sol 修改范围并签发新授权；若涉及重大承诺，再由 Sol 请求 human_authority。",
+      "reason": "范围外修复属于 scope/plan 变化，不能走原合同的机械 repair。"
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；审计阶段不授权任何写入。",
+      "audit_route": "r2 的 abandon 不更新增量基线；r3 应相对最近一次成功完成的审计 revision 检查 delta 与未解决发现，若此前没有成功审计则对 r3 做 full audit。",
+      "exception_route": "r3 若重试再次耗尽，记录 ACTION: abandon、转 sol_planner，且仍不得推进增量审计基线。",
+      "reason": "只有成功完成的审计可成为后续增量基线，提前终止或 abandon 的 revision 明确不得更新基线。"
+     }
+    ],
+    "quality_notes": [
+     "所有写入均以完整 DISPATCH 和 PATHS_ALLOW 为前提；PASS、BLOCKED、ESCALATE 本身都不授权写入。",
+     "将“审计基线”解释为最近一次成功完成的审计 revision，而非最近一次尝试或被 abandon 的 revision。"
+    ]
+   }
+  },
+  {
+   "id": "m40_e0_en_r1",
+   "variant": "E0",
+   "language": "en",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-30-39-019ff4e1-6346-7640-8b2e-e84bd81e33d2.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:30:39.938Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:30:48.386Z",
+     "input_tokens": 21480,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1256,
+     "output_tokens": 134,
+     "reasoning_output_tokens": 58,
+     "total_tokens": 21614
+    },
+    {
+     "timestamp": "2026-08-12T07:31:25.431Z",
+     "input_tokens": 24265,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 4041,
+     "output_tokens": 1401,
+     "reasoning_output_tokens": 457,
+     "total_tokens": 25666
+    }
+   ],
+   "final_output": {
+    "variant": "E0",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker under a complete valid DISPATCH limited to the single allowed file",
+      "audit_route": "parent verifies scope, revision, replay, and the preregistered audit contract, then launches terra_auditor directly",
+      "exception_route": "undefined, incomplete, or contract-changing states return to sol_planner",
+      "reason": "All repository changes start with Sol even when the write is clear, local, and low risk; Luna alone performs authorized writes."
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "none until the user resolves compatibility and Sol issues valid batch and integration contracts; Luna then writes within those contracts",
+      "audit_route": "preregistered component audits followed by any declared final audit of the clean integrated revision",
+      "exception_route": "sol_planner returns BLOCKED/major-decision/REQUEST human_authority to the parent, which asks the user",
+      "reason": "Three dependent batches require explicit dependency and integration contracts, while unresolved public API compatibility is a material decision requiring human authority."
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "none",
+      "audit_route": "terra_auditor performs the independent read-only causal audit of the current concrete revision",
+      "exception_route": "technical findings may request bounded implementation, but authorization or planning returns to sol_planner and edits remain forbidden under the current request",
+      "reason": "Diagnosis and audits may start with Terra, and Terra is always read-only; the user's no-edit instruction removes any present write authority."
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "the original DISPATCH remains the only possible authority, but the latched stop forbids another target call until revision, contract, or evidence changes",
+      "audit_route": "parent routes Luna exhaustion or technical uncertainty to terra_auditor for technical resolution",
+      "exception_route": "runtime_guard records deterministic spinning after two stagnant calls and latches the stop",
+      "reason": "Repeating the same failure twice with unchanged revision, contract, and evidence reaches STAGNANT_CALL_LIMIT and cannot be retried unchanged."
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "only the existing valid DISPATCH; the claimed PASS grants no authority",
+      "audit_route": "no Terra audit launches until scope passes and the dirty state is identified by a valid worktree-sha256 revision",
+      "exception_route": "parent rejects the PASS and requires Luna to correct its result with FAILURE verification and concrete revision evidence",
+      "reason": "A dirty worktree cannot use the clean baseline SHA as its revision; baseline-only dirty keys are explicitly invalid."
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "the original luna_worker receives the original DISPATCH for a bounded repair inside PATHS_ALLOW",
+      "audit_route": "the repaired state receives a new revision and terra_auditor re-audits it",
+      "exception_route": "parent mechanically follows terra_auditor ESCALATE/implementation to repair after matching IDs, unchanged contract, affected paths, evidence, and remaining budget",
+      "reason": "This is a category A change-caused acceptance defect eligible for contract-preserving in-scope repair."
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "none until sol_planner amends scope and issues new valid authorization to luna_worker",
+      "audit_route": "the current audit blocks and reports the omitted necessary path with causal evidence",
+      "exception_route": "terra_auditor returns ESCALATE/planning_resolution and the parent routes to sol_planner",
+      "reason": "A required path outside PATHS_ALLOW is category B and cannot be repaired under the original contract."
+     },
+     {
+      "id": 8,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker may produce r3 only under the applicable valid DISPATCH or Sol-amended contract",
+      "audit_route": "audit r3 against the last successfully completed audit baseline before r2; use a full audit if no prior successful baseline exists",
+      "exception_route": "record ACTION abandon for r2 with the exhaustion reason, route to sol_planner, and never promote r2 as the incremental baseline",
+      "reason": "An abandoned audit does not update incremental audit state, so r3 must not use r2 as its baseline."
+     }
+    ],
+    "quality_notes": [
+     "The routing distinguishes read scope from write authority: Terra may inspect the causal impact cone but never authorizes or performs writes.",
+     "A PASS result never authorizes writes; concrete scope, revision, replay, dependency, and audit preconditions remain mandatory.",
+     "For case 8, the exact named baseline depends on audit history: it is the most recent successfully completed audited revision, not abandoned r2."
+    ]
+   }
+  },
+  {
+   "id": "m40_c1_zh_r1",
+   "variant": "C1",
+   "language": "zh",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-31-27-019ff4e2-1d6b-7002-8524-35dfc8bc0618.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:31:27.589Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:31:35.845Z",
+     "input_tokens": 21513,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1289,
+     "output_tokens": 148,
+     "reasoning_output_tokens": 17,
+     "total_tokens": 21661
+    },
+    {
+     "timestamp": "2026-08-12T07:32:22.162Z",
+     "input_tokens": 24396,
+     "cached_input_tokens": 21248,
+     "uncached_input_tokens": 3148,
+     "output_tokens": 1856,
+     "reasoning_output_tokens": 856,
+     "total_tokens": 26252
+    }
+   ],
+   "final_output": {
+    "variant": "C1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker 在完整 DISPATCH 下仅写 PATHS_ALLOW",
+      "audit_route": "父代理验证 scope、revision、复现和审计契约后直接启动独立 terra_auditor",
+      "exception_route": "任何未定义状态或契约变化返回 sol_planner",
+      "reason": "所有仓库改动均从 Sol 进入；低风险和单文件不豁免规划与写入授权。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "兼容性决策完成前无；完成后由获授权 luna_worker 分批写入并由指定 Luna 集成",
+      "audit_route": "各组件 revision 流式交由独立 Terra 审计，组合结果再执行集成与最终审计门禁",
+      "exception_route": "sol_planner 以 BLOCKED/major-decision/REQUEST human_authority 路由用户",
+      "reason": "公共 API 向后兼容属于实质性兼容承诺，必须先由用户决定；三个依赖写入批次还必须声明共享契约和集成规则。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 严格只读",
+      "audit_route": "Terra 直接对当前 diff 做独立因果审计",
+      "exception_route": "需要规划或授权时以 ESCALATE/planning_resolution 返回 sol_planner",
+      "reason": "明确的只读独立审计可从 Terra 开始，用户禁止编辑进一步排除了任何修复写入。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "冻结原 Luna 的继续写入；仅在 revision、contract 或 evidence 变化后解锁",
+      "audit_route": "不进入验收审计；先停止无变化重试并请求技术解阻",
+      "exception_route": "Luna 以 ESCALATE/technical_resolution 经父代理路由 terra_auditor",
+      "reason": "两次无变化失败构成确定性 spinning，禁止重放，Luna 的执行耗尽或技术不确定性转 Terra。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "仍仅限原 DISPATCH 授权的 Luna，但该 PASS 不被接受",
+      "audit_route": "父代理拒绝启动 Terra；先要求生成合法的 worktree-sha256 revision 并重新验证 scope",
+      "exception_route": "由原 luna_worker 以 FAILURE: verification 修正无效输出",
+      "reason": "脏工作树必须使用包含授权 diff 与 untracked 内容的 worktree-sha256 标识，干净 baseline commit SHA 不能代表该 revision。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "父代理验证修复信封、身份、路径和预算后，机械交回原 luna_worker 在原 PATHS_ALLOW 内修复",
+      "audit_route": "修复产生新 revision，必须由 Terra 重新审计",
+      "exception_route": "Terra 以 ESCALATE/implementation 进入 parent:repair_or_sol，并在条件满足时路由原 Luna",
+      "reason": "这是契约不变、范围内且预算充足的 A 类改动引起验收缺陷，符合有界修复闭环。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "现有 DISPATCH 下无权写入；只有 Sol 更新契约后才能授权 Luna",
+      "audit_route": "Terra 记录越界路径、证据、因果、严重性、阻断决定和归属",
+      "exception_route": "Terra 以 ESCALATE/planning_resolution 经父代理路由 sol_planner",
+      "reason": "PATHS_ALLOW 外的必要修复属于 B 类 scope 遗漏，扩大读取不扩大写权，范围变化必须回 Sol。"
+     },
+     {
+      "id": 8,
+      "entry_role": "sol_planner",
+      "write_authority": "无；增量基线决定本身不授权写入",
+      "audit_route": "r3 由 Terra 相对最近一次成功完成的审计 revision 加未解决发现执行增量审计；若此前没有完成审计，则完整审计",
+      "exception_route": "r2 保持 ACTION: abandon 并路由 Sol，绝不成为增量审计基线",
+      "reason": "提前终止或重试耗尽的审计不得更新增量基线，因此 r3 不能以已 abandon 的 r2 为基准。"
+     }
+    ],
+    "quality_notes": [
+     "仅依据指定的完整 zhcn-optimized SKILL.md 判断。",
+     "未检查 GitHub、议题、拉取请求、其他 Skill 变体、既往实验结果或其他代理，也未修改文件。"
+    ]
+   }
+  },
+  {
+   "id": "m40_c0_en_r1",
+   "variant": "C0",
+   "language": "en",
+   "run": 1,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-31-48-019ff4e2-6fc1-7322-a577-edd718fb61fd.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:31:48.684Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:31:55.892Z",
+     "input_tokens": 21481,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1257,
+     "output_tokens": 109,
+     "reasoning_output_tokens": 0,
+     "total_tokens": 21590
+    },
+    {
+     "timestamp": "2026-08-12T07:32:38.364Z",
+     "input_tokens": 24934,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 4710,
+     "output_tokens": 1492,
+     "reasoning_output_tokens": 553,
+     "total_tokens": 26426
+    }
+   ],
+   "final_output": {
+    "variant": "C0",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker only after receiving a complete Sol-authored DISPATCH",
+      "audit_route": "Parent validates Luna PASS, scope, concrete revision, evidence, dependencies, and preregistered audit contract, then directly starts an independent terra_auditor",
+      "exception_route": "Undefined, incomplete, or contract-changing states return to sol_planner",
+      "reason": "Every change-producing task starts with Sol even when the write is clear, low-risk, and limited to one file."
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "None until the user resolves public-API compatibility and Sol issues valid DISPATCH contracts for the dependent batches and integration",
+      "audit_route": "After authorization, audit each accepted revision as preregistered and perform the declared final integration audit on the clean combined state",
+      "exception_route": "sol_planner returns BLOCKED/major-decision/REQUEST human_authority through the parent to the user",
+      "reason": "Public-interface compatibility is a substantive major decision, and three dependent write batches also require explicit integration contracts and ordering."
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "None; Terra is read-only and the user's no-edit constraint is binding",
+      "audit_route": "Terra independently audits the current concrete diff/revision and reports causal evidence to the parent",
+      "exception_route": "Route to sol_planner only if planning, authorization, or a major decision becomes necessary",
+      "reason": "Explicit audit, diagnosis, and evidence-first investigations begin with Terra, which cannot authorize or perform writes."
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "The existing DISPATCH remains the only authority, but further unchanged retries must stop while the spinning latch is active",
+      "audit_route": "Route the stopped Luna failure and complete reproduction evidence to terra_auditor for technical resolution",
+      "exception_route": "parent:terra; the stop remains latched until revision, contract, or evidence changes",
+      "reason": "Two unchanged stagnant failures deterministically signal spinning, so an identical third attempt is prohibited."
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "Only the existing valid DISPATCH; its claimed PASS confers no authority",
+      "audit_route": "Do not start Terra until Luna supplies a valid scope result and a reproducible worktree-sha256 revision for the dirty state",
+      "exception_route": "Return to luna_worker to correct the result as FAILURE verification; unresolved or contract-changing defects then return to sol_planner",
+      "reason": "A dirty worktree cannot use the clean baseline commit SHA as its revision, so the PASS fails parent preflight validation."
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "The original luna_worker receives the bounded unchanged-contract repair after the parent validates IDs, evidence, affected paths, repair cycle, and remaining budget",
+      "audit_route": "After repair, compute a new revision and re-audit its delta plus existing findings with the preregistered Terra auditor",
+      "exception_route": "parent:repair_or_sol, mechanically choosing the original Luna because the repair stays within PATHS_ALLOW and the contract and budget remain valid",
+      "reason": "This is class A: a change-caused acceptance defect that blocks acceptance and requires an in-scope repair."
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "None under the current DISPATCH; PATHS_ALLOW does not authorize the required path",
+      "audit_route": "Terra reports the out-of-scope path, causal evidence, severity, blocking decision, and ownership",
+      "exception_route": "terra_auditor returns ESCALATE/planning_resolution to parent:sol",
+      "reason": "A necessary omitted path is class B and changes scope, so only Sol can revise the plan and write contract."
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor",
+      "write_authority": "None; audit routing never grants write authority",
+      "audit_route": "Audit r3 against the last successfully completed audit baseline before r2, including existing findings; if no completed baseline exists, perform a full audit",
+      "exception_route": "The parent records ACTION: abandon for r2 and routes its retry exhaustion to sol_planner without advancing the incremental baseline",
+      "reason": "An abandoned or prematurely terminated audit never becomes the incremental audit baseline."
+     }
+    ],
+    "quality_notes": [
+     "A PASS never authorizes writing; only a complete Sol-authored DISPATCH authorizes Luna writes.",
+     "Dirty revisions must use worktree-sha256 over the authorized state, while clean revisions use an exact commit SHA.",
+     "Incremental audit baselines advance only after a completed audit, never after abandonment."
+    ]
+   }
+  },
+  {
+   "id": "m40_e1_en_r2",
+   "variant": "E1",
+   "language": "en",
+   "run": 2,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-32-35-019ff4e3-2887-7562-9cf0-24bc81eda086.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:32:36.018Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:32:44.552Z",
+     "input_tokens": 21482,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1258,
+     "output_tokens": 131,
+     "reasoning_output_tokens": 53,
+     "total_tokens": 21613
+    },
+    {
+     "timestamp": "2026-08-12T07:33:23.964Z",
+     "input_tokens": 23932,
+     "cached_input_tokens": 21248,
+     "uncached_input_tokens": 2684,
+     "output_tokens": 1219,
+     "reasoning_output_tokens": 344,
+     "total_tokens": 25151
+    }
+   ],
+   "final_output": {
+    "variant": "E1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker under a complete DISPATCH",
+      "audit_route": "Parent validates Luna PASS, scope, revision, replay, and preregistered audit contract, then starts terra_auditor directly.",
+      "exception_route": "Any incomplete, undefined, or contract-changing state returns to sol_planner.",
+      "reason": "Even a low-risk single-file write enters through Sol; Luna alone may write, and only within PATHS_ALLOW."
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "None until the compatibility decision is resolved; afterward, authorized luna_worker batches and one authorized integration Luna may write.",
+      "audit_route": "Stream component audits through independent terra_auditor instances, then run the declared combined integration audit after dependency completion.",
+      "exception_route": "sol_planner returns BLOCKED/major-decision with REQUEST human_authority to the user.",
+      "reason": "Public API backward compatibility is a material compatibility commitment and cannot remain unresolved in a DISPATCH."
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "none",
+      "audit_route": "Direct read-only causal audit of the current concrete diff/revision.",
+      "exception_route": "Any planning or authorization need returns to sol_planner; Terra must not edit.",
+      "reason": "Direct audit work may begin with Terra, and the explicit no-edit constraint matches Terra's read-only authority."
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "halted under the existing DISPATCH",
+      "audit_route": "Route the unchanged repeated failure and replay evidence to terra_auditor for technical resolution.",
+      "exception_route": "luna_worker returns ESCALATE with REQUEST technical_resolution to parent:terra; deterministic stagnation prevents another unchanged attempt.",
+      "reason": "The guard latches repeated unchanged failure, and Luna exhaustion or technical uncertainty routes to Terra."
+     },
+     {
+      "id": 5,
+      "entry_role": "parent validator",
+      "write_authority": "No new authority; Luna's PASS is rejected.",
+      "audit_route": "Do not register or start Terra until the dirty state has a valid worktree-sha256 revision and scope validation passes.",
+      "exception_route": "Return FAILURE verification to luna_worker for corrected output; if its budget is exhausted, route to Terra.",
+      "reason": "A dirty worktree cannot use the clean baseline commit SHA as its revision; baseline-only dirty keys are explicitly invalid."
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "The original luna_worker, mechanically re-entered under the original PLAN_ID, DISPATCH_ID, PATHS_ALLOW, and unchanged contract.",
+      "audit_route": "Terra returns ESCALATE/implementation; after the bounded repair produces a new revision, re-audit that revision with Terra.",
+      "exception_route": "parent:repair_or_sol, with this case taking the repair branch after identity, evidence, paths, registration, and budget validation.",
+      "reason": "This is a contract-preserving class A defect, in scope and within the remaining repair budget."
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "none under the current DISPATCH",
+      "audit_route": "Record the causal finding as omitted required scope and block the current audit outcome.",
+      "exception_route": "terra_auditor returns ESCALATE with REQUEST planning_resolution to parent:sol for new authorization.",
+      "reason": "A required repair outside PATHS_ALLOW is a class B scope omission; neither Terra nor the parent may expand write authority."
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor after parent validation and audit registration for r3",
+      "write_authority": "none for the audit",
+      "audit_route": "Use the last successfully completed audit revision as the incremental baseline; if none exists, audit r3 in full. Never use abandoned r2.",
+      "exception_route": "The abandoned r2 audit records ACTION abandon and routes to sol_planner; r3 is handled as a distinct revision/job.",
+      "reason": "Early termination never advances the incremental-audit baseline, and the same revision is not audited twice."
+     }
+    ],
+    "quality_notes": [
+     "All repository writes enter through sol_planner authorization and are performed only by luna_worker.",
+     "terra_auditor remains read-only; bounded repair advice does not itself authorize a write.",
+     "Concrete dirty revisions must use the specified worktree-sha256 identity, while clean revisions use the exact commit SHA."
+    ]
+   }
+  },
+  {
+   "id": "m40_c1_en_r2",
+   "variant": "C1",
+   "language": "en",
+   "run": 2,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-32-53-019ff4e3-6da8-7c61-ab0c-f045bf11e1f1.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:32:53.680Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:32:59.450Z",
+     "input_tokens": 21483,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1259,
+     "output_tokens": 127,
+     "reasoning_output_tokens": 17,
+     "total_tokens": 21610
+    },
+    {
+     "timestamp": "2026-08-12T07:33:31.430Z",
+     "input_tokens": 24345,
+     "cached_input_tokens": 21248,
+     "uncached_input_tokens": 3097,
+     "output_tokens": 1147,
+     "reasoning_output_tokens": 376,
+     "total_tokens": 25492
+    }
+   ],
+   "final_output": {
+    "variant": "C1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker under a complete DISPATCH",
+      "audit_route": "After parent scope/revision checks, launch the preregistered independent terra_auditor directly",
+      "exception_route": "Return undefined, incomplete, or contract-changing states to sol_planner",
+      "reason": "Every repository change enters through Sol, and only Luna may write, even for a low-risk single-file change."
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "none until the compatibility decision is resolved and complete batch DISPATCH contracts exist",
+      "audit_route": "Preregister component audits and a final integration audit; audit accepted revisions as they arrive",
+      "exception_route": "sol_planner returns BLOCKED/major-decision with REQUEST human_authority to the user",
+      "reason": "Three dependent write batches require an integration contract, while substantive public-API compatibility is a user-owned major decision."
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "none",
+      "audit_route": "terra_auditor performs the independent read-only causal audit of the current diff",
+      "exception_route": "Route planning or authorization needs to sol_planner; preserve the no-edit constraint",
+      "reason": "An explicit audit or diagnosis may begin with Terra, whose role is read-only."
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "suspended",
+      "audit_route": "Stop the unchanged retry sequence and escalate technical resolution to terra_auditor",
+      "exception_route": "luna_worker returns ESCALATE/technical_resolution; only changed revision, contract, or evidence may unlock execution",
+      "reason": "Two unchanged stagnant failures deterministically constitute spinning, so Luna must not replay the attempt."
+     },
+     {
+      "id": 5,
+      "entry_role": "parent manifest gate",
+      "write_authority": "no additional write authority",
+      "audit_route": "Do not start Terra until the PASS is corrected and the dirty state is identified by a valid worktree-sha256 revision",
+      "exception_route": "Reject the PASS as FAILURE verification and require luna_worker to correct its output",
+      "reason": "A dirty worktree cannot use the clean baseline commit SHA as its revision; baseline-only dirty keys are forbidden."
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "original luna_worker receives the verified bounded repair under the original PLAN_ID and DISPATCH_ID",
+      "audit_route": "Register and fully audit the new repair revision with terra_auditor",
+      "exception_route": "parent mechanically routes Terra's ESCALATE/implementation request to the original Luna without Sol replanning",
+      "reason": "This is a category A change-caused acceptance defect, and the repair is in scope, contract-preserving, and within budget."
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "none under the current DISPATCH",
+      "audit_route": "Record the blocking out-of-scope finding with causal evidence",
+      "exception_route": "Route to sol_planner for planning_resolution",
+      "reason": "A required path outside PATHS_ALLOW is a category B scope omission; broader audit reading never grants write authority."
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor",
+      "write_authority": "none for the audit",
+      "audit_route": "Audit r3 against the last successfully completed audit revision; perform a full audit if none exists",
+      "exception_route": "The abandoned r2 audit routes to sol_planner and must never become the incremental baseline",
+      "reason": "ACTION abandon does not advance audit state, so r2 cannot serve as the delta baseline for r3."
+     }
+    ],
+    "quality_notes": [
+     "Only sol_planner defines or changes repository-write contracts, and only luna_worker performs authorized writes.",
+     "Audit read scope may exceed PATHS_ALLOW along the bounded impact cone, but write scope may not.",
+     "Every repair creates a new revision that must be audited."
+    ]
+   }
+  },
+  {
+   "id": "m40_c0_zh_r2",
+   "variant": "C0",
+   "language": "zh",
+   "run": 2,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-33-16-019ff4e3-c8e0-76e0-96ee-6100f4b43048.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:33:17.008Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:33:23.547Z",
+     "input_tokens": 21511,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1287,
+     "output_tokens": 175,
+     "reasoning_output_tokens": 27,
+     "total_tokens": 21686
+    },
+    {
+     "timestamp": "2026-08-12T07:34:09.061Z",
+     "input_tokens": 25003,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 4779,
+     "output_tokens": 1998,
+     "reasoning_output_tokens": 853,
+     "total_tokens": 27001
+    }
+   ],
+   "final_output": {
+    "variant": "C0",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "仅 luna_worker 在收到完整有效的 DISPATCH 后写入",
+      "audit_route": "Luna PASS 后由父代理验证 scope、revision、证据和预注册审计契约，再直接启动独立 terra_auditor",
+      "exception_route": "契约缺失、未定义或发生变化时返回 sol_planner",
+      "reason": "所有产生改动的任务都必须先由 Sol 规划授权；低风险和单文件不会免除写入契约与审计要求。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "兼容性决策完成并由 Sol 签发各批次及集成 DISPATCH 后，才由 luna_worker 按授权写入",
+      "audit_route": "对各组件 revision 进行预注册 Terra 审计，并在顺序集成后执行最终 scope、验收和已声明的最终审计",
+      "exception_route": "Sol 以 BLOCKED/major-decision/REQUEST human_authority 路由 parent:user；用户决定后再由 Sol 固化共享契约和集成清单",
+      "reason": "三个依赖批次必须声明共享契约与集成属性，而公开 API 向后兼容属于实质性兼容性承诺，不能留给 Sol 或 Luna自行决定。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 只读，且用户明确禁止编辑",
+      "audit_route": "由独立 Terra 对当前 diff 沿有界因果影响锥进行审计并提供证据",
+      "exception_route": "需要规划、授权或重大决策时加入 sol_planner；任何修复请求均不得绕过用户的禁止编辑约束",
+      "reason": "明确的独立审计和证据调查从 Terra 开始，Terra 不能授权或执行写入。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "原 DISPATCH 仅授权其既定范围；出现 spinning 后停止继续尝试和写入",
+      "audit_route": "停止 Luna，将完整复现证据转给 terra_auditor 作 technical resolution",
+      "exception_route": "停止状态锁存，直到 revision、contract 或 evidence 改变；Terra 预算耗尽再转 sol_planner",
+      "reason": "在 revision、契约和证据均未变化时连续两次相同失败构成确定性 spinning，禁止原样重试。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "仍仅限原有效 DISPATCH，但该 PASS 不产生后续写入或审计授权",
+      "audit_route": "拒绝启动 Terra；先由原 Luna 以 FAILURE: verification 修正结果并生成有效 dirty revision",
+      "exception_route": "若无法完成 scope 或 revision 验证，则保持 verification blocker 并返回既定异常路由",
+      "reason": "脏状态必须使用可复现的 worktree-sha256 revision；仅用干净 baseline commit SHA 的 dirty key 明确无效。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "Terra 无写权；父代理核验修复信封后，将写入机械交回原 luna_worker",
+      "audit_route": "Luna 修复后生成新 revision，并由 Terra 对新 revision 重新审计",
+      "exception_route": "ID、证据、预注册审计、PATHS_ALLOW、contract 或 repair budget 任一不满足时返回 sol_planner",
+      "reason": "这是 A 类改动引起的验收缺陷，且修复在原范围内、契约不变并有剩余修复预算，符合有界 repair 回路。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "现有 DISPATCH 不授权 PATHS_ALLOW 外写入；Terra 也不得修复",
+      "audit_route": "Terra 记录路径、证据、因果关系、严重性、阻塞决定和责任归属，并将该 B 类发现阻塞",
+      "exception_route": "以 planning_resolution 返回 sol_planner，由 Sol 重新处理 scope；若涉及重大承诺再请求 parent:user",
+      "reason": "必要修复位于 PATHS_ALLOW 外属于 scope 变化，必须回到 Sol，不能由 Terra 或原 Luna自行扩权。"
+     },
+     {
+      "id": 8,
+      "entry_role": "sol_planner",
+      "write_authority": "审计本身无写权；后续修复仍须有效 DISPATCH 授权 luna_worker",
+      "audit_route": "为 r3 启动 Terra；增量基线使用 r2 之前最后一次成功完成的审计 revision，若不存在则对 r3 做首次完整审计",
+      "exception_route": "r2 记录 ACTION: abandon 并路由 Sol，且永远不得把 r2 提升为增量审计基线",
+      "reason": "提前终止或重试耗尽的审计不得更新增量基线；后续 revision 只能相对最后成功审计状态审 delta，否则必须完整审计。"
+     }
+    ],
+    "quality_notes": [
+     "仅依据指定的完整 C0 Skill 判定，未检查 GitHub、其他 Skill 变体、实验结果或其他代理。",
+     "将 audit_route 表述为正常审计路径，将 exception_route 表述为异常、越权、预算或重大决策的机械路由。"
+    ]
+   }
+  },
+  {
+   "id": "m40_e0_zh_r2",
+   "variant": "E0",
+   "language": "zh",
+   "run": 2,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-33-38-019ff4e4-1ebd-75e2-913e-31589621feea.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:33:39.042Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:33:45.605Z",
+     "input_tokens": 21510,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1286,
+     "output_tokens": 142,
+     "reasoning_output_tokens": 21,
+     "total_tokens": 21652
+    },
+    {
+     "timestamp": "2026-08-12T07:34:25.112Z",
+     "input_tokens": 24340,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 4116,
+     "output_tokens": 1636,
+     "reasoning_output_tokens": 360,
+     "total_tokens": 25976
+    }
+   ],
+   "final_output": {
+    "variant": "E0",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker 仅在收到完整有效的 DISPATCH 后写入指定 PATHS_ALLOW",
+      "audit_route": "Luna PASS 后由 parent 校验 scope、revision、replay 与预注册审计合同，再直接交 terra_auditor",
+      "exception_route": "未定义、不完整或改变 contract 的状态返回 sol_planner",
+      "reason": "所有仓库改动均从 Sol 开始；任务虽低风险且仅单文件，也不能绕过写入合同，但应使用最小代理池。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "当前不授予；公共 API 兼容性决定完成后，分别由受有效 DISPATCH 约束的 luna_worker 执行各批次，并由一个 Luna 负责授权后的集成写入",
+      "audit_route": "各批次按预注册规则由 terra_auditor 审计，最终还需通过集成 scope、acceptance 及已声明的 final audit",
+      "exception_route": "sol_planner 以 BLOCKED/major-decision/REQUEST human_authority 路由用户决定兼容性",
+      "reason": "两个以上写入批次必须声明共享合同、依赖顺序和集成合同；公共接口兼容性属于重大决定，未决定前不能下发无重大决策的 DISPATCH。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 为只读，PASS、BLOCKED、ESCALATE 也都不授权写入",
+      "audit_route": "由 terra_auditor 直接执行独立只读审计并向 parent 返回因果证据和结论",
+      "exception_route": "若需要规划或授权则返回 sol_planner；若发现可修复的本次改动缺陷，只能 REQUEST implementation，由既有合同决定后续",
+      "reason": "审计或诊断允许直接从 Terra 开始，且用户明确禁止编辑。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "停止后续写入；相同 revision、contract、evidence 下的停止状态保持锁定",
+      "audit_route": "两次停滞调用构成确定性的 spinning 信号，Luna 耗尽后由 parent 路由 terra_auditor 做 technical resolution",
+      "exception_route": "若 Terra 也耗尽则路由 sol_planner；只有 revision、contract 或 evidence 变化才可解除停止锁定",
+      "reason": "风险熔断器规定两次 stagnant calls 即停止，parent 不得在 Luna 失败或中断后自行修复或写入。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "原 DISPATCH 的写入权限不因此扩大，但该 PASS 无效，Luna 必须纠正结果并提供正确 revision 证据",
+      "audit_route": "parent 拒绝启动 Terra；先要求 originating luna_worker 以 FAILURE verification 修正，脏状态 revision 必须为 worktree-sha256:<64 lowercase hex>",
+      "exception_route": "若无法生成或验证具体脏 revision，则按 verification failure 处理；未满足预条件时返回 sol_planner",
+      "reason": "只有干净已提交状态可用精确 commit SHA；以 baseline SHA 标识脏工作树属于被明确禁止的 baseline-only dirty key。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "terra_auditor 无写权；parent 核对 DISPATCH_ID、审计身份、contract unchanged、AFFECTED_PATHS 和预算后，将原 DISPATCH 机械返回原 luna_worker 修复",
+      "audit_route": "修复产生新 revision，并由 terra_auditor 对新 revision 重新审计",
+      "exception_route": "若 scope、contract、acceptance、接口等发生变化，或修复含糊、预算耗尽，则返回 sol_planner",
+      "reason": "这是 A 类由改动导致的验收缺陷，且满足合同保持、原 PATHS_ALLOW 内和 repair budget 有余额的有界修复条件。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；现有 DISPATCH 不允许 Luna 写 PATHS_ALLOW 之外的路径",
+      "audit_route": "Terra 将其记录为 B 类必要路径遗漏，附路径、证据、因果性、严重度、阻塞判断和 ownership",
+      "exception_route": "返回 sol_planner 重新决定 scope 与合同；若涉及重大兼容性、安全、政策等决定，再由 Sol 请求 human_authority",
+      "reason": "扩大 PATHS_ALLOW 是 scope/plan 变化，不能走合同不变的直接 repair 路径，也不能由 Terra 授权。"
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；审计本身只读，任何后续修复仍须由有效 DISPATCH 授权 luna_worker",
+      "audit_route": "r2 的 abandon 不更新增量审计基线；r3 应相对最后一次成功完成并被接受的审计 revision 做 delta 与既有 findings 审计，若此前没有成功审计基线则对 r3 做 full audit",
+      "exception_route": "r2 提前终止时由 parent 记录 ACTION abandon 及原因并路由 sol_planner；r3 预条件不完整时同样返回 Sol",
+      "reason": "规范明确规定提前终止或重试耗尽的审计不得推进 incremental-audit baseline，因此不能以已 abandon 的 r2 为基线。"
+     }
+    ],
+    "quality_notes": [
+     "所有写入均需由 sol_planner 编写或修订完整 DISPATCH，并仅由 luna_worker 在 PATHS_ALLOW 内执行。",
+     "terra_auditor 始终只读；其 implementation 请求只是修复建议与机械路由输入，不构成写入授权。",
+     "审计启动前必须由 parent 验证具体 revision、scope、依赖、replay 和预注册审计合同。"
+    ]
+   }
+  },
+  {
+   "id": "m40_c1_zh_r2",
+   "variant": "C1",
+   "language": "zh",
+   "run": 2,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-34-30-019ff4e4-ea14-7a20-a016-5ae80b02c4e5.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:34:31.040Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:34:36.730Z",
+     "input_tokens": 21513,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1289,
+     "output_tokens": 136,
+     "reasoning_output_tokens": 18,
+     "total_tokens": 21649
+    },
+    {
+     "timestamp": "2026-08-12T07:35:40.693Z",
+     "input_tokens": 24383,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 4159,
+     "output_tokens": 1919,
+     "reasoning_output_tokens": 682,
+     "total_tokens": 26302
+    }
+   ],
+   "final_output": {
+    "variant": "C1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "仅 luna_worker 在完整有效的 DISPATCH 下可写入指定单文件路径。",
+      "audit_route": "Luna PASS 后由父代理完成 scope、revision、依赖、复现与审计契约门禁，再直接启动独立 terra_auditor。",
+      "exception_route": "缺失授权、输出无效或出现契约变化时返回 Sol；重大决策才请求用户。",
+      "reason": "所有改动任务都从 Sol 进入；低风险和单文件不会免除规划、写入契约及独立审计。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "当前不授予写入；用户决定兼容性后，Sol 才能为各批次签发完整 DISPATCH，由隔离 worktree 中的 luna_worker 写入。",
+      "audit_route": "按依赖顺序流式审计各组件 revision，并对干净组合状态执行已声明的最终集成审计。",
+      "exception_route": "Sol 以 BLOCKED/major-decision/REQUEST human_authority 向用户提供至多三个选项、一个建议和一个问题。",
+      "reason": "公开 API 向后兼容属于实质性兼容性承诺，不能留给 Sol 或 Luna自行决定；多批次还必须声明共享契约和集成规则。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 只读，用户也明确禁止编辑。",
+      "audit_route": "由未参与实现的 Terra 对当前具体 diff/revision 做独立因果审计，并报告证据、严重性、阻断决定与归属。",
+      "exception_route": "需要规划或授权时返回 Sol；即使发现 A 类缺陷，也只能提出有界修复建议或 REQUEST implementation，不能自行写入。",
+      "reason": "明确的独立审计可从 Terra 开始，而 Terra 的权限始终是只读。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "原 DISPATCH 的写入授权不扩大，但必须立即停止继续重放，且在 revision、contract 或 evidence 变化前不得解锁。",
+      "audit_route": "不进入常规验收审计；按 Luna 耗尽路径以 ESCALATE/technical_resolution 经父代理转给 Terra。",
+      "exception_route": "记录确定性 spinning；Terra 若耗尽或问题要求改变契约，再返回 Sol。",
+      "reason": "两次无变化停滞构成 spinning，未改变的失败或命令不得继续重放。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "仍仅限有效 DISPATCH 的 PATHS_ALLOW；该 PASS 不被接受。",
+      "audit_route": "父代理在 manifest gate 拒绝该 revision，不得启动 Terra；原角色先以 FAILURE verification 修正并提供 worktree-sha256:<64 lowercase hex>。",
+      "exception_route": "若 baseline 漂移则按 verification failure 停止写入并升级；若存在越界路径则按 scope failure 拒绝。",
+      "reason": "干净状态才可用精确 commit SHA；脏状态必须使用包含授权 diff 与 untracked 内容的确定性 worktree revision。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "Terra 无写权；父代理验证身份、证据、审计登记、路径和预算后，机械交回原 luna_worker 在原 PATHS_ALLOW 内修复。",
+      "audit_route": "Terra 返回 ESCALATE/implementation，声明 CONTRACT_EFFECT: unchanged、AFFECTED_PATHS、下一 REPAIR_CYCLE、新 REVISION 与新 EVIDENCE_FINGERPRINT；修复产生的新 revision 必须重审。",
+      "exception_route": "身份、路径、预算或登记校验失败，或 contract、acceptance、constraint 等发生变化时返回 Sol。",
+      "reason": "这是范围内、契约不变且预算充足的 A 类改动引起验收缺陷，符合有界 repair loop。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；原 DISPATCH 不授权 PATHS_ALLOW 外写入，父代理也不能创造清理或修复权限。",
+      "audit_route": "将其分类为必要 scope 遗漏，Terra 以 ESCALATE/planning_resolution 经父代理返回 Sol，当前审计保持阻塞。",
+      "exception_route": "Sol 修改 scope/plan 并签发新授权；若涉及目标、公开接口或其他重大承诺，则请求 human_authority。",
+      "reason": "扩大读取不授予写入，任何必要的范围变化都不能走原 Luna repair 路径。"
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；这是审计基线选择，不产生写入授权。",
+      "audit_route": "r3 只能相对最近一次成功完成的审计 revision 做 delta，并覆盖未解决发现；若此前没有成功审计基线，则对 r3 完整审计。",
+      "exception_route": "r2 的 abandon 记录后路由 Sol，且绝不把 r2 写入增量审计基线。",
+      "reason": "提前终止或重试耗尽的审计不会推进基线，因此 r3 不能以已 abandon 的 r2 为增量起点。"
+     }
+    ],
+    "quality_notes": [
+     "严格区分了写入授权、验收审计和异常路由；PASS、BLOCKED、ESCALATE 本身均不授权写入。",
+     "场景 4 将无变化的两次停滞按确定性 spinning 处理；场景 8 仅认可成功完成的审计 revision 作为增量基线。"
+    ]
+   }
+  },
+  {
+   "id": "m40_e1_zh_r2",
+   "variant": "E1",
+   "language": "zh",
+   "run": 2,
+   "session_id": "019ff43a-acf0-7081-b652-8f6ec6284792",
+   "session_file": "rollout-2026-08-12T15-34-42-019ff4e5-18e6-70d0-b3fb-cab4fe284872.jsonl",
+   "skill_variant_path": null,
+   "started_at": "2026-08-12T07:34:43.052Z",
+   "token_events": [
+    {
+     "timestamp": "2026-08-12T07:34:49.643Z",
+     "input_tokens": 21512,
+     "cached_input_tokens": 20224,
+     "uncached_input_tokens": 1288,
+     "output_tokens": 117,
+     "reasoning_output_tokens": 0,
+     "total_tokens": 21629
+    },
+    {
+     "timestamp": "2026-08-12T07:35:45.394Z",
+     "input_tokens": 24003,
+     "cached_input_tokens": 21248,
+     "uncached_input_tokens": 2755,
+     "output_tokens": 1837,
+     "reasoning_output_tokens": 835,
+     "total_tokens": 25840
+    }
+   ],
+   "final_output": {
+    "variant": "E1",
+    "cases": [
+     {
+      "id": 1,
+      "entry_role": "sol_planner",
+      "write_authority": "luna_worker，仅凭完整 DISPATCH 在 PATHS_ALLOW 内写入",
+      "audit_route": "Luna PASS 经父级范围、revision、依赖和审计合同校验后，直接交 terra_auditor",
+      "exception_route": "任何未定义、不完整或改变合同的状态返回 sol_planner",
+      "reason": "所有仓库改动都须先经 Sol；任务虽简单，也不能绕过完整授权和预注册审计。"
+     },
+     {
+      "id": 2,
+      "entry_role": "sol_planner",
+      "write_authority": "暂无；用户决定兼容性政策后，Sol 才能为各批次签发 DISPATCH",
+      "audit_route": "决定后按依赖流式审计各组件，最终组合集成使用全组件屏障并执行声明的最终审计",
+      "exception_route": "sol_planner 以 BLOCKED/major-decision/REQUEST human_authority 路由 parent:user",
+      "reason": "公共 API 向后兼容属于重大兼容性承诺，不能由 Sol、Luna 或 Terra自行决定。"
+     },
+     {
+      "id": 3,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；Terra 只读，且用户明确禁止编辑",
+      "audit_route": "Terra 直接独立审计当前 diff，并沿有界因果影响锥读取证据",
+      "exception_route": "需要规划或授权时返回 sol_planner；不得启动 Luna 修复",
+      "reason": "直接审计可从 Terra 开始，而 PASS、BLOCKED、ESCALATE 均不授予写权限。"
+     },
+     {
+      "id": 4,
+      "entry_role": "luna_worker",
+      "write_authority": "原 DISPATCH 的写权限被停用，未发生 revision、contract 或 evidence 变化前不得继续重试",
+      "audit_route": "Luna 以 ESCALATE/technical_resolution 路由 parent:terra",
+      "exception_route": "判定为 deterministic spinning；只有 revision、contract 或 evidence 改变才能清除停滞锁存",
+      "reason": "两次未变化的相同失败达到 STAGNANT_CALL_LIMIT，必须立即停止，Luna 耗尽转 Terra。"
+     },
+     {
+      "id": 5,
+      "entry_role": "luna_worker",
+      "write_authority": "仅保留原 DISPATCH 对 PATHS_ALLOW 的授权；该 PASS 不被接受",
+      "audit_route": "不启动 Terra 审计，父级先在 revision gate 拒绝结果",
+      "exception_route": "由原角色以 FAILURE: verification 更正输出，脏状态必须提交 worktree-sha256 revision",
+      "reason": "干净状态才可使用精确 commit SHA；脏工作树使用 baseline SHA 是被明确禁止的 baseline-only dirty key。"
+     },
+     {
+      "id": 6,
+      "entry_role": "terra_auditor",
+      "write_authority": "父级校验身份、证据、审计注册、路径和预算后，机械地将原 Luna 恢复为下一 repair cycle",
+      "audit_route": "Luna 修复产生新 revision 后，由 Terra 重新审计该 revision",
+      "exception_route": "Terra 以 ESCALATE/implementation 路由 parent:repair_or_sol；任一校验失败或合同发生变化则转 sol_planner",
+      "reason": "这是由改动引起的 A 类验收缺陷，修复保持合同、位于原 PATHS_ALLOW 内且预算未耗尽，符合有界修复条件。"
+     },
+     {
+      "id": 7,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；原 DISPATCH 不授权 PATHS_ALLOW 外写入",
+      "audit_route": "当前审计阻断，等待 Sol 扩展或重订范围后再按新合同审计",
+      "exception_route": "terra_auditor 以 ESCALATE/planning_resolution 路由 parent:sol",
+      "reason": "必要修复超出允许路径，属于范围变化，父级和 Terra 都不能自行扩张写权限。"
+     },
+     {
+      "id": 8,
+      "entry_role": "terra_auditor",
+      "write_authority": "无；审计始终只读",
+      "audit_route": "r3 以最后一次成功完成的审计 revision 为增量基线，并覆盖其后的 delta 与未解决发现；若不存在成功基线，则执行 full audit",
+      "exception_route": "r2 的 ACTION: abandon 路由 sol_planner，且绝不把 r2 记为增量审计基线",
+      "reason": "被 abandon 的审计不更新基线，因此 r3 不能以 r2 为增量起点。"
+     }
+    ],
+    "quality_notes": [
+     "结论仅依据指定的完整 E1 SKILL.md。",
+     "未检查 GitHub、议题、拉取请求、其他 Skill 变体、既往实验结果或其他代理，也未修改文件。"
+    ]
+   }
+  }
+ ],
+ "valid_sample_count": 14
+}

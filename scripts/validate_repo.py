@@ -398,10 +398,42 @@ def validate_skill_document(
             error(f"{relative}:{number}: bare heading {line.strip()!r}")
 
 
+def markdown_structure(text: str) -> list[str]:
+    """Return a language-neutral line skeleton for aligned Skill variants."""
+    result: list[str] = []
+    in_fence = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        fence = re.match(r"^(`{3,}|~{3,})(.*)$", stripped)
+        if fence:
+            if in_fence:
+                result.append("fence-close")
+                in_fence = False
+            else:
+                result.append(f"fence-open:{fence.group(2).strip().casefold()}")
+                in_fence = True
+            continue
+        if in_fence:
+            result.append("fence-body")
+        elif not stripped:
+            result.append("blank")
+        elif re.match(r"^#{1,6}\s", stripped):
+            result.append(f"heading:{len(stripped) - len(stripped.lstrip('#'))}")
+        elif stripped.startswith("|"):
+            result.append("table-row")
+        elif re.match(r"^(?:[-+*]|\d+\.)\s", stripped):
+            result.append("list-item")
+        else:
+            result.append("prose")
+    return result
+
+
 def validate_skill() -> None:
     root = ".agents/skills/lean-dev-router/SKILL.md"
     english = "skill-variants/en/SKILL.md"
     chinese = "skill-variants/zhcn/SKILL.md"
+    optimized_english = "skill-variants/en-optimized/SKILL.md"
+    optimized_chinese = "skill-variants/zhcn-optimized/SKILL.md"
     if read(root) != read(english):
         error(f"{root}: must exactly match {english}")
 
@@ -472,6 +504,48 @@ def validate_skill() -> None:
             "Terra 因果审计与修复", "集成", "执行与用户门禁",
         },
     )
+    optimized_common = (
+        "name: lean-dev-router",
+        "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
+        "FAILURE: missing_dispatch", "N/A (batch coverage)",
+        "python scripts/check_scope.py", "worktree-sha256:<64 lowercase hex>",
+        "runtime_guard.py start", "runtime_guard.py audit", "ACTION: abandon",
+        "<component>:<revision>:<stage>", "all-component barrier",
+        "CONTRACT_EFFECT: unchanged", "parent:repair_or_sol",
+        "integration_owner", "integration_baseline", "integration_paths_allow",
+        "integration_acceptance",
+    )
+    validate_skill_document(
+        optimized_english,
+        optimized_common + (
+            "start` atomically performs preflight", "stateless `preflight` subcommand",
+            "zero target calls", "deterministic `spinning`",
+            "Parent never repairs or writes", "never updates the incremental-audit baseline",
+        ),
+        {
+            "Lean Dev Router", "Authority and planning", "Protocol",
+            "Deterministic entry and scope", "Bounded execution",
+            "Streaming audit and repair", "Integration and finish",
+        },
+    )
+    validate_skill_document(
+        optimized_chinese,
+        optimized_common + (
+            "`start` 原子执行预检", "无状态 `preflight` 子命令",
+            "目标调用数为零", "确定性 `spinning`",
+            "父代理绝不修复或写入", "绝不更新增量审计基线",
+        ),
+        {
+            "Lean Dev Router", "权限与规划", "协议", "确定性入口与范围",
+            "有界执行", "流式审计与修复", "集成与完成",
+        },
+    )
+    if len(read(optimized_english)) >= len(read(english)):
+        error(f"{optimized_english}: must be smaller than {english}")
+    if len(read(optimized_chinese)) >= len(read(chinese)):
+        error(f"{optimized_chinese}: must be smaller than {chinese}")
+    if markdown_structure(read(optimized_english)) != markdown_structure(read(optimized_chinese)):
+        error("optimized Skill variants must have aligned Markdown structure")
 
 
 def validate_runtime_guard() -> None:
@@ -517,7 +591,10 @@ def validate_runtime_guard() -> None:
         and isinstance(node.args[0], ast.Constant)
         and isinstance(node.args[0].value, str)
     }
-    for term in ("validate_dispatch", "validate_repair", "abandon_audit"):
+    for term in (
+        "validate_dispatch", "preflight_dispatch", "validate_revision",
+        "validate_repair", "abandon_audit",
+    ):
         if term not in definitions:
             error(f"{relative}: missing runtime gate {term!r}")
     for term in (
@@ -527,7 +604,7 @@ def validate_runtime_guard() -> None:
     ):
         if term not in string_constants:
             error(f"{relative}: missing runtime gate {term!r}")
-    for term in ("start", "event", "repair", "audit", "schema"):
+    for term in ("preflight", "start", "event", "repair", "audit", "schema"):
         if term not in subcommands:
             error(f"{relative}: missing runtime gate subcommand {term!r}")
     for term in (

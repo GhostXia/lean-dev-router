@@ -145,7 +145,7 @@ Terra's read-only guarantee depends on Codex enforcing its configured read-only 
 
 The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
 
-Before the first Luna call, the parent feeds the complete JSON dispatch once to the installed Skill's `scripts/runtime_guard.py start --state <external-scratch-state>`. Repair and audit packets use their subcommands against that same state; restarting is rejected. Exit code 2 means no target child is spawned. The guard persists identity leases, finite budgets, latches, repair cycles, audit revision keys, and per-role/stage telemetry outside the target repository. Run `runtime_guard.py schema` for required fields and `snapshot --state ...` for accumulated telemetry.
+Before the first Luna call, the parent feeds the complete JSON dispatch once to the installed Skill's `scripts/runtime_guard.py start --state <external-scratch-state>`. `start` performs deterministic preflight and state initialization atomically; normal execution must not add a separate preflight call. The stateless `preflight` subcommand is for validating templates and installed runtimes. Repair and audit packets use their subcommands against the same state; restarting is rejected. Exit code 2 means no target child is spawned. The guard persists identity leases, finite budgets, latches, repair cycles, audit revision keys, and per-role/stage telemetry outside the target repository. Run `runtime_guard.py schema` for required fields and `snapshot --state ...` for accumulated telemetry.
 
 For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in Sol's dispatch defines what may change. The parent cannot create a direct Luna fast path.
 
@@ -282,6 +282,8 @@ flowchart LR
 | `.agents/skills/lean-dev-router/` | Routing Skill plus its standard-library runtime guard |
 | `skill-variants/en/SKILL.md` | Exact copy of the default English root Skill |
 | `skill-variants/zhcn/SKILL.md` | Chinese test variant for replacing the installed root Skill |
+| `skill-variants/en-optimized/SKILL.md` | Structurally deduplicated English E1 experiment |
+| `skill-variants/zhcn-optimized/SKILL.md` | Structurally aligned Chinese C1 experiment |
 | `agents/` | Example Agent config files: `luna_worker`, `sol_planner`, `terra_auditor` |
 | `docs/zh-CN/` | Chinese documentation for human readers only |
 | `lean-dev-router-self-test-guide.md` | Controlled guide for measuring token savings, quality, and routing overhead |
@@ -314,6 +316,19 @@ Copy-Item skill-variants/en/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-ro
 ```
 
 Start a fresh Codex task after either replacement.
+
+Verify the installed deterministic entry point without creating guard state:
+
+```powershell
+$guard = "$env:USERPROFILE/.codex/skills/lean-dev-router/scripts/runtime_guard.py"
+python $guard schema
+Get-Content dispatch.json -Raw | python $guard preflight
+```
+
+`preflight` exits 0 with `allowed: true` for a complete contract and exits 2 with stable JSON errors otherwise. Production scheduling still invokes only `start --state ...`, which performs the same validation and initializes state in one call.
+The command validates protocol fields, IDs, repository-relative allow paths, budget ceilings, baseline hashes, and optional concrete revision syntax. It does not inspect a target worktree, replace the independent scope enumeration, or enforce an OS sandbox.
+
+The optimized E1/C1 files are controlled experiment variants, not release defaults. Replace the installed root Skill with one of them only for a fresh benchmark task, then restore `skill-variants/en/SKILL.md`.
 
 #### Optional Scope Helper
 
