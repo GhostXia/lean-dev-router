@@ -27,7 +27,7 @@
 ## 🌟 Core Highlights
 
 > **Token-efficient** — Reduce unnecessary agent calls and handoff context.
-> **Role-separated** — Sol plans, Luna implements, and Terra validates.
+> **Role-separated** — Terra plans eligible work, Sol owns exceptions, Luna implements, and Terra validates independently.
 > **Protocol-driven** — Compact, auditable `lean-dev-router/v2` handoffs.
 > **Isolated parallelism** — Every writing Luna owns a separate worktree or checkout.
 > **Runtime-independent** — The routing theory is portable beyond Codex and GPT.
@@ -46,17 +46,47 @@ I currently use Codex, so this repository uses GPT model identifiers as concrete
 
 For further token savings, this router can be combined with projects such as [Caveman](https://github.com/juliusbrussee/caveman), which reduce unnecessary verbosity in engineering workflows. **Lean Dev Router** reduces unnecessary agent calls and handoff context; **Caveman** reduces unnecessary prose in agent responses. Together, they can help maximize token efficiency while preserving the technical content that matters. This project currently does not plan to duplicate response-compression features already provided by such projects.
 
-Because the subagents use explicitly selected models and bounded assignments, the main conversation can often use a lower-cost model. **Sol** owns engineering planning and authorization, while the parent conversation is the mechanical runtime scheduler and user-facing control surface. Sol is called again only at a declared expansion or exception gate.
+Because the subagents use explicitly selected models and bounded assignments, the main conversation can often use a lower-cost model. **terra_planner** (`gpt-5.6-terra`, high, read-only) directly replaces routine Sol planning for eligible L1/L2 contracts; **Sol** owns every exception and user decision. The parent conversation is the mechanical runtime scheduler and user-facing control surface.
 
 ### 🧭 Engineering Lifecycle Entry Points
 
 | Work Type | Default Route |
 |:---|:---|
-| 🔧 Bounded implementation, fixes, refactors, tests, docs, config | **Sol** issues a minimal single-step `DISPATCH` to **Luna**; harder work receives fuller planning and decomposition |
+| 🔧 Bounded implementation, fixes, refactors, tests, docs, config | Eligible L1/L2 work uses **terra_planner** for one bounded `DISPATCH`; failed predicates, L3, or exceptions use **Sol** |
 | 🔍 Audits, reviews, compliance checks, or release readiness | One or more **Terra** workers first; **Sol** partitions or consolidates when needed; **Luna** handles only authorized remediation |
 | 🐛 Investigations, incidents, performance analysis, debugging | **Terra** establishes evidence and likely causes; **Sol** resolves in-scope technical trade-offs or returns user-owned choices; **Luna** applies the authorized fix |
 | 🔄 Migrations, dependency upgrades, or platform upgrades | **Sol** plans within scope & defines order; **Terra** inventories compatibility & risk; isolated **Luna** worktrees implement; **Terra** verifies |
 | 👑 Major direction, scope, policy, or irreversible commitments | **Sol** may frame options, but the parent returns the decision to the user |
+
+### ⚡ Experimental terra_planner fast path
+
+`terra_planner` may directly replace routine Sol planning only when every
+eligibility predicate is true: `LEVEL` is L1/L2; `OBJECTIVE_FIXED` is true;
+`BASELINE`, `SCOPE_ROOTS`, and `ACCEPTANCE` are non-empty;
+`OPEN_MAJOR_DECISIONS` is false; `RISK_FLAGS` and `EXTERNAL_ACTIONS` are none;
+`MAX_DISPATCHES` is exactly 1; `COMPONENT_COUNT` is at most 2; and
+`DEPENDENCY_DEPTH` is at most 1. Ambiguity, contract expansion, a required path
+outside `SCOPE_ROOTS`, or more than one write batch routes directly to Sol with
+no routine Terra-to-Sol review.
+
+Every change-producing run starts with one read-only `terra_planner`
+classification. It derives the canonical evidence from the user objective and
+repository; the parent does not classify the task. `REQUIRED_PATHS`,
+`WRITE_BATCH_COUNT`, `CONTRACT_EXPANDED`, and `AMBIGUITY` must be explicit;
+`SCOPE_ROOTS`, `PATHS_ALLOW`, and `REQUIRED_PATHS` are repository-relative path
+lists, and every non-empty allowed/required path stays inside `SCOPE_ROOTS`.
+Malformed, missing, or contradictory evidence routes directly to Sol.
+
+Risk flags are `security`, `privacy`, `public-contract`,
+`data-schema-or-migration`, `destructive`, `production`,
+`external-commitment`, `license`, `material-compatibility`, `concurrency`,
+`irreversible`, and material-cost changes. Terra can inspect read-only, analyze,
+issue one bounded Luna `DISPATCH`, preregister an independent Terra audit, and
+emit a finite manifest. It cannot schedule/wait, implement, audit, amend after
+execution, or request `human_authority`. Every plan carries `PLAN_ID`,
+`PLANNER_ROLE`, `PLANNER_INSTANCE_ID`, and an independent
+`AUDITOR_INSTANCE_ID`; role leases are immutable per plan and Luna validates
+planner authority before writing.
 
 > ⚠️ This expansion covers **repository-bound engineering work only**. It does not grant authority for production deployment, destructive operations, external commitments, or changes to business/product policy **without explicit user approval**.
 
@@ -69,6 +99,10 @@ PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
 DISPATCH_ID: stable unique component/write identifier
+PLAN_ID: stable plan identifier
+PLANNER_ROLE: sol_planner | terra_planner
+PLANNER_INSTANCE_ID: immutable planner instance identifier
+AUDITOR_INSTANCE_ID: independent auditor instance identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -80,15 +114,21 @@ CONSTRAINTS:
 NEXT: parent
 ```
 
-Only Sol authors or amends a `DISPATCH`; the parent may relay it unchanged. Missing fields, non-relative write paths, or open major product/architecture decisions make it invalid. Luna then performs no implementation work and returns `BLOCKED / missing_dispatch / NEXT parent` without naming a planning role. A minimal single-step `DISPATCH` preserves the L1 path without weakening the gate.
+Sol authors or amends exception `DISPATCH` contracts; an eligible terra_planner
+may issue one bounded `DISPATCH` under the same schema, and the parent relays it
+unchanged. Luna validates planner authority and identity before writing. Missing
+fields, non-relative write paths, or open major product/architecture decisions
+make it invalid; Luna then performs no implementation work and returns
+`BLOCKED / missing_dispatch / NEXT parent`. A minimal single-step `DISPATCH`
+preserves the eligible L1/L2 path without weakening Sol's exception gate.
 
 Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Workers request capabilities rather than naming peers; the parent performs a deterministic role-and-request lookup without interpreting the evidence.
 
-All three roles use a separate compact outbound result protocol:
+All four roles use a separate compact outbound result protocol:
 
 ```text
 PROTOCOL: lean-dev-router/v2
-AGENT: luna_worker | terra_auditor | sol_planner
+AGENT: luna_worker | terra_auditor | terra_planner | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
 REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
@@ -116,10 +156,10 @@ Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `
 
 #### Migrating from v1 to v2
 
-1. Replace the Skill and all three Agent TOML files together; do not mix installed v1 and v2 runtime files.
+1. Replace the Skill and all four Agent TOML files together; do not mix installed v1 and v2 runtime files.
 2. Replace stored `PROTOCOL: lean-dev-router/v1` templates with `PROTOCOL: lean-dev-router/v2`.
 3. Add `REQUEST` to every outbound result and select only a combination listed in the Skill's role-status-request table.
-4. Replace every named outbound `NEXT` value with `NEXT: parent`; keep inbound write authorization as a complete Sol-issued `DISPATCH`.
+4. Replace every named outbound `NEXT` value with `NEXT: parent`; keep inbound write authorization as a complete planner-issued `DISPATCH` carrying plan and role identity.
 5. Do not resume an in-flight v1 handoff chain as v2. Finish or stop it, then start a fresh v2 coordination session.
 6. Run `python scripts/validate_repo.py` and the repository tests after replacing local runtime files.
 
@@ -133,11 +173,11 @@ Terra's read-only guarantee depends on Codex enforcing its configured read-only 
 
 ### 🚧 Hard Entry Gate and Scope Fuse
 
-The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
+The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is the authorized planner's Todo/DISPATCH decomposition plus precise Luna instructions. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
 
-For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in Sol's dispatch defines what may change. The parent cannot create a direct Luna fast path.
+For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in the planner's dispatch defines what may change. Luna starts only from a complete planner-issued dispatch, which the parent relays unchanged.
 
-Before accepting Luna's `PASS`, Sol—or the parent mechanically relaying for Sol—independently checks tracked, standard untracked, and ignored untracked paths:
+Before accepting Luna's `PASS`, the authorized planner—or the parent mechanically relaying for it—independently checks tracked, standard untracked, and ignored untracked paths:
 
 ```bash
 git diff --name-only --no-renames <baseline> --
@@ -191,7 +231,7 @@ NEXT: parent
 
 ### 🔌 Codex Execution Mode
 
-Native Codex subagents are the default. Start every change-producing task with **Sol** planning. Sol emits a minimal single-step `DISPATCH` for bounded L1 work, or a compact `PLAN_MANIFEST` containing global invariants, the currently ready `DISPATCH_WAVE`, preregistered audits, and an `EXPANSION_GATE`. It does not pre-expand distant work.
+Native Codex subagents are the default. Start each change-producing task with one read-only **terra_planner** classification. Terra derives the eligibility evidence from the objective and repository: eligible L1/L2 work stays on that path, while failed predicates, L3, and exceptions route directly to Sol. The parent only relays the result. The planner emits one bounded `DISPATCH` or a compact `PLAN_MANIFEST` containing global invariants, the ready `DISPATCH_WAVE`, preregistered audits, and an `EXPANSION_GATE`. It does not pre-expand distant work.
 
 **Key Rules:**
 
@@ -205,7 +245,7 @@ Native Codex subagents are the default. Start every change-producing task with *
 3. Its first result follows `lean-dev-router/v2`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `PLAN_ID`, `PLANNER_ROLE`, `PLANNER_INSTANCE_ID`, `AUDITOR_INSTANCE_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
 
 The parent executes it mechanically. It calls Sol again only at an expansion gate, an undefined transition, a contract change, or a user-owned decision. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -215,7 +255,7 @@ Independent components advance as soon as they are ready. The parent starts or q
 
 Component audits and re-audits use a stable `<component>:<revision>:<stage>` job key with `queued`, `running`, `complete`, or `failed` state. If a batch spawn partially fails, reconcile each item and retry only missing or failed keys; never replay a running or complete job. Sol remains available for declared planning and exception gates, not as the routine event loop.
 
-Sol preregisters Terra's objective, change scope, broader causal impact cone, acceptance, dependencies, revision rule, and replay evidence. After Luna `PASS`, the parent verifies those gates and launches Terra directly. Terra reads causal neighbors beyond `PATHS_ALLOW` and classifies outside findings: A change-caused acceptance defect, B necessary omitted scope, C unrelated existing issue, or D severe security/data-loss/compatibility risk. A bounded unchanged-contract repair may return mechanically to the original Luna; scope, plan, acceptance, public-interface, architecture, security, data-format, resource-limit, ambiguity, or exhausted-budget changes return to Sol.
+Sol or eligible terra_planner preregisters Terra's objective, change scope, broader causal impact cone, acceptance, dependencies, revision rule, and replay evidence. After Luna `PASS`, the parent verifies those gates and starts the preregistered Terra audit directly. Terra reads causal neighbors beyond `PATHS_ALLOW` and classifies outside findings: A change-caused acceptance defect, B necessary omitted scope, C unrelated existing issue, or D severe security/data-loss/compatibility risk. A bounded unchanged-contract repair may return mechanically to the original Luna; scope, plan, acceptance, public-interface, architecture, security, data-format, resource-limit, ambiguity, or exhausted-budget changes return to Sol.
 
 When every manifest-declared scope, revision, audit, repair, integration, and final gate is terminal and passing, the parent may summarize completion without another Sol round-trip.
 
@@ -248,6 +288,8 @@ The cap covers Luna and Terra workers combined and is a routing heuristic, not a
 ```mermaid
 flowchart LR
     U[user] --> P[parent state machine]
+    P --> TP[terra_planner<br/>eligible L1/L2 only]
+    TP --> P
     P --> S[sol_planner<br/>plan / authorize / decide]
     S --> P
     P --> L[luna_worker × N<br/>isolated writes]
@@ -257,6 +299,7 @@ flowchart LR
     P --> U
 
     style P fill:#1e293b,stroke:#334155,color:#fff
+    style TP fill:#a78bfa,stroke:#7c3aed,color:#000
     style S fill:#f59e0b,stroke:#d97706,color:#000
     style L fill:#0ea5e9,stroke:#0284c7,color:#000
     style T fill:#10b981,stroke:#059669,color:#000
@@ -268,7 +311,7 @@ flowchart LR
 | Path | Description |
 |:---|:---|
 | `.agents/skills/lean-dev-router/` | The lightweight routing Skill |
-| `agents/` | Example Agent config files: `luna_worker`, `sol_planner`, `terra_auditor` |
+| `agents/` | Example Agent config files: `luna_worker`, `sol_planner`, `terra_planner`, `terra_auditor` |
 | `docs/zh-CN/` | Chinese documentation for human readers only |
 | `lean-dev-router-self-test-guide.md` | Controlled guide for measuring token savings, quality, and routing overhead |
 | `lean-dev-router-l3-idempotent-orders-task.md` | Reusable L3 benchmark task packet |
@@ -280,7 +323,7 @@ flowchart LR
 For **Codex**, install this required runtime as one versioned unit:
 
 1. `.agents/skills/lean-dev-router/` → `~/.codex/skills/lean-dev-router/`
-2. The three files in `agents/` → `~/.codex/agents/`
+2. The four files in `agents/` → `~/.codex/agents/`
 
 Do not mix a Skill from one release with Agent TOML files from another. Start a fresh Codex task after installation; do not resume an in-flight v1 handoff as v2.
 
@@ -291,13 +334,13 @@ Do not mix a Skill from one release with Agent TOML files from another. Start a 
 #### Upgrade and Verify
 
 1. Stop or finish any in-flight handoff chain.
-2. Replace the Skill directory and all three Agent TOML files from the same release.
+2. Replace the Skill directory and all four Agent TOML files from the same release.
 3. Start a fresh Codex task and verify the intended custom Agent, model, reasoning effort, sandbox, and first `lean-dev-router/v2` result before a dependent or write handoff.
 4. From a clean checkout of this release, run `python scripts/validate_repo.py` and `python -m unittest discover -s tests -v`.
 
 #### Uninstall or Roll Back
 
-To uninstall, remove only the installed `lean-dev-router` Skill directory and the three named Agent TOML files, then start a fresh Codex task. This does not modify target repositories. To roll back, replace both groups with the complete files from one earlier release; never combine versions or resume an in-flight handoff across the change.
+To uninstall, remove only the installed `lean-dev-router` Skill directory and the four named Agent TOML files, then start a fresh Codex task. This does not modify target repositories. To roll back, replace both groups with the complete files from one earlier release; never combine versions or resume an in-flight handoff across the change.
 
 Adapt the file format and model identifiers when using another runtime.
 
@@ -305,7 +348,8 @@ Adapt the file format and model identifiers when using another runtime.
 
 | Role | Badge | Responsibility |
 |:---|:---:|:---|
-| **sol_planner** | 👑 | Sole `DISPATCH` author for writes and single planner/orchestrator for complex tasks. Scales, directs, and consolidates Luna/Terra workers; returns user-owned decisions to the parent. |
+| **terra_planner** | ⚡ | Read-only deterministic L1/L2 planner. Issues at most one bounded Luna `DISPATCH`, preregisters an independent audit, and emits a finite manifest; it cannot schedule, implement, audit, amend, or request authority. |
+| **sol_planner** | 👑 | Exception planner and `DISPATCH` authority for L3, risk, ambiguity, expansion, integration, and user-owned decisions. |
 | **luna_worker** | ⚡ | Bounded code, test, documentation, and configuration edits. Multiple instances may run in parallel on isolated assignments. |
 | **terra_auditor** | 🔍 | Code audit, technical diagnosis, and validation. Escalate only when it cannot resolve the issue or a major decision is required. |
 

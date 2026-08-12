@@ -6,19 +6,39 @@
 
 ## 项目定位
 
-Lean Dev Router 用三个职责不同的角色处理仓库内的软件工程任务：
+Lean Dev Router 用四个职责不同的角色处理仓库内的软件工程任务：
 
+- `terra_planner`：只读的实验性确定性规划者；仅对满足固定谓词的 L1/L2 任务直接替代例行 Sol 规划。
 - `sol_planner`：工程方案与授权者，负责拆分、契约、预注册审计和例外决策，但不持续调度运行时事件。
 - `luna_worker`：仅在收到完整的标准 `DISPATCH` 后，按其中的任务摘要、基线、允许写入路径、验收和约束实施改动。
 - `terra_auditor`：沿因果影响面进行只读审计、诊断和验证，并给出不带写授权的最小修复建议。
 
-父会话是机械状态机：按 Sol 已声明的 manifest 启动、排队和转交，不在没有用户指令时自行作工程决策。Sol 的规划采用有界波次：每次只输出全局不变量、当前可执行的 `DISPATCH_WAVE` 与下一次 `EXPANSION_GATE`；父会话只在该门或例外发生时再次请求 Sol，避免一次性计划过长带来的偏差。
+父会话是机械状态机：按授权 planner（`terra_planner` 或 `sol_planner`）已声明的 manifest 启动、排队和转交，不在没有用户指令时自行作工程决策。规划采用有界波次：每次只输出全局不变量、当前可执行的 `DISPATCH_WAVE` 与下一次 `EXPANSION_GATE`；父会话只在该门或例外发生时请求 Sol，避免一次性计划过长带来的偏差。
 
-目标不是每次都调用全部角色，而是用满足任务需要的最小组合完成工作。所有写入任务先由 Sol 签发开工契约：边界清楚的 L1 改动只需最小单步 `DISPATCH`，模糊、跨模块或需要分批集成的任务则由 Sol 完整规划；审计和诊断仍可从 Terra 开始。
+目标不是每次都调用全部角色，而是用满足任务需要的最小组合完成工作。符合确定性谓词的 L1/L2 写入由 `terra_planner` 直接规划并签发一个有界 `DISPATCH`；L3、风险、歧义、范围外路径、契约扩展、多个写入批次或用户决策直接回到 Sol，不经过例行 Terra→Sol 复核。其他任务仍由 Sol 规划；审计和诊断可从 Terra 开始。
+
+每个会产生改动的任务先进行一次只读 `terra_planner` 分类。它依据用户目标和仓库状态生成规范 eligibility 证据；父会话不负责给任务定级。符合条件的任务留在 Terra 快路径，任何无法只读确认、缺失或矛盾的证据都直接升级到 Sol。
+
+### terra_planner 实验路径
+
+只有以下条件全部满足时才允许快路径：`LEVEL` 为 L1/L2，
+`OBJECTIVE_FIXED` 为 true，`BASELINE`、`SCOPE_ROOTS`、`ACCEPTANCE` 非空，
+`OPEN_MAJOR_DECISIONS` 为 false，`RISK_FLAGS` 与 `EXTERNAL_ACTIONS` 为 none，
+`MAX_DISPATCHES` 等于 1，`COMPONENT_COUNT` 不超过 2，
+`DEPENDENCY_DEPTH` 不超过 1。必需路径在 `SCOPE_ROOTS` 外、歧义、契约扩展或超过一个写入批次都会直接路由 Sol。
+`REQUIRED_PATHS`、`WRITE_BATCH_COUNT`、`CONTRACT_EXPANDED`、`AMBIGUITY` 必须显式给出；不得依靠缺省值放行。
+`SCOPE_ROOTS`、`PATHS_ALLOW`、`REQUIRED_PATHS` 必须是仓库相对路径列表，且允许或必需路径不得越出 `SCOPE_ROOTS`；畸形字段直接升级 Sol，不得抛错或放行。
+
+风险旗标包括 security、privacy、public-contract、data-schema-or-migration、
+destructive、production、external-commitment、license、
+material-compatibility、concurrency、irreversible 与 material-cost changes。
+`terra_planner` 可以只读检查、分析、发出一个有界 Luna `DISPATCH`、预注册独立只读 Terra 审计并输出有限 manifest；不能调度/等待、实施、审计、执行后修改或请求 `human_authority`。
+每个计划必须携带 `PLAN_ID`、`PLANNER_ROLE`、`PLANNER_INSTANCE_ID` 与不同的
+`AUDITOR_INSTANCE_ID`。同一 `AGENT_INSTANCE_ID` 在同一计划中只能拥有不可变角色租约，且审计者不能规划或实施该计划；Luna 会在写入前验证这些身份。
 
 ## 交接协议怎么读
 
-协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空且稳定唯一的 `DISPATCH_ID`、任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。该 ID 贯穿 Luna 证据、预注册 Terra 审计和契约内返工核验。只有 Sol 可以签发或修改，父会话只能原样转发；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`。
+协议把“入站执行授权”和“出站结果”分开。Luna 开始任何实现工具或写入前，必须收到 `PROTOCOL: lean-dev-router/v2`、`STATUS: DISPATCH`、`TARGET: implementation`，以及非空且稳定唯一的 `DISPATCH_ID`、`PLAN_ID`、`PLANNER_ROLE`、`PLANNER_INSTANCE_ID`、`AUDITOR_INSTANCE_ID`、任务摘要、基线、相对仓库的允许路径、客观验收和固定约束。该 ID 贯穿 Luna 证据、预注册 Terra 审计和契约内返工核验。Sol 签发或修改例外契约；符合谓词的 `terra_planner` 可发出一个有界契约，父会话只能原样转发，Luna 会验证规划者权限和身份；缺失或非法时，Luna 不实施并返回 `BLOCKED / missing_dispatch / NEXT parent`。
 
 Agent 返回的出站交接包含状态、失败类型、能力请求、证据、固定的 `NEXT: parent` 和一句摘要。重点检查三件事：
 
@@ -28,11 +48,11 @@ Agent 返回的出站交接包含状态、失败类型、能力请求、证据�
 
 `PASS`、`BLOCKED`、`ESCALATE` 都只是结果，不能作为写入授权；`PLAN_READY` 也不是执行状态。
 
-升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验范围、稳定 revision、依赖与 replay；若 Sol 已预注册审计，则直接启动 Terra。Terra 发现不改变原契约且仍在 `PATHS_ALLOW` 内的缺陷时，父会话可在返工预算内直接交回原 Luna；涉及范围、方案、验收、公共接口、架构、安全边界、数据格式、资源限制或歧义时才回 Sol。只有 Sol 可以请求用户决策。
+升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验范围、稳定 revision、依赖与 replay；若 planner 已预注册审计，则在 gates 通过后直接启动 Terra。Terra 发现不改变原契约且仍在 `PATHS_ALLOW` 内的缺陷时，父会话可在返工预算内直接交回原 Luna；涉及范围、方案、验收、公共接口、架构、安全边界、数据格式、资源限制或歧义时才回 Sol。只有 Sol 可以请求用户决策。
 
 `lean-dev-router/v2` 与 v1 不兼容：v2 强制要求 `REQUEST`，并禁止在 `NEXT` 中点名具体 Agent。协调者必须拒绝混用版本的交接，不能自动猜测或静默转换。
 
-从 v1 迁移时，应一次性替换 Skill 和三个 Agent TOML，把保存的协议模板改为 v2，为每个出站结果增加合法的 `REQUEST`，并把具名的出站 `NEXT` 改为 `NEXT: parent`。不要把进行中的 v1 交接链直接续接为 v2；结束或停止旧链后，从新的 v2 协调会话开始。
+从 v1 迁移时，应一次性替换 Skill 和四个 Agent TOML，把保存的协议模板改为 v2，为每个出站结果增加合法的 `REQUEST`，并把具名的出站 `NEXT` 改为 `NEXT: parent`。不要把进行中的 v1 交接链直接续接为 v2；结束或停止旧链后，从新的 v2 协调会话开始。
 
 协议的精确定义只维护在英文 Skill 中，避免中英文副本漂移。
 
@@ -103,7 +123,7 @@ Terra 的读取范围必须宽于改动范围：沿调用关系、数据/错误/
 Codex 用户必须把以下英文运行时作为同一版本整体安装：
 
 1. `.agents/skills/lean-dev-router/` 到 Codex 的 Skill 目录；
-2. `agents/` 下的三个 TOML 文件到 Codex 的 Agent 配置目录。
+2. `agents/` 下的四个 TOML 文件到 Codex 的 Agent 配置目录。
 
 不得混用不同版本的 Skill 与 Agent TOML。安装后启动新的 Codex 任务；不得把仍在进行的 v1 handoff 直接恢复为 v2。
 
@@ -114,13 +134,13 @@ Codex 用户必须把以下英文运行时作为同一版本整体安装：
 ### 升级与验证
 
 1. 先结束或停止正在进行的 handoff 链；
-2. 使用同一个 release 同时替换 Skill 目录和三个 Agent TOML；
+2. 使用同一个 release 同时替换 Skill 目录和四个 Agent TOML；
 3. 启动新的 Codex 任务，在依赖或写入 handoff 前确认实际 Agent、模型、reasoning effort、sandbox 与首个 `lean-dev-router/v2` 结果；
 4. 在该 release 的干净 checkout 中运行 `python scripts/validate_repo.py` 和 `python -m unittest discover -s tests -v`。
 
 ### 卸载与回滚
 
-卸载时只删除已安装的 `lean-dev-router` Skill 目录和三个具名 Agent TOML，然后启动新的 Codex 任务；这不会修改目标仓库。回滚时必须用某一个旧 release 的完整文件同时替换两组运行时，不得混合版本，也不得跨版本继续尚未结束的 handoff。
+卸载时只删除已安装的 `lean-dev-router` Skill 目录和四个具名 Agent TOML，然后启动新的 Codex 任务；这不会修改目标仓库。回滚时必须用某一个旧 release 的完整文件同时替换两组运行时，不得混合版本，也不得跨版本继续尚未结束的 handoff。
 
 ## 维护边界
 

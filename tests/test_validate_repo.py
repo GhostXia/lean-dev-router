@@ -45,6 +45,7 @@ class ValidateRepositoryTests(unittest.TestCase):
             "agents/luna-worker.toml",
             "agents/sol-planner.toml",
             "agents/terra-auditor.toml",
+            "agents/terra-planner.toml",
         ):
             source = self.source(relative)
             if "luna-worker" in relative:
@@ -66,12 +67,16 @@ class ValidateRepositoryTests(unittest.TestCase):
             ("sol_planner", "BLOCKED", "none"): "parent:pause",
             ("sol_planner", "BLOCKED", "implementation"): "parent:luna",
             ("sol_planner", "BLOCKED", "human_authority"): "parent:user",
+            ("terra_planner", "PASS", "none"): "parent:manifest_gate",
+            ("terra_planner", "BLOCKED", "none"): "parent:pause",
+            ("terra_planner", "BLOCKED", "implementation"): "parent:luna",
+            ("terra_planner", "ESCALATE", "planning_resolution"): "parent:sol",
         }
         self.assertEqual(validate_repo.HANDOFF_ROUTES, expected)
         for route, destination in expected.items():
             self.assertEqual(validate_repo.resolve_handoff_route(*route), destination)
         all_routes = itertools.product(
-            ("luna_worker", "terra_auditor", "sol_planner"),
+            ("luna_worker", "terra_auditor", "terra_planner", "sol_planner"),
             ("PASS", "BLOCKED", "ESCALATE"),
             ("none", "implementation", "technical_resolution", "planning_resolution", "human_authority"),
         )
@@ -84,7 +89,7 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertEqual(self.validate_skill(skill), [])
         scenarios = {
             "planning waves": ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "does not continuously schedule"),
-            "direct audit": ("launches Terra directly", "No routine Luna-to-Sol-to-Terra hop"),
+            "direct audit": ("starts the preregistered Terra audit directly", "No routine Luna-to-Sol-to-Terra hop"),
             "revision": ("worktree-sha256:<64 lowercase hex>", "same state reproduces", "repair changes"),
             "artifacts": ("persistent writes only", "disposable artifact", "never enter revision identity"),
             "fuse": ("three materially distinct attempts", "twenty", "unchanged command"),
@@ -140,7 +145,8 @@ class ValidateRepositoryTests(unittest.TestCase):
     def test_agent_profiles_preserve_role_boundaries(self) -> None:
         originals = {
             path: self.source(path) for path in (
-                "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"
+                "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml",
+                "agents/terra-planner.toml",
             )
         }
         for path, source in originals.items():
@@ -152,6 +158,7 @@ class ValidateRepositoryTests(unittest.TestCase):
             "agents/sol-planner.toml": "EXPANSION_GATE",
             "agents/luna-worker.toml": "scripts/check_scope.py",
             "agents/terra-auditor.toml": "CONTRACT_EFFECT: unchanged",
+            "agents/terra-planner.toml": "finite manifest",
         }
         for path, term in mutations.items():
             validate_repo.ERRORS.clear()
@@ -162,7 +169,8 @@ class ValidateRepositoryTests(unittest.TestCase):
 
     def test_agent_envelope_next_must_be_parent(self) -> None:
         paths = (
-            "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"
+            "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml",
+            "agents/terra-planner.toml",
         )
         for target in paths:
             validate_repo.ERRORS.clear()
@@ -198,7 +206,8 @@ class ValidateRepositoryTests(unittest.TestCase):
 
     def test_worker_authority_boundaries_are_required(self) -> None:
         paths = (
-            "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"
+            "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml",
+            "agents/terra-planner.toml",
         )
         boundaries = {
             "agents/luna-worker.toml": (
@@ -208,6 +217,10 @@ class ValidateRepositoryTests(unittest.TestCase):
             "agents/terra-auditor.toml": (
                 "Never edit, authorize a write, schedule peers, or request human authority.",
                 "Never edit or request human authority.",
+            ),
+            "agents/terra-planner.toml": (
+                "Never write, schedule, wait, amend after execution, audit, or request human_authority.",
+                "Never write or request human_authority.",
             ),
         }
         for target, (required, weakened) in boundaries.items():
@@ -220,6 +233,159 @@ class ValidateRepositoryTests(unittest.TestCase):
                 self.write(path, source)
             validate_repo.validate_agents()
             self.assertTrue(any(target in error and required in error for error in validate_repo.ERRORS))
+
+    def test_terra_planner_eligibility_is_exact_and_routes_directly_to_sol(self) -> None:
+        contract = {
+            "LEVEL": "L2",
+            "OBJECTIVE_FIXED": True,
+            "BASELINE": "abc123",
+            "SCOPE_ROOTS": ["src", "tests"],
+            "ACCEPTANCE": ["python -m unittest"],
+            "OPEN_MAJOR_DECISIONS": False,
+            "RISK_FLAGS": None,
+            "EXTERNAL_ACTIONS": [],
+            "MAX_DISPATCHES": 1,
+            "COMPONENT_COUNT": 2,
+            "DEPENDENCY_DEPTH": 1,
+            "PATHS_ALLOW": ["src/service.py"],
+            "REQUIRED_PATHS": ["src/service.py"],
+            "WRITE_BATCH_COUNT": 1,
+            "CONTRACT_EXPANDED": False,
+            "AMBIGUITY": False,
+        }
+        self.assertTrue(validate_repo.is_terra_planner_eligible(contract))
+        self.assertEqual(validate_repo.route_planner(contract), "terra_planner")
+
+        checks = {
+            "LEVEL": "L3",
+            "OBJECTIVE_FIXED": False,
+            "BASELINE": "",
+            "SCOPE_ROOTS": [],
+            "ACCEPTANCE": "",
+            "OPEN_MAJOR_DECISIONS": True,
+            "EXTERNAL_ACTIONS": ["network"],
+            "MAX_DISPATCHES": 2,
+            "COMPONENT_COUNT": 3,
+            "DEPENDENCY_DEPTH": 2,
+            "REQUIRED_PATHS": ["outside/file.py"],
+            "WRITE_BATCH_COUNT": 2,
+            "CONTRACT_EXPANDED": True,
+            "AMBIGUITY": True,
+        }
+        for field, value in checks.items():
+            changed = dict(contract)
+            changed[field] = value
+            self.assertFalse(validate_repo.is_terra_planner_eligible(changed), field)
+            self.assertEqual(validate_repo.route_planner(changed), "sol_planner", field)
+        for risk in validate_repo.TERRA_RISK_FLAGS:
+            changed = dict(contract, RISK_FLAGS=[risk])
+            self.assertFalse(validate_repo.is_terra_planner_eligible(changed), risk)
+
+        for field in (
+            "REQUIRED_PATHS",
+            "WRITE_BATCH_COUNT",
+            "CONTRACT_EXPANDED",
+            "AMBIGUITY",
+        ):
+            omitted = dict(contract)
+            omitted.pop(field)
+            self.assertFalse(validate_repo.is_terra_planner_eligible(omitted), field)
+            self.assertEqual(validate_repo.route_planner(omitted), "sol_planner", field)
+
+    def test_plan_identity_and_immutable_role_leases(self) -> None:
+        plan = {
+            "PLAN_ID": "plan-1",
+            "PLANNER_ROLE": "terra_planner",
+            "PLANNER_INSTANCE_ID": "planner-a",
+            "AUDITOR_INSTANCE_ID": "auditor-b",
+        }
+        self.assertEqual(validate_repo.validate_plan_identity(plan), [])
+        self.assertIn(
+            "AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID",
+            validate_repo.validate_plan_identity(dict(plan, AUDITOR_INSTANCE_ID="planner-a")),
+        )
+        registry = validate_repo.RoleLeaseRegistry()
+        self.assertTrue(registry.record_planned("plan-1", "planner-a", "terra_planner"))
+        self.assertFalse(registry.lease("plan-1", "planner-a", "sol_planner"))
+        self.assertFalse(registry.record_implemented("plan-1", "planner-a", "luna_worker"))
+        self.assertTrue(registry.record_implemented("plan-1", "worker-a", "luna_worker"))
+        self.assertFalse(registry.record_planned("plan-1", "worker-a", "terra_planner"))
+        self.assertTrue(registry.record_audited("plan-1", "auditor-c", "terra_auditor"))
+        self.assertTrue(registry.validate_audit("plan-1", "planner-a", "auditor-c"))
+        self.assertFalse(registry.record_audited("plan-1", "worker-a", "terra_auditor"))
+        self.assertFalse(registry.validate_audit("plan-1", "planner-a", "planner-a"))
+        self.assertFalse(registry.validate_audit("plan-1", "planner-a", "worker-a"))
+        self.assertTrue(registry.validate_audit("plan-1", "planner-a", "auditor-b"))
+        self.assertEqual(validate_repo.validate_role_independence(plan, lease_registry=registry), [])
+        self.assertTrue(
+            validate_repo.validate_role_independence(
+                dict(plan, AUDITOR_INSTANCE_ID="worker-a"), lease_registry=registry
+            )
+        )
+
+    def test_luna_dispatch_validates_terra_planner_authority(self) -> None:
+        dispatch = {
+            "DISPATCH_ID": "dispatch-1",
+            "PLANNER_ROLE": "terra_planner",
+            "PLAN_ID": "plan-1",
+            "PLANNER_INSTANCE_ID": "planner-a",
+            "AUDITOR_INSTANCE_ID": "auditor-b",
+            "LEVEL": "L1",
+            "OBJECTIVE_FIXED": True,
+            "BASELINE": "abc123",
+            "SCOPE_ROOTS": ["src"],
+            "ACCEPTANCE": "python -m unittest",
+            "OPEN_MAJOR_DECISIONS": False,
+            "RISK_FLAGS": "none",
+            "EXTERNAL_ACTIONS": "none",
+            "MAX_DISPATCHES": 1,
+            "COMPONENT_COUNT": 1,
+            "DEPENDENCY_DEPTH": 0,
+            "PATHS_ALLOW": ["src/service.py"],
+            "REQUIRED_PATHS": [],
+            "WRITE_BATCH_COUNT": 1,
+            "CONTRACT_EXPANDED": False,
+            "AMBIGUITY": False,
+        }
+        self.assertEqual(validate_repo.validate_dispatch_identity(dispatch), [])
+        invalid = dict(dispatch, PLANNER_INSTANCE_ID="auditor-b")
+        self.assertTrue(validate_repo.validate_dispatch_identity(invalid))
+        missing_auditor = dict(dispatch)
+        missing_auditor.pop("AUDITOR_INSTANCE_ID")
+        self.assertTrue(validate_repo.validate_dispatch_identity(missing_auditor))
+
+        malformed_scope_cases = (
+            dict(dispatch, PATHS_ALLOW=["outside/write.py"]),
+            dict(dispatch, REQUIRED_PATHS=True),
+            dict(dispatch, SCOPE_ROOTS=1),
+        )
+        for malformed in malformed_scope_cases:
+            self.assertFalse(validate_repo.is_terra_planner_eligible(malformed))
+            self.assertEqual(validate_repo.route_planner(malformed), "sol_planner")
+            self.assertTrue(validate_repo.validate_dispatch_identity(malformed))
+
+        registry = validate_repo.RoleLeaseRegistry()
+        self.assertTrue(registry.record_planned("plan-1", "planner-a", "terra_planner"))
+        self.assertEqual(
+            validate_repo.validate_dispatch_identity(dispatch, lease_registry=registry), []
+        )
+        self.assertTrue(registry.record_implemented("plan-1", "worker-a", "luna_worker"))
+        reused_auditor = dict(dispatch, AUDITOR_INSTANCE_ID="worker-a")
+        self.assertTrue(
+            validate_repo.validate_dispatch_identity(
+                reused_auditor, lease_registry=registry
+            )
+        )
+        sol_dispatch = {
+            "DISPATCH_ID": "dispatch-2",
+            "PLANNER_ROLE": "sol_planner",
+            "PLAN_ID": "plan-2",
+            "PLANNER_INSTANCE_ID": "sol-a",
+            "AUDITOR_INSTANCE_ID": "auditor-d",
+        }
+        self.assertEqual(validate_repo.validate_dispatch_identity(sol_dispatch), [])
+        sol_dispatch.pop("AUDITOR_INSTANCE_ID")
+        self.assertTrue(validate_repo.validate_dispatch_identity(sol_dispatch))
 
     def test_skill_stays_within_context_budget(self) -> None:
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")

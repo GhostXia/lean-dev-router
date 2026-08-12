@@ -1,4 +1,4 @@
 interface:
   display_name: "Lean Dev Router"
-  short_description: "Route software engineering work across three agents"
-  default_prompt: "Use $lean-dev-router to route this software engineering task through the minimum necessary Sol, Luna, and Terra agents."
+  short_description: "Route software engineering work across four roles"
+  default_prompt: "Use $lean-dev-router to route eligible L1/L2 work through terra_planner and exceptions through the minimum necessary Sol, Luna, and Terra roles."

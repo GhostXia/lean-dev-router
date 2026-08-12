@@ -7,6 +7,7 @@ import ast
 import re
 import sys
 import tomllib
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 
@@ -26,6 +27,10 @@ DISPATCH_FIELDS = (
     "STATUS: DISPATCH",
     "TARGET: implementation",
     "DISPATCH_ID",
+    "PLAN_ID",
+    "PLANNER_ROLE",
+    "PLANNER_INSTANCE_ID",
+    "AUDITOR_INSTANCE_ID",
     "TASK_SUMMARY",
     "BASELINE",
     "PATHS_ALLOW",
@@ -55,8 +60,408 @@ HANDOFF_ROUTES = {
     ("sol_planner", "BLOCKED", "none"): "parent:pause",
     ("sol_planner", "BLOCKED", "implementation"): "parent:luna",
     ("sol_planner", "BLOCKED", "human_authority"): "parent:user",
+    ("terra_planner", "PASS", "none"): "parent:manifest_gate",
+    ("terra_planner", "BLOCKED", "none"): "parent:pause",
+    ("terra_planner", "BLOCKED", "implementation"): "parent:luna",
+    ("terra_planner", "ESCALATE", "planning_resolution"): "parent:sol",
 }
 LEGAL_HANDOFFS = set(HANDOFF_ROUTES)
+
+# Terra planning is intentionally a small, deterministic fast path. Keep the
+# predicate data in one place so the executable validator, tests, and runtime
+# documentation cannot silently drift apart.
+TERRA_ELIGIBLE_LEVELS = frozenset({"L1", "L2"})
+TERRA_RISK_FLAGS = frozenset(
+    {
+        "security",
+        "privacy",
+        "public-contract",
+        "data-schema-or-migration",
+        "destructive",
+        "production",
+        "external-commitment",
+        "license",
+        "material-compatibility",
+        "concurrency",
+        "irreversible",
+        "material-cost",
+    }
+)
+TERRA_REQUIRED_FIELDS = (
+    "LEVEL",
+    "OBJECTIVE_FIXED",
+    "BASELINE",
+    "SCOPE_ROOTS",
+    "ACCEPTANCE",
+    "OPEN_MAJOR_DECISIONS",
+    "RISK_FLAGS",
+    "EXTERNAL_ACTIONS",
+    "MAX_DISPATCHES",
+    "COMPONENT_COUNT",
+    "DEPENDENCY_DEPTH",
+    "PATHS_ALLOW",
+    "REQUIRED_PATHS",
+    "WRITE_BATCH_COUNT",
+    "CONTRACT_EXPANDED",
+    "AMBIGUITY",
+)
+
+
+def _contract_value(contract: Mapping[str, object], key: str, default: object = None) -> object:
+    """Read a contract field case-insensitively without mutating caller data."""
+    if key in contract:
+        return contract[key]
+    folded = key.casefold()
+    for candidate, value in contract.items():
+        if str(candidate).casefold() == folded:
+            return value
+    return default
+
+
+def _has_field(contract: Mapping[str, object], key: str) -> bool:
+    folded = key.casefold()
+    return any(str(candidate).casefold() == folded for candidate in contract)
+
+
+def _non_empty(value: object) -> bool:
+    if value is None or isinstance(value, bool):
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (Mapping, Sequence, set, frozenset)):
+        return bool(value)
+    return bool(value)
+
+
+def _items(value: object) -> set[str]:
+    """Normalize list-like risk/action fields for the eligibility predicate."""
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        values = re.split(r"[,\s]+", value.strip()) if value.strip() else []
+    elif isinstance(value, Mapping):
+        values = list(value)
+    elif isinstance(value, Sequence) or isinstance(value, (set, frozenset)):
+        values = list(value)
+    else:
+        values = [value]
+    return {str(item).strip().casefold() for item in values if str(item).strip()}
+
+
+def _strict_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
+        return int(value.strip())
+    return None
+
+
+def _path_inside(path: str, roots: set[str]) -> bool:
+    normalized = path.replace("\\", "/").strip("/")
+    if not normalized:
+        return True
+    for root in roots:
+        candidate = root.replace("\\", "/").strip("/")
+        if candidate in {"", "."} or normalized == candidate or normalized.startswith(candidate + "/"):
+            return True
+    return False
+
+
+def _repository_paths(value: object, *, allow_empty: bool) -> list[str] | None:
+    """Return canonical repository-relative paths or None for malformed evidence."""
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return None
+    paths: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            return None
+        normalized = item.replace("\\", "/").strip()
+        parts = normalized.split("/")
+        if (
+            normalized.startswith("/")
+            or re.match(r"^[A-Za-z]:", normalized)
+            or any(part in {"", ".."} for part in parts)
+        ):
+            return None
+        paths.append(normalized)
+    return paths if paths or allow_empty else None
+
+
+def terra_planner_ineligibility_reasons(contract: Mapping[str, object]) -> list[str]:
+    """Return stable, ordered reasons a contract must go directly to Sol."""
+    reasons: list[str] = []
+    level = str(_contract_value(contract, "LEVEL", "")).strip().upper()
+    if level not in TERRA_ELIGIBLE_LEVELS:
+        reasons.append("LEVEL must be L1 or L2")
+    if _contract_value(contract, "OBJECTIVE_FIXED") is not True:
+        reasons.append("OBJECTIVE_FIXED must be true")
+    for field in ("BASELINE", "SCOPE_ROOTS", "ACCEPTANCE"):
+        if not _non_empty(_contract_value(contract, field)):
+            reasons.append(f"{field} must be non-empty")
+    if _contract_value(contract, "OPEN_MAJOR_DECISIONS") is not False:
+        reasons.append("OPEN_MAJOR_DECISIONS must be false")
+
+    if not _has_field(contract, "RISK_FLAGS"):
+        reasons.append("RISK_FLAGS must be none")
+    risk_flags = _items(_contract_value(contract, "RISK_FLAGS"))
+    risk_flags.discard("none")
+    if risk_flags:
+        reasons.append("RISK_FLAGS must be none")
+    if not _has_field(contract, "EXTERNAL_ACTIONS"):
+        reasons.append("EXTERNAL_ACTIONS must be none")
+    actions = _items(_contract_value(contract, "EXTERNAL_ACTIONS"))
+    actions.discard("none")
+    if actions:
+        reasons.append("EXTERNAL_ACTIONS must be none")
+
+    max_dispatches = _strict_int(_contract_value(contract, "MAX_DISPATCHES"))
+    if max_dispatches != 1:
+        reasons.append("MAX_DISPATCHES must equal 1")
+    components = _strict_int(_contract_value(contract, "COMPONENT_COUNT"))
+    if components is None or components < 0 or components > 2:
+        reasons.append("COMPONENT_COUNT must be at most 2")
+    depth = _strict_int(_contract_value(contract, "DEPENDENCY_DEPTH"))
+    if depth is None or depth < 0 or depth > 1:
+        reasons.append("DEPENDENCY_DEPTH must be at most 1")
+
+    if not _has_field(contract, "WRITE_BATCH_COUNT"):
+        reasons.append("WRITE_BATCH_COUNT must be explicitly 1")
+    batch_value = _contract_value(contract, "WRITE_BATCH_COUNT")
+    if not isinstance(batch_value, int) or isinstance(batch_value, bool) or batch_value != 1:
+        reasons.append("more than one write batch")
+
+    roots_list = _repository_paths(_contract_value(contract, "SCOPE_ROOTS"), allow_empty=False)
+    if roots_list is None:
+        reasons.append("SCOPE_ROOTS must be repository-relative path list")
+        roots: set[str] = set()
+    else:
+        roots = set(roots_list)
+
+    if not _has_field(contract, "REQUIRED_PATHS"):
+        reasons.append("REQUIRED_PATHS must be explicitly present")
+    required_paths = _repository_paths(
+        _contract_value(contract, "REQUIRED_PATHS"), allow_empty=True
+    )
+    if required_paths is None:
+        reasons.append("REQUIRED_PATHS must be a repository-relative path list")
+    elif roots:
+        outside = [path for path in required_paths if not _path_inside(path, roots)]
+        if outside:
+            reasons.append("required path outside SCOPE_ROOTS")
+
+    if not _has_field(contract, "PATHS_ALLOW"):
+        reasons.append("PATHS_ALLOW must be explicitly present")
+    paths_allow = _repository_paths(
+        _contract_value(contract, "PATHS_ALLOW"), allow_empty=False
+    )
+    if paths_allow is None:
+        reasons.append("PATHS_ALLOW must be a non-empty repository-relative path list")
+    elif roots:
+        outside = [path for path in paths_allow if not _path_inside(path, roots)]
+        if outside:
+            reasons.append("PATHS_ALLOW outside SCOPE_ROOTS")
+
+    if not _has_field(contract, "CONTRACT_EXPANDED"):
+        reasons.append("CONTRACT_EXPANDED must be explicitly false")
+    expansion = _contract_value(contract, "CONTRACT_EXPANDED")
+    if expansion is not False:
+        reasons.append("contract expansion")
+    if not _has_field(contract, "AMBIGUITY"):
+        reasons.append("AMBIGUITY must be explicitly false")
+    ambiguity = _contract_value(contract, "AMBIGUITY")
+    if ambiguity is not False:
+        reasons.append("ambiguity")
+    return reasons
+
+
+def is_terra_planner_eligible(contract: Mapping[str, object]) -> bool:
+    """Return whether Terra may replace routine Sol planning for this contract."""
+    return not terra_planner_ineligibility_reasons(contract)
+
+
+# Friendly aliases used by integrations and regression tests.
+terra_planner_eligible = is_terra_planner_eligible
+terra_planner_eligibility = is_terra_planner_eligible
+eligibility_reasons = terra_planner_ineligibility_reasons
+
+
+def route_planner(contract: Mapping[str, object]) -> str:
+    """Select Terra's fast path or direct Sol fallback without an audit hop."""
+    return "terra_planner" if is_terra_planner_eligible(contract) else "sol_planner"
+
+
+route_contract = route_planner
+select_planner = route_planner
+
+
+def validate_plan_identity(
+    plan: Mapping[str, object], *, expected_role: str | None = None
+) -> list[str]:
+    """Validate the immutable identity fields every planner manifest carries."""
+    errors: list[str] = []
+    for field in (
+        "PLAN_ID",
+        "PLANNER_ROLE",
+        "PLANNER_INSTANCE_ID",
+        "AUDITOR_INSTANCE_ID",
+    ):
+        if not _non_empty(_contract_value(plan, field)):
+            errors.append(f"{field} must be non-empty")
+    planner_role = _contract_value(plan, "PLANNER_ROLE")
+    if expected_role is not None and planner_role != expected_role:
+        errors.append(f"PLANNER_ROLE must be {expected_role}")
+    elif expected_role is None and planner_role not in {"terra_planner", "sol_planner"}:
+        errors.append("PLANNER_ROLE must identify an authorized planner")
+    planner = _contract_value(plan, "PLANNER_INSTANCE_ID")
+    auditor = _contract_value(plan, "AUDITOR_INSTANCE_ID")
+    if _non_empty(auditor) and auditor == planner:
+        errors.append("AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID")
+    return errors
+
+
+def validate_role_independence(
+    plan: Mapping[str, object],
+    *,
+    lease_registry: "RoleLeaseRegistry | None" = None,
+    planned_plan_ids: Mapping[str, object] | None = None,
+    implemented_plan_ids: Mapping[str, object] | None = None,
+) -> list[str]:
+    """Reject self-implementation and cross-role identity reuse.
+
+    Planner self-registration in ``planned_plan_ids`` is valid. The planner
+    must not appear in implementation records, while the auditor must appear in
+    neither planned nor implemented records. When a ``RoleLeaseRegistry`` is
+    supplied, its concrete ``(PLAN_ID, AGENT_INSTANCE_ID)`` leases are the
+    authoritative source.
+    """
+    errors = validate_plan_identity(plan)
+    if lease_registry is None and isinstance(planned_plan_ids, RoleLeaseRegistry):
+        lease_registry = planned_plan_ids
+        planned_plan_ids = None
+    if lease_registry is not None:
+        errors.extend(lease_registry.validate_plan(plan))
+        return list(dict.fromkeys(errors))
+    planner = str(_contract_value(plan, "PLANNER_INSTANCE_ID", ""))
+    plan_id = str(_contract_value(plan, "PLAN_ID", ""))
+    auditor = _contract_value(plan, "AUDITOR_INSTANCE_ID")
+    implemented = implemented_plan_ids.get(planner, ()) if isinstance(implemented_plan_ids, Mapping) else ()
+    if isinstance(implemented, str):
+        implemented = (implemented,)
+    if plan_id in implemented:
+        errors.append("planner instance cannot implement PLAN_ID")
+    for label, registry in (("planned", planned_plan_ids), ("implemented", implemented_plan_ids)):
+        if not auditor or not isinstance(registry, Mapping):
+            continue
+        auditor_values = registry.get(str(auditor), ())
+        if isinstance(auditor_values, str):
+            auditor_values = (auditor_values,)
+        if plan_id in auditor_values:
+            errors.append(f"auditor instance cannot have {label} PLAN_ID")
+    return list(dict.fromkeys(errors))
+
+
+class RoleLeaseRegistry:
+    """Small in-memory guard for immutable per-plan agent role leases."""
+
+    def __init__(self) -> None:
+        self._leases: dict[tuple[str, str], str] = {}
+        self._planned: dict[str, set[str]] = {}
+        self._implemented: dict[str, set[str]] = {}
+
+    def lease(self, plan_id: str, agent_instance_id: str, role: str) -> bool:
+        if not str(plan_id).strip() or not str(agent_instance_id).strip() or not str(role).strip():
+            return False
+        key = (str(plan_id), str(agent_instance_id))
+        previous = self._leases.get(key)
+        if previous is not None and previous != role:
+            return False
+        self._leases[key] = str(role)
+        return True
+
+    def _record(self, bucket: dict[str, set[str]], plan_id: str, agent_instance_id: str, role: str) -> bool:
+        if not self.lease(plan_id, agent_instance_id, role):
+            return False
+        bucket.setdefault(str(agent_instance_id), set()).add(str(plan_id))
+        return True
+
+    def record_planned(self, plan_id: str, agent_instance_id: str, role: str) -> bool:
+        if role not in {"terra_planner", "sol_planner"}:
+            return False
+        return self._record(self._planned, plan_id, agent_instance_id, role)
+
+    def record_implemented(self, plan_id: str, agent_instance_id: str, role: str) -> bool:
+        if role != "luna_worker":
+            return False
+        return self._record(self._implemented, plan_id, agent_instance_id, role)
+
+    def record_audited(self, plan_id: str, agent_instance_id: str, role: str = "terra_auditor") -> bool:
+        if role != "terra_auditor":
+            return False
+        return self.lease(plan_id, agent_instance_id, role)
+
+    def lease_role(self, plan_id: str, agent_instance_id: str) -> str | None:
+        """Return the concrete role lease for one plan/agent pair."""
+        return self._leases.get((str(plan_id), str(agent_instance_id)))
+
+    def validate_plan(self, plan: Mapping[str, object]) -> list[str]:
+        """Validate planner, auditor, and implementation identity against leases."""
+        errors = validate_plan_identity(plan)
+        plan_id = str(_contract_value(plan, "PLAN_ID", ""))
+        planner_id = str(_contract_value(plan, "PLANNER_INSTANCE_ID", ""))
+        planner_role = str(_contract_value(plan, "PLANNER_ROLE", ""))
+        auditor_id = str(_contract_value(plan, "AUDITOR_INSTANCE_ID", ""))
+        planner_lease = self.lease_role(plan_id, planner_id)
+        if planner_lease != planner_role:
+            errors.append("planner instance has no matching role lease")
+        if plan_id not in self._planned.get(planner_id, set()):
+            errors.append("planner instance must be recorded as planned")
+        if plan_id in self._implemented.get(planner_id, set()):
+            errors.append("planner instance cannot implement PLAN_ID")
+        auditor_lease = self.lease_role(plan_id, auditor_id)
+        if auditor_lease in {"terra_planner", "sol_planner", "luna_worker"}:
+            errors.append("auditor instance cannot reuse planner or luna role lease")
+        if plan_id in self._planned.get(auditor_id, set()):
+            errors.append("auditor instance cannot have planned PLAN_ID")
+        if plan_id in self._implemented.get(auditor_id, set()):
+            errors.append("auditor instance cannot have implemented PLAN_ID")
+        return list(dict.fromkeys(errors))
+
+    def validate_audit(self, plan_id: str, planner_instance_id: str, auditor_instance_id: str) -> bool:
+        if not auditor_instance_id or auditor_instance_id == planner_instance_id:
+            return False
+        plan = str(plan_id)
+        planner_role = self.lease_role(plan, str(planner_instance_id))
+        if planner_role not in {"terra_planner", "sol_planner"}:
+            return False
+        if plan not in self._planned.get(str(planner_instance_id), set()):
+            return False
+        auditor_role = self.lease_role(plan, str(auditor_instance_id))
+        if auditor_role in {"terra_planner", "sol_planner", "luna_worker"}:
+            return False
+        return plan not in self._planned.get(str(auditor_instance_id), set()) and plan not in self._implemented.get(str(auditor_instance_id), set())
+
+
+def validate_dispatch_identity(
+    dispatch: Mapping[str, object], *, lease_registry: RoleLeaseRegistry | None = None
+) -> list[str]:
+    """Validate planner fields Luna must check before accepting a DISPATCH."""
+    role = str(_contract_value(dispatch, "PLANNER_ROLE", "")).strip()
+    if role not in {"sol_planner", "terra_planner"}:
+        return ["PLANNER_ROLE must identify an authorized planner"]
+    errors = validate_plan_identity(dispatch, expected_role=role)
+    if not _non_empty(_contract_value(dispatch, "DISPATCH_ID")):
+        errors.append("DISPATCH_ID must be non-empty")
+    if role == "terra_planner" and not is_terra_planner_eligible(dispatch):
+        errors.append("terra_planner DISPATCH is not eligible")
+    if lease_registry is not None:
+        errors.extend(lease_registry.validate_plan(dispatch))
+    return list(dict.fromkeys(errors))
+
+
+# Compatibility names for callers that use the validator as a tiny runtime API.
+validate_dispatch_planner = validate_dispatch_identity
 
 
 def error(message: str) -> None:
@@ -99,6 +504,12 @@ def validate_agents() -> None:
         "agents/sol-planner.toml": ("sol_planner", "gpt-5.6-sol", "medium", None),
         "agents/terra-auditor.toml": (
             "terra_auditor",
+            "gpt-5.6-terra",
+            "high",
+            "read-only",
+        ),
+        "agents/terra-planner.toml": (
+            "terra_planner",
             "gpt-5.6-terra",
             "high",
             "read-only",
@@ -158,6 +569,7 @@ def validate_agents() -> None:
                 "IMPACT_CONE", "worktree-sha256:<64 lowercase hex>",
                 "three materially distinct attempts", "human_authority",
                 "externally measurable latency", "sleep is only polling",
+                "terra_planner", "eligible L1/L2", "PLANNER_INSTANCE_ID",
             ),
             "terra_auditor": (
                 "Never edit, authorize a write, schedule peers, or request human authority.",
@@ -168,11 +580,57 @@ def validate_agents() -> None:
                 "sleep alone is not synchronization proof",
                 "pre-PASS technical-resolution", "does not require final scope or revision",
                 "never BLOCKED/none",
+                "remains independent and read-only", "AUDITOR_INSTANCE_ID",
+                "cannot have planned or implemented", "immutable role lease",
+            ),
+            "terra_planner": (
+                "Never write, schedule, wait, amend after execution, audit, or request human_authority.",
+                "read-only",
+                "gpt-5.6-terra",
+                "high",
+                "terra_planner",
+                "L1/L2",
+                "OBJECTIVE_FIXED",
+                "SCOPE_ROOTS",
+                "RISK_FLAGS",
+                "EXTERNAL_ACTIONS",
+                "MAX_DISPATCHES",
+                "COMPONENT_COUNT",
+                "DEPENDENCY_DEPTH",
+                "REQUIRED_PATHS",
+                "WRITE_BATCH_COUNT",
+                "CONTRACT_EXPANDED",
+                "AMBIGUITY",
+                "directly replaces routine Sol planning",
+                "parent to start after its gates",
+                "one bounded Luna DISPATCH",
+                "finite manifest",
+                "PLAN_ID",
+                "PLANNER_ROLE",
+                "PLANNER_INSTANCE_ID",
+                "AUDITOR_INSTANCE_ID",
+                "CONTRACT_EXPANDED",
+                "required path outside SCOPE_ROOTS",
+                "routine Terra-to-Sol review",
+                "cannot request human_authority",
             ),
         }
         for term in common + role_terms[name]:
             if term not in instructions:
                 error(f"{relative}: missing required instruction {term!r}")
+        if name == "terra_planner":
+            forbidden = (
+                "may schedule",
+                "can schedule",
+                "may amend",
+                "can amend",
+                "may audit",
+                "can audit",
+                "REQUEST: human_authority",
+            )
+            for term in forbidden:
+                if term in instructions:
+                    error(f"{relative}: terra_planner contains forbidden authority {term!r}")
 
 
 def markdown_lines(text: str) -> list[tuple[int, str]]:
@@ -258,6 +716,10 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 "STATUS": "DISPATCH",
                 "TARGET": "implementation",
                 "DISPATCH_ID": None,
+                "PLAN_ID": None,
+                "PLANNER_ROLE": None,
+                "PLANNER_INSTANCE_ID": None,
+                "AUDITOR_INSTANCE_ID": None,
                 "TASK_SUMMARY": None,
                 "BASELINE": None,
                 "PATHS_ALLOW": None,
@@ -271,7 +733,7 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
             outbound,
             {
                 "PROTOCOL": "lean-dev-router/v2",
-                "AGENT": "luna_worker | terra_auditor | sol_planner",
+                "AGENT": "luna_worker | terra_auditor | terra_planner | sol_planner",
                 "STATUS": "PASS | BLOCKED | ESCALATE",
                 "FAILURE": "none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision",
                 "REQUEST": "none | implementation | technical_resolution | planning_resolution | human_authority",
@@ -294,8 +756,16 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 f"{relative}: {label} has unexpected fields: "
                 f"{', '.join(sorted(unexpected))}"
             )
-        if label == "inbound DISPATCH protocol" and not fields.get("DISPATCH_ID"):
-            error(f"{relative}: inbound DISPATCH protocol DISPATCH_ID must be non-empty")
+        if label == "inbound DISPATCH protocol":
+            for name in (
+                "DISPATCH_ID",
+                "PLAN_ID",
+                "PLANNER_ROLE",
+                "PLANNER_INSTANCE_ID",
+                "AUDITOR_INSTANCE_ID",
+            ):
+                if not fields.get(name):
+                    error(f"{relative}: inbound DISPATCH protocol {name} must be non-empty")
         for name, value in expected.items():
             if value is not None and fields.get(name) != value:
                 error(
@@ -376,6 +846,26 @@ def validate_skill() -> None:
         "worktree-sha256:<64 lowercase hex>",
         "CONTRACT_EFFECT: unchanged",
         "parent:repair_or_sol",
+        "terra_planner",
+        "directly replaces routine Sol planning",
+        "LEVEL",
+        "OBJECTIVE_FIXED",
+        "SCOPE_ROOTS",
+        "RISK_FLAGS",
+        "EXTERNAL_ACTIONS",
+        "MAX_DISPATCHES",
+        "COMPONENT_COUNT",
+        "DEPENDENCY_DEPTH",
+        "required path outside",
+        "more than one",
+        "no routine Terra-to-Sol review",
+        "PLAN_ID",
+        "PLANNER_ROLE",
+        "PLANNER_INSTANCE_ID",
+        "AUDITOR_INSTANCE_ID",
+        "immutable role lease",
+        "planner authority and identity",
+        "independent and read-only",
     ):
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")

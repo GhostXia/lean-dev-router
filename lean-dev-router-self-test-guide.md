@@ -14,7 +14,7 @@ You will compare three setups on the same tasks:
 |-------|--------|--------|
 | **A. Direct Sol** | `gpt-5.6-sol` only at a fixed **medium** reasoning effort for the primary comparison. No lean-dev-router. | Strong baseline for quality and cost of “just use Sol”. |
 | **B. Direct Luna** | `gpt-5.6-luna` only (max). No routing skill. | Cheap baseline; may fail more on ambiguous work. |
-| **C. Lean Router** | `$lean-dev-router` with `sol_planner`, `luna_worker`, `terra_auditor`, plus a fixed controller model/effort chosen before testing. Every write run starts with Sol issuing a valid `DISPATCH`. For a cost-focused run, `gpt-5.6-luna` + `high` is a reasonable controller default. | The system under test. |
+| **C. Lean Router** | `$lean-dev-router` with `terra_planner`, `sol_planner`, `luna_worker`, `terra_auditor`, plus a fixed controller model/effort chosen before testing. Eligible L1/L2 runs start with Terra's finite plan; failed predicates and L3 start with Sol. For a cost-focused run, `gpt-5.6-luna` + `high` is a reasonable controller default. | The system under test. |
 
 Optional later (do **not** mix into the primary comparison):
 
@@ -34,7 +34,7 @@ Primary questions:
 ## 2. Prerequisites
 
 - A Codex environment that can load custom agents and skills.
-- `lean-dev-router` installed as documented by the project (skill + three agent TOML files).
+- `lean-dev-router` installed as documented by the project (skill + four agent TOML files).
 - A git repo you can branch and reset safely.
 - Ability to run your project’s tests or verification commands.
 - Preferably a usage panel that shows input/output tokens. If not available, use the proxy metrics in §5.
@@ -85,7 +85,7 @@ Unrelated refactors, scope expansion, drive-by cleanup.
 Starting commit hash: <hash>
 ```
 
-For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C, Sol places them with task summary, objective acceptance, and fixed constraints in a standard inbound `DISPATCH`; the parent may relay but not author or amend it. In a direct-Luna Group B run, the parent supplies the packet because the router is not in use. Paths needed only for reading remain context and do not become write authorization.
+For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C, the authorized planner places them with task summary, planner identity, objective acceptance, and fixed constraints in a standard inbound `DISPATCH`; the parent may relay but not author or amend it. In a direct-Luna Group B run, the parent supplies the packet because the router is not in use. Paths needed only for reading remain context and do not become write authorization.
 
 ### Example (L2)
 
@@ -114,13 +114,57 @@ abc1234
 
 ## 4.1 Codex Runtime and Routing Controls
 
-For Group C, use native Codex subagents as the default path. Start every change-producing run with Sol: bounded L1 work should receive one minimal single-step `DISPATCH`, while L2/L3 work may require fuller decomposition. Keep dependent stages sequential. Independent read-only work may share a checkout; independent Luna writes may run in parallel only when each writer has a dedicated worktree or independent checkout and branch. Never let multiple agents write to the same worktree.
+For Group C, use native Codex subagents as the default path. Start with one
+read-only terra_planner classification; Terra derives the canonical eligibility
+evidence from the objective and repository, while the parent only relays it. A mechanically eligible L1/L2 task uses one
+read-only `terra_planner` call, one bounded Luna `DISPATCH`, and an independent
+Terra audit; a failed predicate, L3, ambiguity, risk, expansion, outside path,
+or second write batch routes directly to `sol_planner` with no routine
+Terra-to-Sol review. Keep dependent stages sequential. Independent read-only
+work may share a checkout; independent Luna writes may run in parallel only
+when each writer has a dedicated worktree or independent checkout and branch.
+Never let multiple agents write to the same worktree.
 
 Before a dependent or write handoff, verify that the intended Agent loaded, its configured model and reasoning effort are honored, and the first result follows `lean-dev-router/v2`. In the CLI, use `/agent` to inspect agent threads; when available, record `codex --version` before the run.
 
 If native spawning is unavailable or the custom Agent configuration is not honored, use one independent Codex session per role as a fallback. Pass only the compact handoff, relevant paths, constraints, and evidence. Use an isolated worktree or branch for writes and record the fallback in the results.
 
 Do not treat an unrelated background process or session as equivalent to native parent-child routing. Do not silently substitute the default agent or model. See the [official Codex subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) when the client behavior is unclear.
+
+### 4.2 Terra planner eligibility and independence checks
+
+Record the eligibility packet before the first agent call. Terra is eligible only
+when `LEVEL` is L1/L2, `OBJECTIVE_FIXED` is true, `BASELINE`, `SCOPE_ROOTS`, and
+`ACCEPTANCE` are non-empty, `OPEN_MAJOR_DECISIONS` is false, `RISK_FLAGS` and
+`EXTERNAL_ACTIONS` are none, `MAX_DISPATCHES` is 1, `COMPONENT_COUNT` is at
+most 2, and `DEPENDENCY_DEPTH` is at most 1. `REQUIRED_PATHS`,
+`WRITE_BATCH_COUNT`, `CONTRACT_EXPANDED`, and `AMBIGUITY` must also be present
+canonically; `REQUIRED_PATHS` may be explicitly empty, while the latter three
+must be exactly `1`, `false`, and `false` respectively.
+`PATHS_ALLOW` must be a non-empty repository-relative list, and every allowed
+or required path must stay inside the repository-relative `SCOPE_ROOTS` list.
+Malformed scalar or absolute-path evidence routes to Sol without throwing. The risk set is security, privacy,
+public-contract, data-schema-or-migration, destructive, production,
+external-commitment, license, material-compatibility, concurrency, irreversible,
+and material-cost changes. A required path outside `SCOPE_ROOTS`, ambiguity,
+contract expansion, or more than one write batch must route directly to Sol.
+
+For every eligible plan, record `PLAN_ID`, `PLANNER_ROLE`,
+`PLANNER_INSTANCE_ID`, and a different `AUDITOR_INSTANCE_ID`. Verify that one
+`AGENT_INSTANCE_ID` has one immutable role lease per `PLAN_ID`, and that the
+auditor identity has neither planned nor implemented that plan. Luna must reject
+missing planner identity, risk-bearing Terra routes, writable Terra profiles,
+and `human_authority` requests. Terra may inspect and analyze read-only, issue
+one bounded Luna `DISPATCH`, preregister the independent audit, and emit a finite
+manifest; it cannot schedule, wait, implement, audit, amend after execution, or
+request authority. The valid Terra handoffs are only `PASS/none`, `BLOCKED/none`,
+`BLOCKED/implementation`, and `ESCALATE/planning_resolution`.
+
+Run negative controls by changing one predicate at a time (L3, an empty field,
+each risk flag, `MAX_DISPATCHES=2`, a third component, depth 2, an outside path,
+or a reused role identity). The result must be direct `sol_planner`; do not add a
+routine Terra-to-Sol review call. Keep these controls separate from acceptance
+task costs and report them with the same replay evidence.
 
 ## 5. Metrics
 
@@ -136,8 +180,8 @@ Count the complete run: parent session plus every child Agent/session. Do not co
 | Output tokens | From usage UI / logs |
 | Total tokens | Input + output |
 | Turns | Number of user/agent exchanges until delivery |
-| Agent calls | Count of Sol / Luna / Terra invocations |
-| Escalations | Luna → Terra, Terra → Sol |
+| Agent calls | Count of Terra planner / Sol / Luna / Terra auditor invocations |
+| Escalations | Luna → Terra auditor, Terra planner or auditor → Sol only when the predicate or audit requires it |
 | Diff size | `git diff --stat` at the end |
 
 **If token counts are unavailable**, use consistent proxies for all groups:
