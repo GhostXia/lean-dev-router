@@ -31,13 +31,18 @@ class ValidateRepositoryTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
+    def write_skill_variants(self) -> None:
+        for relative in (
+            "skill-variants/zhcn/SKILL.md",
+            "skill-variants/en-optimized/SKILL.md",
+            "skill-variants/zhcn-optimized/SKILL.md",
+        ):
+            self.write(relative, self.source(relative))
+
     def validate_skill(self, source: str) -> list[str]:
         self.write(".agents/skills/lean-dev-router/SKILL.md", source)
         self.write("skill-variants/en/SKILL.md", source)
-        self.write(
-            "skill-variants/zhcn/SKILL.md",
-            self.source("skill-variants/zhcn/SKILL.md"),
-        )
+        self.write_skill_variants()
         validate_repo.validate_skill()
         return validate_repo.ERRORS
 
@@ -129,8 +134,39 @@ class ValidateRepositoryTests(unittest.TestCase):
 
         validate_repo.ERRORS.clear()
         self.write(".agents/skills/lean-dev-router/SKILL.md", root + "\n")
+        self.write_skill_variants()
         validate_repo.validate_skill()
         self.assertTrue(any("must exactly match" in error for error in validate_repo.ERRORS))
+
+    def test_optimized_variants_are_aligned_and_smaller(self) -> None:
+        baseline_english = self.source("skill-variants/en/SKILL.md")
+        baseline_chinese = self.source("skill-variants/zhcn/SKILL.md")
+        optimized_english = self.source("skill-variants/en-optimized/SKILL.md")
+        optimized_chinese = self.source("skill-variants/zhcn-optimized/SKILL.md")
+        self.assertLess(len(optimized_english), len(baseline_english))
+        self.assertLess(len(optimized_chinese), len(baseline_chinese))
+        self.assertEqual(
+            validate_repo.markdown_structure(optimized_english),
+            validate_repo.markdown_structure(optimized_chinese),
+        )
+        self.assertEqual(self.validate_skill(baseline_english), [])
+
+    def test_optimized_variant_rejects_preflight_contract_removal(self) -> None:
+        root = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        self.write(".agents/skills/lean-dev-router/SKILL.md", root)
+        self.write("skill-variants/en/SKILL.md", root)
+        self.write("skill-variants/zhcn/SKILL.md", self.source("skill-variants/zhcn/SKILL.md"))
+        optimized = self.source("skill-variants/en-optimized/SKILL.md")
+        self.write(
+            "skill-variants/en-optimized/SKILL.md",
+            optimized.replace("stateless `preflight` subcommand", "removed", 1),
+        )
+        self.write(
+            "skill-variants/zhcn-optimized/SKILL.md",
+            self.source("skill-variants/zhcn-optimized/SKILL.md"),
+        )
+        validate_repo.validate_skill()
+        self.assertTrue(any("stateless `preflight` subcommand" in error for error in validate_repo.ERRORS))
 
     def test_chinese_variant_rejects_semantic_anchor_removal(self) -> None:
         root = self.source(".agents/skills/lean-dev-router/SKILL.md")
@@ -141,6 +177,8 @@ class ValidateRepositoryTests(unittest.TestCase):
             "skill-variants/zhcn/SKILL.md",
             chinese.replace("相同 revision 不得重复审计", "removed", 1),
         )
+        self.write("skill-variants/en-optimized/SKILL.md", self.source("skill-variants/en-optimized/SKILL.md"))
+        self.write("skill-variants/zhcn-optimized/SKILL.md", self.source("skill-variants/zhcn-optimized/SKILL.md"))
         validate_repo.validate_skill()
         self.assertTrue(
             any(
@@ -280,6 +318,14 @@ class ValidateRepositoryTests(unittest.TestCase):
             skill = self.source(relative)
             self.assertLessEqual(len(skill), 12_000)
             self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
+        optimized_budgets = {
+            "skill-variants/en-optimized/SKILL.md": (11_000, 1_400),
+            "skill-variants/zhcn-optimized/SKILL.md": (7_000, 900),
+        }
+        for relative, (characters, words) in optimized_budgets.items():
+            skill = self.source(relative)
+            self.assertLessEqual(len(skill), characters)
+            self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), words)
 
     def test_chinese_skill_is_allowed_but_runtime_remains_ascii(self) -> None:
         self.write(".agents/skills/lean-dev-router/SKILL.md", "# 中文\n")

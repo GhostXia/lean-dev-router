@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -86,6 +87,89 @@ class DispatchValidationTests(unittest.TestCase):
         errors = runtime_guard.validate_dispatch(value)
         self.assertTrue(any("BUDGET" in error for error in errors))
 
+    def test_preflight_cli_validates_without_creating_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state.json"
+            result = subprocess.run(
+                [sys.executable, "-B", str(GUARD_PATH), "preflight"],
+                input=json.dumps(dispatch()), text=True, capture_output=True, check=False,
+                timeout=30,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(payload["allowed"])
+            self.assertEqual(payload["reason"], "dispatch_valid")
+            self.assertEqual(payload["destination"], "parent:luna")
+            self.assertRegex(payload["dispatch_fingerprint"], r"^[0-9a-f]{64}$")
+            self.assertFalse(state.exists())
+
+    def test_installed_skill_preflight_smoke(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            installed = Path(directory) / "skills" / "lean-dev-router"
+            shutil.copytree(GUARD_PATH.parents[1], installed)
+            guard = installed / "scripts" / "runtime_guard.py"
+            schema = subprocess.run(
+                [sys.executable, "-B", str(guard), "schema"],
+                text=True, capture_output=True, check=False, timeout=30,
+            )
+            preflight = subprocess.run(
+                [sys.executable, "-B", str(guard), "preflight"],
+                input=json.dumps(dispatch()), text=True, capture_output=True, check=False,
+                timeout=30,
+            )
+            self.assertEqual(schema.returncode, 0, schema.stderr)
+            self.assertIn("dispatch_fields", json.loads(schema.stdout))
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+            self.assertTrue(json.loads(preflight.stdout)["allowed"])
+
+    def test_preflight_and_start_reject_the_same_invalid_dispatch(self) -> None:
+        value = dispatch()
+        value["BASELINE"] = "NOT-A-GIT-HASH"
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state.json"
+            preflight = subprocess.run(
+                [sys.executable, "-B", str(GUARD_PATH), "preflight"],
+                input=json.dumps(value), text=True, capture_output=True, check=False,
+                timeout=30,
+            )
+            started = subprocess.run(
+                [sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state)],
+                input=json.dumps(value), text=True, capture_output=True, check=False,
+                timeout=30,
+            )
+            self.assertEqual(preflight.returncode, 2)
+            self.assertEqual(started.returncode, 2)
+            preflight_result = json.loads(preflight.stdout)
+            start_result = json.loads(started.stdout)
+            self.assertEqual(preflight_result["reason"], "invalid_dispatch")
+            self.assertEqual(start_result["reason"], preflight_result["reason"])
+            self.assertEqual(start_result["errors"], preflight_result["errors"])
+            self.assertEqual(
+                start_result["dispatch_fingerprint"],
+                preflight_result["dispatch_fingerprint"],
+            )
+            self.assertIn("BASELINE", " ".join(preflight_result["errors"]))
+            self.assertFalse(state.exists())
+
+    def test_revision_must_be_concrete_clean_or_dirty_identity(self) -> None:
+        valid = (
+            "a" * 40,
+            "worktree-sha256:" + "b" * 64,
+        )
+        for revision in valid:
+            value = dispatch()
+            value["REVISION"] = revision
+            self.assertEqual(runtime_guard.validate_dispatch(value), [])
+        for revision in (
+            "<luna-revision>",
+            "worktree-sha256:" + "B" * 64,
+            "worktree-sha256:" + "b" * 63,
+            "c" * 40,
+        ):
+            value = dispatch()
+            value["REVISION"] = revision
+            self.assertTrue(any("REVISION" in error for error in runtime_guard.validate_dispatch(value)))
+
     def test_budget_cannot_raise_runtime_ceiling(self) -> None:
         value = dispatch()
         value["BUDGET"] = dict(value["BUDGET"], MODEL_CALL_LIMIT=9)
@@ -117,12 +201,16 @@ class DispatchValidationTests(unittest.TestCase):
                 ),
             )
             for payload in payloads:
-                result = subprocess.run(
+                for command in (
+                    [sys.executable, "-B", str(GUARD_PATH), "preflight"],
                     [sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state)],
-                    input=payload, text=True, capture_output=True, check=False, timeout=30,
-                )
-                self.assertEqual(result.returncode, 2)
-                self.assertEqual(json.loads(result.stdout)["reason"], "invalid_input")
+                ):
+                    result = subprocess.run(
+                        command, input=payload, text=True, capture_output=True,
+                        check=False, timeout=30,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(json.loads(result.stdout)["reason"], "invalid_input")
                 self.assertFalse(state.exists())
 
     def test_cli_reports_corrupt_state_without_traceback(self) -> None:

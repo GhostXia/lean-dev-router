@@ -143,6 +143,27 @@ def _positive_int(value: Any) -> int | None:
     return None
 
 
+def _lower_hex(value: Any, lengths: tuple[int, ...]) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) in lengths
+        and value == value.casefold()
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def validate_revision(value: Any, baseline: Any) -> list[str]:
+    """Validate an optional concrete clean or dirty revision identifier."""
+    if value is None:
+        return []
+    if value == baseline:
+        return []
+    prefix = "worktree-sha256:"
+    if isinstance(value, str) and value.startswith(prefix) and _lower_hex(value[len(prefix):], (64,)):
+        return []
+    return ["REVISION must equal BASELINE or use worktree-sha256:<64 lowercase hex>"]
+
+
 def _nonnegative_number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
@@ -211,10 +232,28 @@ def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
         errors.append("PLANNER_ROLE must equal sol_planner")
     if _value(packet, "PLANNER_INSTANCE_ID") == _value(packet, "AUDITOR_INSTANCE_ID"):
         errors.append("AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID")
+    baseline = _value(packet, "BASELINE")
+    if not _lower_hex(baseline, (40, 64)):
+        errors.append("BASELINE must be a 40 or 64 character lowercase Git hex")
     if _paths(_value(packet, "PATHS_ALLOW")) is None:
         errors.append("PATHS_ALLOW must be non-empty repository-relative paths")
+    errors.extend(validate_revision(_value(packet, "REVISION"), baseline))
     errors.extend(validate_budget(_value(packet, "BUDGET")))
     return list(dict.fromkeys(errors))
+
+
+def preflight_dispatch(packet: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the stable spawn decision shared by preflight and start."""
+    errors = validate_dispatch(packet)
+    result: dict[str, Any] = {
+        "allowed": not errors,
+        "reason": "dispatch_valid" if not errors else "invalid_dispatch",
+        "destination": "parent:luna" if not errors else "parent:sol",
+        "dispatch_fingerprint": fingerprint(packet),
+    }
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 def validate_repair(packet: Mapping[str, Any], dispatch: Mapping[str, Any]) -> list[str]:
@@ -668,6 +707,7 @@ def _save(path: Path, guard: RuntimeGuard) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("preflight", help="validate dispatch without creating state")
     start = sub.add_parser("start", help="validate dispatch and initialize state")
     start.add_argument("--state", type=Path, required=True)
     event = sub.add_parser("event", help="record one model-call event")
@@ -693,6 +733,9 @@ def main() -> int:
                 "audit_complete_fields": AUDIT_COMPLETE_FIELDS,
                 "audit_abandon_fields": AUDIT_ABANDON_FIELDS,
             }
+        elif args.command == "preflight":
+            packet = _stdin_json()
+            result = preflight_dispatch(packet)
         elif args.command == "start":
             if args.state.exists():
                 result = {
@@ -702,9 +745,13 @@ def main() -> int:
                 }
                 print(json.dumps(result, ensure_ascii=False, sort_keys=True))
                 return 2
-            guard = RuntimeGuard(_stdin_json())
+            packet = _stdin_json()
+            result = preflight_dispatch(packet)
+            if not result["allowed"]:
+                print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+                return 2
+            guard = RuntimeGuard(packet)
             _save(args.state, guard)
-            result = {"allowed": True, "reason": "dispatch_valid", "destination": "parent:luna"}
         elif args.command == "event":
             guard = _load(args.state)
             result = guard.observe(_stdin_json())
