@@ -33,6 +33,11 @@ class ValidateRepositoryTests(unittest.TestCase):
 
     def validate_skill(self, source: str) -> list[str]:
         self.write(".agents/skills/lean-dev-router/SKILL.md", source)
+        self.write("skill-variants/en/SKILL.md", source)
+        self.write(
+            "skill-variants/zhcn/SKILL.md",
+            self.source("skill-variants/zhcn/SKILL.md"),
+        )
         validate_repo.validate_skill()
         return validate_repo.ERRORS
 
@@ -90,6 +95,7 @@ class ValidateRepositoryTests(unittest.TestCase):
     def test_skill_protocol_and_semantic_contract(self) -> None:
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
         self.assertEqual(self.validate_skill(skill), [])
+        chinese = self.source("skill-variants/zhcn/SKILL.md")
         scenarios = {
             "planning waves": ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "Sol 不持续调度"),
             "direct audit": ("随后直接启动 Terra", "Luna-to-Sol-to-Terra"),
@@ -105,7 +111,36 @@ class ValidateRepositoryTests(unittest.TestCase):
         }
         for terms in scenarios.values():
             for term in terms:
-                self.assertIn(term, skill)
+                self.assertIn(term, chinese)
+
+    def test_root_skill_is_the_english_variant(self) -> None:
+        root = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        english = self.source("skill-variants/en/SKILL.md")
+        self.assertEqual(root, english)
+        self.assertEqual(self.validate_skill(root), [])
+
+        validate_repo.ERRORS.clear()
+        self.write(".agents/skills/lean-dev-router/SKILL.md", root + "\n")
+        validate_repo.validate_skill()
+        self.assertTrue(any("must exactly match" in error for error in validate_repo.ERRORS))
+
+    def test_chinese_variant_rejects_semantic_anchor_removal(self) -> None:
+        root = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        chinese = self.source("skill-variants/zhcn/SKILL.md")
+        self.write(".agents/skills/lean-dev-router/SKILL.md", root)
+        self.write("skill-variants/en/SKILL.md", root)
+        self.write(
+            "skill-variants/zhcn/SKILL.md",
+            chinese.replace("相同 revision 不得重复审计", "removed", 1),
+        )
+        validate_repo.validate_skill()
+        self.assertTrue(
+            any(
+                "skill-variants/zhcn/SKILL.md" in error
+                and "相同 revision 不得重复审计" in error
+                for error in validate_repo.ERRORS
+            )
+        )
 
     def test_skill_validation_rejects_semantic_anchor_removal(self) -> None:
         original = self.source(".agents/skills/lean-dev-router/SKILL.md")
@@ -230,9 +265,13 @@ class ValidateRepositoryTests(unittest.TestCase):
             self.assertTrue(any(target in error and required in error for error in validate_repo.ERRORS))
 
     def test_skill_stays_within_context_budget(self) -> None:
-        skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
-        self.assertLessEqual(len(skill), 12_000)
-        self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
+        for relative in (
+            ".agents/skills/lean-dev-router/SKILL.md",
+            "skill-variants/zhcn/SKILL.md",
+        ):
+            skill = self.source(relative)
+            self.assertLessEqual(len(skill), 12_000)
+            self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
 
     def test_chinese_skill_is_allowed_but_runtime_remains_ascii(self) -> None:
         self.write(".agents/skills/lean-dev-router/SKILL.md", "# 中文\n")

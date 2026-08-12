@@ -280,6 +280,8 @@ flowchart LR
 | Path | Description |
 |:---|:---|
 | `.agents/skills/lean-dev-router/` | Routing Skill plus its standard-library runtime guard |
+| `skill-variants/en/SKILL.md` | Exact copy of the default English root Skill |
+| `skill-variants/zhcn/SKILL.md` | Chinese test variant for replacing the installed root Skill |
 | `agents/` | Example Agent config files: `luna_worker`, `sol_planner`, `terra_auditor` |
 | `docs/zh-CN/` | Chinese documentation for human readers only |
 | `lean-dev-router-self-test-guide.md` | Controlled guide for measuring token savings, quality, and routing overhead |
@@ -296,6 +298,15 @@ For **Codex**, install this required runtime as one versioned unit:
 
 Do not mix a Skill from one release with Agent TOML files from another. Start a fresh Codex task after installation; do not resume an in-flight v1 handoff as v2.
 The guard is bundled under the Skill's `scripts/`; keep mutable state in external scratch.
+The root `SKILL.md` and `skill-variants/en/SKILL.md` are identical and remain the release default.
+To test Chinese locally, replace only the installed root Skill; restore English the same way:
+
+```powershell
+Copy-Item skill-variants/zhcn/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
+Copy-Item skill-variants/en/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
+```
+
+Start a fresh Codex task after either replacement.
 
 #### Optional Scope Helper
 

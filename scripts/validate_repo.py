@@ -365,44 +365,13 @@ def validate_handoff_table(relative: str, skill: str) -> None:
         error(f"{relative}: missing handoff route {'/'.join(handoff)}")
 
 
-def validate_skill() -> None:
-    relative = ".agents/skills/lean-dev-router/SKILL.md"
+def validate_skill_document(
+    relative: str, required_text: tuple[str, ...], expected_titles: set[str]
+) -> None:
     skill = read(relative)
     if not skill.startswith("---\n") or "\n---\n" not in skill[4:]:
         error(f"{relative}: missing YAML-style frontmatter")
-    for required in (
-        "name: lean-dev-router",
-        "N/A (batch coverage)",
-        "integration_owner",
-        "integration_baseline",
-        "integration_paths_allow",
-        "integration_acceptance",
-        "python scripts/check_scope.py",
-        "FAILURE: missing_dispatch",
-        "PLAN_MANIFEST",
-        "DISPATCH_WAVE",
-        "EXPANSION_GATE",
-        "Sol 不持续调度常规事件",
-        "流式处理与预注册审计",
-        "<component>:<revision>:<stage>",
-        "all-component barrier",
-        "可复用一名未参与实现的 Terra",
-        "父代理执行长命令",
-        "60 秒内启动",
-        "第一个可用 slot 释放时启动",
-        "不使用出站结果信封",
-        "worktree-sha256:<64 lowercase hex>",
-        "CONTRACT_EFFECT: unchanged",
-        "parent:repair_or_sol",
-        "runtime_guard.py start",
-        "runtime_guard.py audit",
-        "ACTION: abandon",
-        "绝不更新增量审计基线",
-        "Exit 2 表示目标调用数为零",
-        "确定性的 `spinning` 信号",
-        "父代理在 Luna 失败或中断后绝不修复或写入",
-        "相同 revision 不得重复审计",
-    ):
+    for required in required_text:
         if required not in skill:
             error(f"{relative}: missing required text {required!r}")
 
@@ -421,25 +390,88 @@ def validate_skill() -> None:
     for previous, current in zip(headings, headings[1:]):
         if current[0] > previous[0] + 1:
             error(f"{relative}: heading level jumps from H{previous[0]} to H{current[0]}")
-    expected_titles = {
-        "Lean Dev Router",
-        "语言",
-        "权限与入口",
-        "有界规划波次",
-        "协议",
-        "范围、产物与版本",
-        "风险熔断与复现",
-        "流式处理与预注册审计",
-        "Terra 因果审计与修复",
-        "集成",
-        "执行与用户门禁",
-    }
     actual_titles = {title for _, title in headings}
     for title in sorted(expected_titles - actual_titles):
         error(f"{relative}: missing heading {title!r}")
     for number, line in markdown_lines(skill):
         if line.strip() in expected_titles and not line.startswith("#"):
             error(f"{relative}:{number}: bare heading {line.strip()!r}")
+
+
+def validate_skill() -> None:
+    root = ".agents/skills/lean-dev-router/SKILL.md"
+    english = "skill-variants/en/SKILL.md"
+    chinese = "skill-variants/zhcn/SKILL.md"
+    if read(root) != read(english):
+        error(f"{root}: must exactly match {english}")
+
+    common = (
+        "name: lean-dev-router",
+        "N/A (batch coverage)",
+        "integration_owner",
+        "integration_baseline",
+        "integration_paths_allow",
+        "integration_acceptance",
+        "python scripts/check_scope.py",
+        "FAILURE: missing_dispatch",
+        "PLAN_MANIFEST",
+        "DISPATCH_WAVE",
+        "EXPANSION_GATE",
+        "<component>:<revision>:<stage>",
+        "all-component barrier",
+        "worktree-sha256:<64 lowercase hex>",
+        "CONTRACT_EFFECT: unchanged",
+        "parent:repair_or_sol",
+        "runtime_guard.py start",
+        "runtime_guard.py audit",
+        "ACTION: abandon",
+    )
+    validate_skill_document(
+        root,
+        common + (
+            "does not continuously schedule",
+            "Streaming and preregistered audit",
+            "reuse one uninvolved Terra",
+            "long parent commands",
+            "within 60 seconds",
+            "first eligible slot release",
+            "not an outbound result envelope",
+            "never updates the incremental-audit baseline",
+            "Exit 2 means zero target calls",
+            "deterministic `spinning` signal",
+            "Parent never repairs or writes",
+            "same revision is never",
+        ),
+        {
+            "Lean Dev Router", "Language", "Authority and entry",
+            "Bounded planning waves", "Protocol", "Scope, artifacts, and revision",
+            "Risk fuse and replay", "Streaming and preregistered audit",
+            "Terra causal audit and repair", "Integration",
+            "Execution and human gate",
+        },
+    )
+    validate_skill_document(
+        chinese,
+        common + (
+            "Sol 不持续调度常规事件",
+            "流式处理与预注册审计",
+            "可复用一名未参与实现的 Terra",
+            "父代理执行长命令",
+            "60 秒内启动",
+            "第一个可用 slot 释放时启动",
+            "不使用出站结果信封",
+            "绝不更新增量审计基线",
+            "Exit 2 表示目标调用数为零",
+            "确定性的 `spinning` 信号",
+            "父代理在 Luna 失败或中断后绝不修复或写入",
+            "相同 revision 不得重复审计",
+        ),
+        {
+            "Lean Dev Router", "语言", "权限与入口", "有界规划波次", "协议",
+            "范围、产物与版本", "风险熔断与复现", "流式处理与预注册审计",
+            "Terra 因果审计与修复", "集成", "执行与用户门禁",
+        },
+    )
 
 
 def validate_runtime_guard() -> None:
