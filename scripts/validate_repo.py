@@ -38,6 +38,14 @@ DISPATCH_FIELDS = (
     "BUDGET",
     "NEXT: parent",
 )
+BUDGET_FIELDS = (
+    "MODEL_CALL_LIMIT",
+    "HYPOTHESIS_LIMIT",
+    "MODEL_ACTIVE_SECONDS_LIMIT",
+    "REPAIR_CYCLE_LIMIT",
+    "STAGNANT_CALL_LIMIT",
+)
+SOL_PRODUCTION_SCHEMA = DISPATCH_FIELDS + BUDGET_FIELDS
 OUTBOUND_FIELDS = (
     "PROTOCOL",
     "AGENT",
@@ -149,22 +157,30 @@ def validate_agents() -> None:
             next_field = re.search(r"\bNEXT:\s*([a-z_]+)", envelope)
             if next_field is None or next_field.group(1) != "parent":
                 error(f"{relative}: outbound result envelope NEXT must equal parent")
+        if name == "sol_planner":
+            validate_fenced_schema(
+                relative,
+                instructions,
+                SOL_PRODUCTION_SCHEMA,
+                "Sol production DISPATCH packet",
+            )
         common = OUTBOUND_FIELDS
         role_terms = {
-            "luna_worker": DISPATCH_FIELDS + (
+            "luna_worker": (
                 "PLAN_READY", "missing_dispatch", "scripts/check_scope.py",
                 "worktree-sha256:<64 lowercase hex>", "repair budget",
                 "Never plan the task, authorize writes, schedule peers, or request human authority.",
                 "pre-PASS route", "current diff/paths", "exact failure/replay",
                 "MODEL_CALL_LIMIT", "STAGNANT_CALL_LIMIT", "runtime guard",
             ),
-            "sol_planner": DISPATCH_FIELDS + (
+            "sol_planner": (
+                "AGENT: sol_planner",
                 "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
                 "not continuously schedule", "Preregister Terra",
                 "IMPACT_CONE", "worktree-sha256:<64 lowercase hex>",
                 "three materially distinct attempts", "human_authority",
                 "externally measurable latency", "sleep is only polling",
-                "MODEL_CALL_LIMIT", "STAGNANT_CALL_LIMIT", "hard parent-enforced ceiling",
+                "hard parent-enforced ceiling",
             ),
             "terra_auditor": (
                 "Never edit, authorize a write, schedule peers, or request human authority.",
@@ -240,6 +256,53 @@ def protocol_fields(block: str) -> dict[str, str]:
             raise ValueError(f"duplicate protocol field {name}")
         fields[name] = value.strip()
     return fields
+
+
+def fenced_protocol_fields(block: str) -> dict[str, str]:
+    """Parse protocol labels from a fenced packet, including indented fields."""
+    fields: dict[str, str] = {}
+    for line in block.splitlines():
+        match = re.match(r"^\s*([A-Z][A-Z_]*):\s*(.*)$", line)
+        if not match:
+            continue
+        name, value = match.groups()
+        if name in fields:
+            raise ValueError(f"duplicate protocol field {name}")
+        fields[name] = value.strip()
+    return fields
+
+
+def validate_fenced_schema(
+    relative: str,
+    text: str,
+    schema: tuple[str, ...],
+    label: str,
+) -> None:
+    """Require schema fields in the matching fenced protocol packet only."""
+    packets: list[dict[str, str]] = []
+    for block in fenced_blocks(text):
+        try:
+            fields = fenced_protocol_fields(block)
+        except ValueError as exc:
+            error(f"{relative}: {exc}")
+            continue
+        if fields.get("STATUS") == "DISPATCH":
+            packets.append(fields)
+    if not packets:
+        expected = ", ".join(repr(term) for term in schema)
+        error(f"{relative}: missing fenced {label}; expected labels: {expected}")
+        return
+    if len(packets) > 1:
+        error(f"{relative}: multiple fenced {label} packets")
+        return
+    packet = packets[0]
+    for term in schema:
+        if ":" in term:
+            name, expected = term.split(":", 1)
+            if packet.get(name.strip()) != expected.strip():
+                error(f"{relative}: fenced {label} missing {term!r}")
+        elif term not in packet:
+            error(f"{relative}: fenced {label} missing {term!r}")
 
 
 def validate_protocol_schema(relative: str, skill: str) -> None:
@@ -436,6 +499,16 @@ def validate_skill() -> None:
     optimized_chinese = "skill-variants/zhcn-optimized/SKILL.md"
     if read(root) != read(english):
         error(f"{root}: must exactly match {english}")
+
+    # The Skill documents shared protocol semantics; Sol's profile owns packet
+    # production, while runtime_guard.py enforces concrete task packets.
+    root_text = read(root)
+    validate_fenced_schema(
+        root,
+        root_text,
+        SOL_PRODUCTION_SCHEMA,
+        "root Skill inbound DISPATCH packet",
+    )
 
     common = (
         "name: lean-dev-router",
