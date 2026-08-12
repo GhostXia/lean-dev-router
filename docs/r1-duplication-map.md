@@ -65,9 +65,9 @@
 
 | 文件 | 改前字符 | 改后字符 | 变化 |
 |---|---:|---:|---:|
-| sol-planner.toml | 5,315 | 2,576 | −51.5% |
+| sol-planner.toml | 5,315 | 3,541 | −33.4% |
 | luna-worker.toml | 4,247 | 2,330 | −45.1% |
 | terra-auditor.toml | 4,383 | 3,114 | −28.9% |
-| 合计 | 13,945 | 8,020 | −42.5% |
+| 合计 | 13,945 | 8,985 | −35.6% |
 
 校验要求：`python -m unittest discover -s tests -v` 与 `python scripts/validate_repo.py` 通过；所有角色禁区锚点、结果信封、LANGUAGE_RULE 保持不变。
