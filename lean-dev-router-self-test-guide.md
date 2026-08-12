@@ -85,7 +85,7 @@ Unrelated refactors, scope expansion, drive-by cleanup.
 Starting commit hash: <hash>
 ```
 
-For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C, Sol places them with task summary, objective acceptance, and fixed constraints in a standard inbound `DISPATCH`; the parent may relay but not author or amend it. In a direct-Luna Group B run, the parent supplies the packet because the router is not in use. Paths needed only for reading remain context and do not become write authorization.
+For every write run, capture the baseline commit and allowed paths before Luna starts. In Group C, Sol places them with plan/planner/auditor identities, task summary, acceptance, constraints, and exact model-call/hypothesis/model-active/repair/stagnation budgets in a standard inbound `DISPATCH`; the parent may relay but not author or amend it. The parent runs the installed Skill's `scripts/runtime_guard.py start` before spawning Luna. In a direct-Luna Group B run, the parent supplies the packet because the router is not in use.
 
 ### Example (L2)
 
@@ -122,6 +122,19 @@ If native spawning is unavailable or the custom Agent configuration is not honor
 
 Do not treat an unrelated background process or session as equivalent to native parent-child routing. Do not silently substitute the default agent or model. See the [official Codex subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) when the client behavior is unclear.
 
+### 4.2 Runtime budget and spinning controls
+
+Use an external scratch state file. Confirm an incomplete DISPATCH makes
+`runtime_guard.py start` exit 2 without a child call. For a valid run, feed one
+`event` after every model call and retain the final snapshot. Verify that:
+
+- repeated hypothesis/error/command without changed progress stops immediately;
+- call, hypothesis, active-time, repair, and stagnant ceilings cannot be raised or exceeded;
+- an exhausted stage needs a changed revision, contract version, or evidence;
+- parent/Terra write events are rejected and parent never edits after Luna failure;
+- the same audit revision cannot register twice and later revisions are incremental;
+- Terra lists verified and unverified claims when its budget expires.
+
 ## 5. Metrics
 
 ### 5.1 Cost / token metrics
@@ -133,7 +146,11 @@ Count the complete run: parent session plus every child Agent/session. Do not co
 | Metric | How to record |
 |--------|----------------|
 | Input tokens | From usage UI / logs |
+| Cached / cache-creation input | Record separately; derive uncached input |
 | Output tokens | From usage UI / logs |
+| Reasoning output tokens | From usage UI / logs |
+| Wall / model-active seconds | Per role and stage |
+| Upstream attempts / termination | From guard snapshot |
 | Total tokens | Input + output |
 | Turns | Number of user/agent exchanges until delivery |
 | Agent calls | Count of Sol / Luna / Terra invocations |

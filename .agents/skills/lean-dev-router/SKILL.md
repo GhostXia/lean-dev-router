@@ -33,6 +33,10 @@ PROTOCOL: lean-dev-router/v2
 STATUS: DISPATCH
 TARGET: implementation
 DISPATCH_ID: stable unique component/write identifier
+PLAN_ID: stable plan identifier
+PLANNER_ROLE: sol_planner
+PLANNER_INSTANCE_ID: immutable planner instance identifier
+AUDITOR_INSTANCE_ID: independent auditor instance identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -41,10 +45,16 @@ ACCEPTANCE:
 - objective check and expected result
 CONSTRAINTS:
 - fixed implementation or compatibility bound
+BUDGET:
+  MODEL_CALL_LIMIT: positive integer
+  HYPOTHESIS_LIMIT: positive integer
+  MODEL_ACTIVE_SECONDS_LIMIT: positive integer
+  REPAIR_CYCLE_LIMIT: positive integer
+  STAGNANT_CALL_LIMIT: positive integer
 NEXT: parent
 ```
 
-父代理原样转发。每个字段都非空；`DISPATCH_ID` 在该写入生命周期内唯一且稳定；路径必须相对仓库；不得遗留重大决策。Terra 指派是普通只读指令。它不使用出站结果信封或 `STATUS: DISPATCH`。该状态只属于 Luna 写入授权。授权缺失时 Luna 不进行实现或写入，返回 `FAILURE: missing_dispatch`。
+父代理原样转发。每个字段都非空；`DISPATCH_ID` 在该写入生命周期内唯一且稳定；planner 与 auditor 身份不同；路径必须相对仓库；不得遗留重大决策。Terra 指派是普通只读指令。它不使用出站结果信封或 `STATUS: DISPATCH`。该状态只属于 Luna 写入授权。授权缺失时 Luna 不进行实现或写入，返回 `FAILURE: missing_dispatch`。
 
 各角色统一返回以下紧凑 schema，不得另加协议。
 
@@ -95,9 +105,11 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 ## 风险熔断与复现
 
-遇到昂贵、并发、flaky、依赖环境或不确定的 gate，Sol 必须设置熔断。默认每个失败 gate 最多三次实质不同的尝试和二十分钟模型主动时间。外部编译、测试、CI、网络等待不计主动时间，但命令必须设置 timeout。记录失败假设、新证据、动作和结果。代码、配置、输入、环境或依赖未变，又没有新可检验假设或明确的 flaky 测量授权时，禁止原样重跑命令。
+首次调用 Luna 前，父代理仅一次执行 `<skill-dir>/scripts/runtime_guard.py start --state <external-scratch-state>` 并传入 `DISPATCH`。后续 `repair` 与 `audit` 共用该状态，禁止重启；Exit 2 means zero target calls。`BUDGET` 是每个角色/阶段的 hard budget，上限为 8 次调用、4 个假设、1200 秒模型主动时间、2 轮修复和 2 次停滞调用，Sol 只能收紧。外部等待不计主动时间，但命令必须设置 timeout。
 
-触发熔断后，技术不确定性请求 `technical_resolution`；缺工具、权限或网络请求依赖处理；越权写入属于 scope failure；baseline 漂移属于 verification failure。复现证据严格包含 cwd、环境差异、完整命令、退出码和紧凑结果，Terra 原样继承；缺一项则审计不完整。
+每个 `event` 记录身份、revision/stage、调用、wall/active time、上游尝试、全部 token/cache families、假设、命令/错误、进展/证据与终止原因；guard 推导 uncached 与总 token。无新进展的重复失败必须停止；两次停滞是 deterministic `spinning` signal。停止状态锁存到 revision、契约或证据变化。Luna 预算耗尽转 Terra，Terra 预算耗尽转 Sol。Parent never repairs or writes after Luna failure/interruption。
+
+预算内每个失败 gate 最多三次实质不同的尝试。代码、配置、输入、环境、依赖、证据或可检验假设未变时，禁止原样重跑命令。技术不确定性请求 `technical_resolution`；缺工具、权限或网络请求依赖处理；越权写入属于 scope failure；baseline 漂移属于 verification failure。复现证据严格包含 cwd、环境差异、完整命令、退出码和紧凑结果，Terra 原样继承；缺一项则审计不完整。
 
 `PASS` 前的技术诊断须携带 `DISPATCH_ID`、baseline、当前 diff/paths、失败假设与尝试、完整失败/复现证据、契约边界和剩余预算，不要求最终 scope 或 revision。技术证据不足时请求 `planning_resolution`，由父代理返回 Sol。并发测试必须证明目标失败或竞争分支确实发生；sleep 只能用于轮询或兜底 timeout，不能单独作为同步证据。baseline 漂移立即停止写入并产生 verification blocker。
 
@@ -106,6 +118,8 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 独立组件的结果到达即处理，不等待无关 sibling；只有组合集成使用 all-component barrier。job key 固定为 `<component>:<revision>:<stage>`，状态为 `queued`、`running`、`complete` 或 `failed`，只重试缺失或失败的 key。`token-first` 可复用一名未参与实现的 Terra，但不得制造 sibling wait。有时间戳且有容量时须在 60 秒内启动，否则记录排队原因，并在第一个可用 slot 释放时启动。父代理执行长命令时仍须及时消费事件，并单独报告外部等待。
 
 Sol 为每次审计预注册相同 `DISPATCH_ID`、组件、依赖、revision/job-key 规则、`TASK_OBJECTIVE`、`CHANGE_SCOPE`、更宽的 `AUDIT_SCOPE/IMPACT_CONE`、验收、复现证据和越界策略。Luna `PASS` 后，父代理验证 scope、具体 revision、依赖、复现证据和审计契约，随后直接启动 Terra，不经过常规 Luna-to-Sol-to-Terra 跳转。前置条件不完整或未定义时回到 Sol。
+
+用 `runtime_guard.py audit` 登记；same revision is never 重复审计。首次完整审计，后续 revision 只审 delta 与既有发现。提前终止时父代理记录 `ACTION: abandon` 及原因，路由至 Sol，且 never updates the incremental-audit baseline。
 
 ## Terra 因果审计与修复
 
@@ -116,7 +130,7 @@ Terra 沿因果影响锥读取 `PATHS_ALLOW` 之外的 caller/callee、数据/�
 - **C** 无关的既有缺陷，通常作为不阻塞的 follow-up。
 - **D** 严重安全、数据丢失或兼容性风险，阻塞或升级。
 
-契约不变的修复由 Terra 返回 `REQUEST: implementation`，并携带原 `DISPATCH_ID`、`CONTRACT_EFFECT: unchanged`、位于 `PATHS_ALLOW` 内的 `AFFECTED_PATHS`、违反的验收项和有界修复证据。父代理核对 ID、Luna 证据、预注册审计和默认两轮修复预算，再机械地交回原 Luna。新状态取得新 revision 并重新审计。
+契约不变的修复由 Terra 返回 `REQUEST: implementation`，并携带原 `DISPATCH_ID`、预注册的 `AUDITOR_INSTANCE_ID`、`CONTRACT_EFFECT: unchanged`、位于 `PATHS_ALLOW` 内的 `AFFECTED_PATHS`、违反的验收项和有界修复证据。父代理核对 ID、Luna 证据、预注册审计和默认两轮修复预算，再机械地交回原 Luna。新状态取得新 revision 并重新审计。
 
 任何 scope、plan、acceptance、constraint、公开接口、架构、安全边界、数据格式或资源限制变化，以及歧义或预算耗尽，都回到 Sol。Terra 自身绝不写修复。
 

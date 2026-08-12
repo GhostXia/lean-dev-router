@@ -5,6 +5,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import validate_repo
 
@@ -53,6 +54,13 @@ class ValidateRepositoryTests(unittest.TestCase):
         validate_repo.validate_agents()
         self.assertTrue(any("luna-worker.toml" in e and "language" in e for e in validate_repo.ERRORS))
 
+    def test_runtime_language_ignores_python_bytecode_cache(self) -> None:
+        path = validate_repo.ROOT / "agents" / "__pycache__" / "runtime.pyc"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"\xff\x00")
+        validate_repo.validate_runtime_language()
+        self.assertEqual(validate_repo.ERRORS, [])
+
     def test_handoff_table_is_closed_and_parent_mechanical(self) -> None:
         expected = {
             ("luna_worker", "PASS", "none"): "parent:manifest_gate",
@@ -87,7 +95,7 @@ class ValidateRepositoryTests(unittest.TestCase):
             "direct audit": ("随后直接启动 Terra", "Luna-to-Sol-to-Terra"),
             "revision": ("worktree-sha256:<64 lowercase hex>", "相同状态必须复现相同 revision", "任何修复都会改变 revision"),
             "artifacts": ("只授权持久写入", "一次性产物根目录", "产物绝不进入 revision 标识"),
-            "fuse": ("三次实质不同的尝试", "二十分钟模型主动时间", "禁止原样重跑命令"),
+            "fuse": ("MODEL_CALL_LIMIT", "deterministic `spinning` signal", "hard budget", "禁止原样重跑命令"),
             "failure routes": ("technical_resolution", "请求依赖处理", "scope failure", "baseline 漂移"),
             "replay": ("cwd、环境差异、完整命令、退出码和紧凑结果",),
             "concurrency": ("证明目标失败或竞争分支确实发生", "轮询或兜底 timeout"),
@@ -235,6 +243,35 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.write("agents/runtime.toml", "name = '中文'\n")
         validate_repo.validate_runtime_language()
         self.assertTrue(any("agents/runtime.toml" in error for error in validate_repo.ERRORS))
+
+    def test_runtime_guard_has_required_contract(self) -> None:
+        source = self.source(".agents/skills/lean-dev-router/scripts/runtime_guard.py")
+        self.write(".agents/skills/lean-dev-router/scripts/runtime_guard.py", source)
+        validate_repo.validate_runtime_guard()
+        self.assertEqual(validate_repo.ERRORS, [])
+
+        validate_repo.ERRORS.clear()
+        self.write(
+            ".agents/skills/lean-dev-router/scripts/runtime_guard.py",
+            source.replace("duplicate_audit_revision", "removed"),
+        )
+        validate_repo.validate_runtime_guard()
+        self.assertTrue(any("duplicate_audit_revision" in error for error in validate_repo.ERRORS))
+
+    def test_runtime_guard_reports_read_syntax_and_import_errors(self) -> None:
+        with mock.patch.object(validate_repo, "read", side_effect=OSError("denied")):
+            validate_repo.validate_runtime_guard()
+        self.assertTrue(any("cannot read runtime guard" in error for error in validate_repo.ERRORS))
+
+        validate_repo.ERRORS.clear()
+        self.write(".agents/skills/lean-dev-router/scripts/runtime_guard.py", "def broken(:\n")
+        validate_repo.validate_runtime_guard()
+        self.assertTrue(any("invalid Python" in error for error in validate_repo.ERRORS))
+
+        validate_repo.ERRORS.clear()
+        self.write(".agents/skills/lean-dev-router/scripts/runtime_guard.py", "import requests\n")
+        validate_repo.validate_runtime_guard()
+        self.assertTrue(any("requests" in error for error in validate_repo.ERRORS))
 
     def test_four_backtick_fence_wraps_shorter_fence(self) -> None:
         self.assertEqual(
