@@ -1,50 +1,32 @@
 ---
 name: lean-dev-router
-description: Route repository-bound engineering through Sol planning, parent scheduling, Luna implementation, and Terra causal audit with compact auditable handoffs.
+description: 由 Sol 规划、父代理调度、Luna 实现、Terra 因果审计，以紧凑且可审计的交接处理仓库工程任务。
 ---
 
 # Lean Dev Router
 
-Use the smallest sufficient pool. Sol plans and authorizes; the parent
-schedules mechanically; Luna writes; Terra audits and resolves technical questions.
+始终使用足够完成任务的最小代理池。Sol 规划并授权，父代理机械调度，Luna 写入，Terra 审计并解决技术问题。
 
-## Language
+## 语言
 
-Follow the parent task's primary language; when unspecified, use its dominant
-language; otherwise the dominant language is the strongest natural-language
-signal. Use English when no natural-language signal exists. Keep code,
-commands, paths, model IDs, and agent names unchanged.
+跟随父任务的主要语言；未明确时使用任务中占主导的自然语言，没有自然语言信号时使用英文。代码、命令、路径、模型 ID、代理名和协议字段保持原样。
 
-## Authority and entry
+## 权限与入口
 
-- Every change-producing task starts with `sol_planner`. Sol fixes objective,
-  scope, acceptance, dependencies, budgets, write contracts, audits, and routes. Only Sol authors or
-  amends a `DISPATCH` and only Sol may request human authority.
-- Sol does not continuously schedule, wait on workers, or consolidate routine
-  events. The parent executes the declared state machine without engineering
-  judgment. Undefined, incomplete, or contract-changing states return to Sol.
-- Sol fixes externally measurable latency, attempt, size, and resource bounds,
-  proven retryable states, and public/data/security invariants when relevant;
-  Luna retains private helper, naming, and equivalent control-flow choices.
-- `luna_worker` implements only a valid contract and makes only local choices
-  that preserve it. `terra_auditor` is read-only and supplies causal evidence,
-  audit findings, and bounded repair advice; it never authorizes a write.
-- Start an explicit audit, diagnosis, or evidence-first investigation with
-  Terra. Add Sol when planning, authorization, or a major decision is needed.
-- Deployment, destructive action, external commitment, and product policy are
-  outside this routing authority unless the user explicitly authorizes them.
+- 一切会产生改动的任务都先交给 `sol_planner`。Sol 确定目标、范围、验收、依赖、预算、写入契约、审计与路由。只有 Sol 能创建或修改 `DISPATCH`，也只有 Sol 能请求用户决策。
+- Sol 不持续调度、不等待 worker，也不汇总常规事件。父代理不作工程判断，只执行已声明的状态机。未定义、不完整或改变契约的状态回到 Sol。
+- Sol 按需确定可外部测量的延迟、尝试次数、规模和资源上限，以及已证明可重试的状态与公开接口、数据、安全不变量。私有 helper、命名和等价控制流由 Luna 决定。
+- `luna_worker` 只执行有效契约，只作不改变契约的局部选择。只读的 `terra_auditor` 提供因果证据、审计发现和有界修复建议，不能授权写入。
+- 明确的审计、诊断或证据优先调查从 Terra 开始；需要规划、授权或重大决策时加入 Sol。
+- 部署、破坏性操作、外部承诺和产品政策不在本路由权限内，除非用户明确授权。
 
-## Bounded planning waves
+## 有界规划波次
 
-Sol emits a compact `PLAN_MANIFEST`: global invariants plus the ready
-`DISPATCH_WAVE`. Entries declare id, role, worktree, dependencies, revision,
-replay, audit, transitions, routes, and the next `EXPANSION_GATE`.
-The parent requests Sol only at that gate or an exception. Do not pre-expand
-distant work or emit implementation code.
+Sol 输出紧凑的 `PLAN_MANIFEST`，其中只有全局不变量与当前就绪的 `DISPATCH_WAVE`。条目声明 id、角色、worktree、依赖、revision、复现证据、审计、状态转换、路由和下一个 `EXPANSION_GATE`。父代理只在扩展门或异常时再次请求 Sol。不要预先展开远期工作，也不要输出实现代码。Sol 不持续调度常规事件。
 
-## Protocol
+## 协议
 
-Luna may write only after receiving this complete inbound contract:
+Luna 只有收到以下完整入站契约后才能写入。
 
 ```text
 PROTOCOL: lean-dev-router/v2
@@ -62,14 +44,9 @@ CONSTRAINTS:
 NEXT: parent
 ```
 
-The parent relays it unchanged. Every field is non-empty, `DISPATCH_ID` is
-unique and stable for that write lifecycle, paths are repository
-relative, and no major decision remains. A Terra assignment is an ordinary
-read-only instruction, not an outbound result envelope (only Luna write
-authorization) and never `STATUS: DISPATCH`. Missing authorization makes Luna
-perform no implementation and return `FAILURE: missing_dispatch`.
+父代理原样转发。每个字段都非空；`DISPATCH_ID` 在该写入生命周期内唯一且稳定；路径必须相对仓库；不得遗留重大决策。Terra 指派是普通只读指令。它不使用出站结果信封或 `STATUS: DISPATCH`。该状态只属于 Luna 写入授权。授权缺失时 Luna 不进行实现或写入，返回 `FAILURE: missing_dispatch`。
 
-Every role returns the same compact result schema; do not add another protocol:
+各角色统一返回以下紧凑 schema，不得另加协议。
 
 ```text
 PROTOCOL: lean-dev-router/v2
@@ -84,14 +61,11 @@ NEXT: parent
 SUMMARY: one concise sentence
 ```
 
-`PASS`, `BLOCKED`, and `ESCALATE` never authorize writes. Evidence may use
-`N/A (planning-only)`, `N/A (batch coverage)`, `N/A (scope-check)`, or
-`N/A (integration-check)`. If required fields or evidence are missing, the
-originating role corrects its result with `FAILURE: verification`.
+`PASS`、`BLOCKED`、`ESCALATE` 都不能授权写入。证据可用 `N/A (planning-only)`、`N/A (batch coverage)`、`N/A (scope-check)` 或 `N/A (integration-check)`。字段或证据缺失时，由原角色以 `FAILURE: verification` 修正结果。
 
-The parent applies these mechanical actions; prose cannot override them:
+父代理严格执行下表，任何自然语言都不能覆盖机械路由。
 
-| AGENT | STATUS | REQUEST | Mechanical destination |
+| AGENT | STATUS | REQUEST | 机械目的地 |
 |:---|:---|:---|:---|
 | `luna_worker` | `PASS` | `none` | `parent:manifest_gate` |
 | `luna_worker` | `BLOCKED` | `none` | `parent:pause` |
@@ -105,123 +79,55 @@ The parent applies these mechanical actions; prose cannot override them:
 | `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
 
-## Scope, artifacts, and revision
+## 范围、产物与版本
 
-`PATHS_ALLOW` authorizes persistent writes only. Build output goes to external
-scratch. A disposable artifact root must be predeclared, absent or clean at
-preflight, and removed before scope passes. Retained or undeclared standard or
-ignored untracked paths fail; artifacts never enter revision identity.
+`PATHS_ALLOW` 只授权持久写入。构建输出放在仓库外的临时目录。一次性产物根目录须预先声明，preflight 时不存在或为空，并在范围检查通过前删除。保留或未声明的普通、ignored、untracked 路径都会失败；产物绝不进入 revision 标识。
 
-Verify every allow entry together with:
+将每个 allow 条目一起传入。
 
 ```text
 python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revision
 ```
 
-Use a repeated `--allow <paths_allow_entry>` flag for each entry. The helper
-checks tracked, standard-untracked, and ignored-untracked paths. If the helper
-is unavailable, run the documented three Git enumerations and do not invent a
-dirty revision. Missing or failed scope evidence rejects `PASS`.
+每个条目各用一次 `--allow <paths_allow_entry>`。helper 检查 tracked、普通 untracked 和 ignored untracked 路径。helper 不可用时执行文档规定的三项 Git 枚举，不得编造 dirty revision。范围证据缺失或失败时拒绝 `PASS`。
 
-Only after scope passes, resolve the auditable state. A clean committed state
-uses its exact commit SHA. A dirty state uses
-`worktree-sha256:<64 lowercase hex>` over the resolved baseline, authorized
-tracked binary diffs, and authorized untracked path/content with safe framing.
-The same state reproduces the same revision; any repair changes it. Reject
-placeholders such as `<luna-revision>` and baseline-only dirty keys.
+范围通过后才能确定可审计状态。干净提交使用精确 commit SHA。dirty 状态使用 `worktree-sha256:<64 lowercase hex>`，输入为已解析 baseline、授权的 tracked binary diff，以及用安全 framing 编码的授权 untracked 路径与内容。相同状态必须复现相同 revision，任何修复都会改变 revision。拒绝 `<luna-revision>` 等占位符及只含 baseline 的 dirty key。
 
-## Risk fuse and replay
+## 风险熔断与复现
 
-Sol adds a fuse for expensive, concurrent, flaky, environment-sensitive, or
-uncertain gates. Default: three materially distinct attempts and twenty
-model-active minutes per failing gate. External compile, test, CI, and network
-waits do not consume active time, but commands retain explicit timeouts.
-Record failed assumption, new evidence, action, and result. Never rerun an
-unchanged command without changed code/config/input/environment/dependency, a
-new testable hypothesis, or explicit flaky-measurement authorization.
+遇到昂贵、并发、flaky、依赖环境或不确定的 gate，Sol 必须设置熔断。默认每个失败 gate 最多三次实质不同的尝试和二十分钟模型主动时间。外部编译、测试、CI、网络等待不计主动时间，但命令必须设置 timeout。记录失败假设、新证据、动作和结果。代码、配置、输入、环境或依赖未变，又没有新可检验假设或明确的 flaky 测量授权时，禁止原样重跑命令。
 
-At the fuse, technical uncertainty requests `technical_resolution`; missing
-tools/permissions/network request dependency handling; unauthorized writes are
-scope failures; baseline drift is verification failure. Replay evidence is
-exactly cwd, environment delta, exact command, exit code, and compact result.
-Terra inherits it verbatim; missing replay fields make the audit incomplete.
-Pre-PASS technical resolution instead carries `DISPATCH_ID`, baseline, current
-diff/paths, failed assumptions and attempts, exact failure/replay, contract
-bounds, and remaining budget; final scope/revision is not required. Missing
-technical evidence requests `planning_resolution` so parent returns to Sol.
-Concurrent tests must prove the target failure/competition branch occurred;
-sleep may be only polling or a backstop timeout, never the sole synchronization
-proof. Baseline drift stops writes and produces a verification blocker.
+触发熔断后，技术不确定性请求 `technical_resolution`；缺工具、权限或网络请求依赖处理；越权写入属于 scope failure；baseline 漂移属于 verification failure。复现证据严格包含 cwd、环境差异、完整命令、退出码和紧凑结果，Terra 原样继承；缺一项则审计不完整。
 
-## Streaming and preregistered audit
+`PASS` 前的技术诊断须携带 `DISPATCH_ID`、baseline、当前 diff/paths、失败假设与尝试、完整失败/复现证据、契约边界和剩余预算，不要求最终 scope 或 revision。技术证据不足时请求 `planning_resolution`，由父代理返回 Sol。并发测试必须证明目标失败或竞争分支确实发生；sleep 只能用于轮询或兜底 timeout，不能单独作为同步证据。baseline 漂移立即停止写入并产生 verification blocker。
 
-Process each independent component result as it arrives; never wait for
-unrelated siblings. Only combined integration uses an all-component barrier.
-Use stable `<component>:<revision>:<stage>` job keys with `queued`, `running`,
-`complete`, or `failed`; retry only missing or failed keys. `token-first` may
-reuse one uninvolved Terra but cannot create a sibling wait. When timestamps
-exist, start within 60 seconds if capacity exists, otherwise record the queue
-reason and start at the first eligible slot release. Keep event consumption
-responsive during long parent commands and report external waits separately.
+## 流式处理与预注册审计
 
-Sol preregisters each audit with the same `DISPATCH_ID`, component,
-dependencies, revision/job-key
-rule, `TASK_OBJECTIVE`, `CHANGE_SCOPE`, broader `AUDIT_SCOPE/IMPACT_CONE`,
-acceptance, replay evidence, and out-of-scope policy. After Luna `PASS`, the
-parent verifies scope, concrete revision, dependencies, replay, and audit
-contract, then launches Terra directly. No routine Luna-to-Sol-to-Terra hop is
-required. An incomplete or undefined precondition returns to Sol.
+独立组件的结果到达即处理，不等待无关 sibling；只有组合集成使用 all-component barrier。job key 固定为 `<component>:<revision>:<stage>`，状态为 `queued`、`running`、`complete` 或 `failed`，只重试缺失或失败的 key。`token-first` 可复用一名未参与实现的 Terra，但不得制造 sibling wait。有时间戳且有容量时须在 60 秒内启动，否则记录排队原因，并在第一个可用 slot 释放时启动。父代理执行长命令时仍须及时消费事件，并单独报告外部等待。
 
-## Terra causal audit and repair
+Sol 为每次审计预注册相同 `DISPATCH_ID`、组件、依赖、revision/job-key 规则、`TASK_OBJECTIVE`、`CHANGE_SCOPE`、更宽的 `AUDIT_SCOPE/IMPACT_CONE`、验收、复现证据和越界策略。Luna `PASS` 后，父代理验证 scope、具体 revision、依赖、复现证据和审计契约，随后直接启动 Terra，不经过常规 Luna-to-Sol-to-Terra 跳转。前置条件不完整或未定义时回到 Sol。
 
-Terra reads beyond `PATHS_ALLOW` through the causal impact cone: callers and
-callees, data/error/resource flow, configuration, platforms, compatibility,
-concurrency, security, performance, and tests. This is broader read scope, not
-write authority or unbounded repository scanning. Outside findings include
-path, evidence, causality, severity, blocking decision, and ownership:
+## Terra 因果审计与修复
 
-- **A**: change-caused acceptance defect; block and repair.
-- **B**: necessary path omitted from scope; return to Sol.
-- **C**: unrelated existing defect; normally non-blocking follow-up.
-- **D**: severe security, data-loss, or compatibility risk; block/escalate.
+Terra 沿因果影响锥读取 `PATHS_ALLOW` 之外的 caller/callee、数据/错误/资源流、配置、平台、兼容性、并发、安全、性能和测试。这只扩大读取范围，不授予写权限，也不允许无界扫描仓库。越界发现须给出路径、证据、因果关系、严重性、阻塞决定和责任归属。
 
-For a contract-preserving repair Terra returns `REQUEST: implementation` with
-the original `DISPATCH_ID`, `CONTRACT_EFFECT: unchanged`, `AFFECTED_PATHS`
-inside `PATHS_ALLOW`, violated acceptance, and bounded repair evidence. Parent
-matches the ID to Luna evidence and the preregistered audit, checks those facts
-and the default two-cycle repair budget, then mechanically
-returns the original Luna. The new state gets a new revision and re-audit.
-Any change to scope, plan, acceptance, constraints, public interface,
-architecture, security boundary, data format, resource limit, or an ambiguous
-or exhausted repair returns to Sol. Terra never writes the repair itself.
+- **A** 改动引起的验收缺陷，阻塞并修复。
+- **B** 必要路径遗漏在 scope 外，返回 Sol。
+- **C** 无关的既有缺陷，通常作为不阻塞的 follow-up。
+- **D** 严重安全、数据丢失或兼容性风险，阻塞或升级。
 
-## Integration
+契约不变的修复由 Terra 返回 `REQUEST: implementation`，并携带原 `DISPATCH_ID`、`CONTRACT_EFFECT: unchanged`、位于 `PATHS_ALLOW` 内的 `AFFECTED_PATHS`、违反的验收项和有界修复证据。父代理核对 ID、Luna 证据、预注册审计和默认两轮修复预算，再机械地交回原 Luna。新状态取得新 revision 并重新审计。
 
-Two or more write batches require shared contracts, dependency order,
-`integration_worktree`, `integration_owner`, `integration_baseline`,
-`integration_paths_allow`, and `integration_acceptance`. The allow-list starts
-as the exact union of accepted batches. One Luna combines accepted commits;
-conflict resolution is a new authorized write. Whole-task `PASS` requires a
-clean combined state, final scope, full acceptance, and any declared final
-audit. Component success is not transitive.
+任何 scope、plan、acceptance、constraint、公开接口、架构、安全边界、数据格式或资源限制变化，以及歧义或预算耗尽，都回到 Sol。Terra 自身绝不写修复。
 
-## Execution and human gate
+## 集成
 
-Parallel Luna writers use isolated worktrees; read-only Terra may share a
-checkout. Default pool caps are token-first 3, balanced 6, latency-first 10.
-If Sol cannot spawn nested workers, it returns
-`BLOCKED/dependency/REQUEST implementation` with the literal manifest so the
-parent can relay it mechanically; the parent fallback never replans.
+两个及以上写入 batch 必须声明共享契约、依赖顺序、`integration_worktree`、`integration_owner`、`integration_baseline`、`integration_paths_allow` 与 `integration_acceptance`。allow-list 初始值是已接受 batch 的精确并集。一名 Luna 按顺序合并已接受提交；冲突解决需要新的写入授权。整项任务 `PASS` 要求干净的组合状态、最终 scope、完整验收和所有已声明的最终审计。组件成功不能自动推出整体成功。
 
-Sol decides only reversible technical trade-offs within the fixed contract.
-Objective, scope, acceptance, policy, material compatibility/security/privacy/
-license/migration/cost, or product commitments require
-`BLOCKED/major-decision/REQUEST human_authority`. Sol supplies at most three
-options, one recommendation, and one question; the parent presents it without
-translating the user's answer into a contract.
+## 执行与用户门禁
 
-Stop when all manifest states, scope, revision, audit, repair, integration, and
-final gates are terminal. When every declared terminal gate passes, the parent
-may summarize completion without another Sol call. Do not invoke every role by
-default, repeat a stage without changed evidence, or let Luna or Terra
-orchestrate peers.
+并行 Luna writer 使用隔离 worktree；只读 Terra 可共享 checkout。默认代理池上限为 token-first 3、balanced 6、latency-first 10。Sol 无法嵌套 spawn 时，以 `BLOCKED/dependency/REQUEST implementation` 返回 literal manifest，父代理只负责机械转发，不能重新规划。
+
+Sol 只决定固定契约内可逆的技术取舍。目标、范围、验收、政策，以及实质性的兼容性、安全、隐私、许可、迁移、成本或产品承诺，必须使用 `BLOCKED/major-decision/REQUEST human_authority`。Sol 至多给出三个选项、一个建议和一个问题；父代理原样交给用户，不得自行把回答转换成契约。
+
+所有 manifest state、scope、revision、audit、repair、integration 和 final gate 都进入终态后停止。全部已声明终态 gate 通过时，父代理可直接总结，无须再次调用 Sol。不要默认调用每个角色，不要在证据未变时重复阶段，也不要让 Luna 或 Terra 调度同级代理。

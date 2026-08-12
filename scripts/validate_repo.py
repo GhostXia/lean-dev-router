@@ -364,15 +364,15 @@ def validate_skill() -> None:
         "PLAN_MANIFEST",
         "DISPATCH_WAVE",
         "EXPANSION_GATE",
-        "does not continuously schedule",
-        "Streaming and preregistered audit",
+        "Sol 不持续调度常规事件",
+        "流式处理与预注册审计",
         "<component>:<revision>:<stage>",
         "all-component barrier",
-        "reuse one uninvolved Terra",
-        "long parent commands",
-        "within 60 seconds",
-        "first eligible slot release",
-        "not an outbound result envelope",
+        "可复用一名未参与实现的 Terra",
+        "父代理执行长命令",
+        "60 秒内启动",
+        "第一个可用 slot 释放时启动",
+        "不使用出站结果信封",
         "worktree-sha256:<64 lowercase hex>",
         "CONTRACT_EFFECT: unchanged",
         "parent:repair_or_sol",
@@ -397,16 +397,16 @@ def validate_skill() -> None:
             error(f"{relative}: heading level jumps from H{previous[0]} to H{current[0]}")
     expected_titles = {
         "Lean Dev Router",
-        "Language",
-        "Authority and entry",
-        "Bounded planning waves",
-        "Protocol",
-        "Scope, artifacts, and revision",
-        "Risk fuse and replay",
-        "Streaming and preregistered audit",
-        "Terra causal audit and repair",
-        "Integration",
-        "Execution and human gate",
+        "语言",
+        "权限与入口",
+        "有界规划波次",
+        "协议",
+        "范围、产物与版本",
+        "风险熔断与复现",
+        "流式处理与预注册审计",
+        "Terra 因果审计与修复",
+        "集成",
+        "执行与用户门禁",
     }
     actual_titles = {title for _, title in headings}
     for title in sorted(expected_titles - actual_titles):
@@ -469,6 +469,8 @@ def validate_runtime_language() -> None:
             if not path.is_file():
                 continue
             relative = path.relative_to(ROOT).as_posix()
+            if relative == ".agents/skills/lean-dev-router/SKILL.md":
+                continue
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if not line.isascii():
                     error(f"{relative}:{number}: non-ASCII text is not allowed in runtime files")

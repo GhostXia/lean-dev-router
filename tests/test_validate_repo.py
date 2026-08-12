@@ -83,17 +83,17 @@ class ValidateRepositoryTests(unittest.TestCase):
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
         self.assertEqual(self.validate_skill(skill), [])
         scenarios = {
-            "planning waves": ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "does not continuously schedule"),
-            "direct audit": ("launches Terra directly", "No routine Luna-to-Sol-to-Terra hop"),
-            "revision": ("worktree-sha256:<64 lowercase hex>", "same state reproduces", "repair changes"),
-            "artifacts": ("persistent writes only", "disposable artifact", "never enter revision identity"),
-            "fuse": ("three materially distinct attempts", "twenty", "unchanged command"),
-            "failure routes": ("technical_resolution", "dependency handling", "scope failures", "Baseline drift"),
-            "replay": ("cwd, environment delta, exact command, exit code, and compact result",),
-            "concurrency": ("prove the target failure/competition branch", "polling or a backstop timeout"),
-            "causal audit": ("broader `AUDIT_SCOPE/IMPACT_CONE`", "causal impact cone", "**A**", "**B**", "**C**", "**D**"),
-            "repair": ("CONTRACT_EFFECT: unchanged", "AFFECTED_PATHS", "two-cycle repair budget", "returns to Sol"),
-            "human": ("REQUEST human_authority", "at most three", "one recommendation", "one question"),
+            "planning waves": ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "Sol 不持续调度"),
+            "direct audit": ("随后直接启动 Terra", "Luna-to-Sol-to-Terra"),
+            "revision": ("worktree-sha256:<64 lowercase hex>", "相同状态必须复现相同 revision", "任何修复都会改变 revision"),
+            "artifacts": ("只授权持久写入", "一次性产物根目录", "产物绝不进入 revision 标识"),
+            "fuse": ("三次实质不同的尝试", "二十分钟模型主动时间", "禁止原样重跑命令"),
+            "failure routes": ("technical_resolution", "请求依赖处理", "scope failure", "baseline 漂移"),
+            "replay": ("cwd、环境差异、完整命令、退出码和紧凑结果",),
+            "concurrency": ("证明目标失败或竞争分支确实发生", "轮询或兜底 timeout"),
+            "causal audit": ("更宽的 `AUDIT_SCOPE/IMPACT_CONE`", "因果影响锥", "**A**", "**B**", "**C**", "**D**"),
+            "repair": ("CONTRACT_EFFECT: unchanged", "AFFECTED_PATHS", "默认两轮修复预算", "都回到 Sol"),
+            "human": ("REQUEST human_authority", "至多给出三个选项", "一个建议和一个问题"),
         }
         for terms in scenarios.values():
             for term in terms:
@@ -225,6 +225,16 @@ class ValidateRepositoryTests(unittest.TestCase):
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
         self.assertLessEqual(len(skill), 12_000)
         self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
+
+    def test_chinese_skill_is_allowed_but_runtime_remains_ascii(self) -> None:
+        self.write(".agents/skills/lean-dev-router/SKILL.md", "# 中文\n")
+        self.write("agents/runtime.toml", "name = 'runtime'\n")
+        validate_repo.validate_runtime_language()
+        self.assertEqual(validate_repo.ERRORS, [])
+
+        self.write("agents/runtime.toml", "name = '中文'\n")
+        validate_repo.validate_runtime_language()
+        self.assertTrue(any("agents/runtime.toml" in error for error in validate_repo.ERRORS))
 
     def test_four_backtick_fence_wraps_shorter_fence(self) -> None:
         self.assertEqual(
