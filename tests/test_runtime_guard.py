@@ -106,6 +106,38 @@ class DispatchValidationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertFalse(state.exists())
 
+    def test_cli_rejects_conflicting_case_insensitive_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state.json"
+            payloads = (
+                json.dumps(dispatch())[:-1] + ', "protocol": "other"}',
+                json.dumps(dispatch())[:-1] + ', "PROTOCOL": "other"}',
+                json.dumps(dispatch()).replace(
+                    '"MODEL_CALL_LIMIT": 3', '"MODEL_CALL_LIMIT": 3, "model_call_limit": 1'
+                ),
+            )
+            for payload in payloads:
+                result = subprocess.run(
+                    [sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state)],
+                    input=payload, text=True, capture_output=True, check=False, timeout=30,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(json.loads(result.stdout)["reason"], "invalid_input")
+                self.assertFalse(state.exists())
+
+    def test_cli_reports_corrupt_state_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state.json"
+            for corrupt in ([], {"dispatch": dispatch(), "stages": []}):
+                state.write_text(json.dumps(corrupt), encoding="utf-8")
+                result = subprocess.run(
+                    [sys.executable, "-B", str(GUARD_PATH), "snapshot", "--state", str(state)],
+                    text=True, capture_output=True, check=False, timeout=30,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(json.loads(result.stdout)["reason"], "invalid_input")
+                self.assertEqual(result.stderr, "")
+
     def test_cli_persists_valid_state_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "state.json"
@@ -218,6 +250,22 @@ class RuntimeBudgetTests(unittest.TestCase):
         self.assertFalse(result["allowed"])
         self.assertEqual(guard.stages, {})
 
+    def test_invalid_outcome_does_not_consume_budget(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        result = guard.observe(event(OUTCOME="unknown", PROGRESS_FINGERPRINT="bad"))
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "invalid_event")
+        self.assertEqual(guard.stages, {})
+
+    def test_changed_evidence_does_not_reset_stage_budget(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        first = guard.observe(event(EVIDENCE_FINGERPRINT="e-1", PROGRESS_FINGERPRINT="p-1"))
+        second = guard.observe(event(EVIDENCE_FINGERPRINT="e-2", PROGRESS_FINGERPRINT="p-2"))
+        self.assertTrue(first["allowed"])
+        self.assertTrue(second["allowed"])
+        self.assertEqual(second["telemetry"]["model_calls"], 2)
+        self.assertEqual(len(guard.stages), 1)
+
     def test_missing_usage_field_fails_closed(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
         item = event()
@@ -233,9 +281,11 @@ class RuntimeBudgetTests(unittest.TestCase):
         guard.observe(event())
         blocked = guard.observe(event())
         self.assertEqual(blocked["reason"], "escalation_latch")
-        resumed = guard.observe(event(EVIDENCE_FINGERPRINT="e-2", PROGRESS_FINGERPRINT="new"))
+        resumed = guard.observe(
+            event(EVIDENCE_FINGERPRINT="e-2", PROGRESS_FINGERPRINT="new", OUTCOME="pass")
+        )
         self.assertTrue(resumed["allowed"])
-        self.assertEqual(resumed["telemetry"]["model_calls"], 1)
+        self.assertEqual(resumed["telemetry"]["model_calls"], 3)
 
     def test_non_luna_writer_is_rejected(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())

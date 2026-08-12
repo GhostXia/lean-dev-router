@@ -98,6 +98,33 @@ def _value(data: Mapping[str, Any], key: str, default: Any = None) -> Any:
     return default
 
 
+def _reject_conflicting_keys(data: Mapping[str, Any], path: str = "$") -> None:
+    seen: set[str] = set()
+    for key, value in data.items():
+        folded = str(key).casefold()
+        if folded in seen:
+            raise ValueError(f"conflicting case-insensitive field: {path}.{key}")
+        seen.add(folded)
+        if isinstance(value, Mapping):
+            _reject_conflicting_keys(value, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, Mapping):
+                    _reject_conflicting_keys(item, f"{path}.{key}[{index}]")
+
+
+def _json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    seen: set[str] = set()
+    for key, item in pairs:
+        folded = key.casefold()
+        if folded in seen:
+            raise ValueError(f"conflicting case-insensitive field: {key}")
+        seen.add(folded)
+        value[key] = item
+    return value
+
+
 def _present(value: Any) -> bool:
     if value is None or isinstance(value, bool):
         return False
@@ -273,7 +300,7 @@ class RuntimeGuard:
     def _key(self, event: Mapping[str, Any]) -> str:
         fields = (
             "PLAN_ID", "DISPATCH_ID", "REVISION", "ROLE", "AGENT_INSTANCE_ID",
-            "STAGE", "CONTRACT_VERSION", "EVIDENCE_FINGERPRINT",
+            "STAGE",
         )
         values = [str(_value(event, name, "")).strip() for name in fields]
         if not all(values[:6]):
@@ -361,6 +388,11 @@ class RuntimeGuard:
             return self._decision(False, "invalid_event", "parent:pause")
         if token_values["REASONING_OUTPUT_TOKENS"] > token_values["OUTPUT_TOKENS"]:
             return self._decision(False, "invalid_event", "parent:pause")
+        outcome = str(_value(event, "OUTCOME", "running")).casefold()
+        if outcome not in {"running", "pass", "blocked", "escalate"}:
+            return self._decision(False, "invalid_event", "parent:pause")
+        if outcome == "pass" and str(_value(event, "ERROR_SIGNATURE", "")).strip():
+            return self._decision(False, "invalid_event", "parent:pause")
 
         self._lease_role(event, record=True)
         self.stages.setdefault(key, stage)
@@ -402,12 +434,7 @@ class RuntimeGuard:
             limit = int(_value(limits, limit_name))
             if actual > limit:
                 return self._trip(event, stage, reason)
-        outcome = str(_value(event, "OUTCOME", "running")).casefold()
-        if outcome not in {"running", "pass", "blocked", "escalate"}:
-            return self._decision(False, "invalid_event", "parent:pause", stage)
         if outcome == "pass":
-            if error_signature:
-                return self._decision(False, "invalid_event", "parent:pause", stage)
             stage.termination_reason = "pass"
             self._latch(event, "pass")
             return self._decision(True, "stage_complete", "parent:manifest_gate", stage)
@@ -573,12 +600,24 @@ class RuntimeGuard:
 
     @classmethod
     def from_snapshot(cls, data: Mapping[str, Any]) -> "RuntimeGuard":
-        guard = cls(_value(data, "dispatch", {}))
-        for key, raw in _value(data, "stages", {}).items():
+        _reject_conflicting_keys(data)
+        dispatch = _value(data, "dispatch", {})
+        if not isinstance(dispatch, Mapping):
+            raise ValueError("snapshot dispatch must be an object")
+        guard = cls(dispatch)
+        stages = _value(data, "stages", {})
+        if not isinstance(stages, Mapping):
+            raise ValueError("snapshot stages must be an object")
+        for key, raw in stages.items():
+            if not isinstance(raw, Mapping):
+                raise ValueError("snapshot stage must be an object")
             values = dict(raw)
             values.pop("uncached_input_tokens", None)
             values.pop("total_tokens", None)
             guard.stages[key] = StageTelemetry(**values)
+        for name in ("latches", "role_leases", "audit_jobs", "last_completed_audits", "repair_cycles", "repair_evidence"):
+            if not isinstance(_value(data, name, {}), Mapping):
+                raise ValueError(f"snapshot {name} must be an object")
         guard.latches = dict(_value(data, "latches", {}))
         guard.role_leases = dict(_value(data, "role_leases", guard.role_leases))
         guard.audit_jobs = dict(_value(data, "audit_jobs", {}))
@@ -586,21 +625,35 @@ class RuntimeGuard:
         guard.repair_cycles = {
             str(key): int(value) for key, value in _value(data, "repair_cycles", {}).items()
         }
-        guard.repair_evidence = {
-            str(key): list(value) for key, value in _value(data, "repair_evidence", {}).items()
-        }
+        guard.repair_evidence = {}
+        for key, value in _value(data, "repair_evidence", {}).items():
+            if not isinstance(value, list):
+                raise ValueError("snapshot repair_evidence values must be arrays")
+            guard.repair_evidence[str(key)] = list(value)
+        if any(not isinstance(value, Mapping) for value in guard.latches.values()):
+            raise ValueError("snapshot latch must be an object")
+        if any(not isinstance(value, str) for value in guard.role_leases.values()):
+            raise ValueError("snapshot role lease must be a string")
+        if any(not isinstance(value, Mapping) for value in guard.audit_jobs.values()):
+            raise ValueError("snapshot audit job must be an object")
+        if any(not isinstance(value, str) for value in guard.last_completed_audits.values()):
+            raise ValueError("snapshot completed audit revision must be a string")
         return guard
 
 
 def _stdin_json() -> Mapping[str, Any]:
-    value = json.load(sys.stdin)
+    value = json.load(sys.stdin, object_pairs_hook=_json_object)
     if not isinstance(value, Mapping):
         raise ValueError("stdin JSON must be an object")
+    _reject_conflicting_keys(value)
     return value
 
 
 def _load(path: Path) -> RuntimeGuard:
-    return RuntimeGuard.from_snapshot(json.loads(path.read_text(encoding="utf-8")))
+    value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_json_object)
+    if not isinstance(value, Mapping):
+        raise ValueError("state JSON must be an object")
+    return RuntimeGuard.from_snapshot(value)
 
 
 def _save(path: Path, guard: RuntimeGuard) -> None:
