@@ -178,9 +178,10 @@ acceptance, replay evidence, and out-of-scope policy. After Luna `PASS`, the
 parent verifies scope, concrete revision, dependencies, replay, and audit
 contract, then launches Terra directly. No routine Luna-to-Sol-to-Terra hop is
 required. An incomplete or undefined precondition returns to Sol.
-Register each audit through `runtime_guard.py audit`. The same revision is never
-audited twice. A changed revision gets an incremental audit of its delta,
-unresolved findings, and affected cone; the initial audit covers the full cone.
+Register via `runtime_guard.py audit`; the same revision is never repeated.
+First audit is full; later revisions cover delta and findings.
+On early termination, parent records `ACTION: abandon` and reason, routes to
+Sol, and never updates the incremental-audit baseline.
 
 ## Terra causal audit and repair
 

@@ -73,7 +73,7 @@ class DispatchValidationTests(unittest.TestCase):
     def test_schema_cli_exposes_required_usage_fields(self) -> None:
         result = subprocess.run(
             [sys.executable, "-B", str(GUARD_PATH), "schema"],
-            text=True, capture_output=True, check=False,
+            text=True, capture_output=True, check=False, timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         schema = json.loads(result.stdout)
@@ -101,6 +101,7 @@ class DispatchValidationTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
             self.assertEqual(result.returncode, 2)
             self.assertFalse(state.exists())
@@ -111,11 +112,13 @@ class DispatchValidationTests(unittest.TestCase):
             started = subprocess.run(
                 [sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state)],
                 input=json.dumps(dispatch()), text=True, capture_output=True, check=False,
+                timeout=30,
             )
             self.assertEqual(started.returncode, 0, started.stderr)
             duplicate_start = subprocess.run(
                 [sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state)],
                 input=json.dumps(dispatch()), text=True, capture_output=True, check=False,
+                timeout=30,
             )
             self.assertEqual(duplicate_start.returncode, 2)
             self.assertEqual(json.loads(duplicate_start.stdout)["reason"], "state_already_exists")
@@ -123,6 +126,7 @@ class DispatchValidationTests(unittest.TestCase):
                 [sys.executable, "-B", str(GUARD_PATH), "event", "--state", str(state)],
                 input=json.dumps(event(PROGRESS_FINGERPRINT="p", OUTCOME="pass")),
                 text=True, capture_output=True, check=False,
+                timeout=30,
             )
             self.assertEqual(observed.returncode, 0, observed.stderr)
             self.assertFalse(state.with_name(state.name + ".tmp").exists())
@@ -343,6 +347,39 @@ class RepairAndAuditTests(unittest.TestCase):
         result = guard.audit_job(dict(begin, REVISION="r-3"))
         self.assertFalse(result["allowed"])
         self.assertEqual(result["reason"], "invalid_incremental_audit")
+
+    def test_abandoned_audit_releases_slot_without_incremental_baseline(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        begin = {
+            "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
+            "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
+        }
+        self.assertTrue(guard.audit_job(begin)["allowed"])
+        abandoned = guard.audit_job(
+            {
+                "ACTION": "abandon", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
+                "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+                "TERMINATION_REASON": "model_call_limit",
+            }
+        )
+        self.assertFalse(abandoned["allowed"])
+        self.assertEqual(abandoned["reason"], "audit_abandoned")
+        self.assertEqual(abandoned["destination"], "parent:sol")
+        self.assertEqual(guard.last_completed_audits, {})
+        next_audit = guard.audit_job(dict(begin, REVISION="r-3"))
+        self.assertTrue(next_audit["allowed"])
+
+    def test_abandon_rejects_wrong_identity_and_non_running_job(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        packet = {
+            "ACTION": "abandon", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
+            "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "wrong-auditor",
+            "TERMINATION_REASON": "blocked",
+        }
+        self.assertEqual(guard.audit_job(packet)["reason"], "invalid_audit_abandon")
+        packet["AUDITOR_INSTANCE_ID"] = "terra-audit-1"
+        self.assertEqual(guard.audit_job(packet)["reason"], "audit_job_not_running")
 
     def test_snapshot_round_trip_preserves_gates(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())

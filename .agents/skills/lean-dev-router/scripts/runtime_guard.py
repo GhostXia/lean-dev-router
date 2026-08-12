@@ -82,6 +82,10 @@ AUDIT_COMPLETE_FIELDS = (
     "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
     "TERMINATION_REASON", "VERIFIED", "UNVERIFIED",
 )
+AUDIT_ABANDON_FIELDS = (
+    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
+    "TERMINATION_REASON",
+)
 WRITER_ROLE = "luna_worker"
 ROLES = {"sol_planner", "luna_worker", "terra_auditor", "parent"}
 
@@ -479,12 +483,35 @@ class RuntimeGuard:
         self.last_completed_audits[dispatch_key] = str(_value(packet, "REVISION"))
         return self._decision(True, "audit_completed", "parent:manifest_gate")
 
+    def abandon_audit(self, packet: Mapping[str, Any]) -> dict[str, Any]:
+        """Release an audit job that terminated without completing its review."""
+        required = AUDIT_ABANDON_FIELDS[1:]
+        if any(not _present(_value(packet, name)) for name in required):
+            return self._decision(False, "invalid_audit_abandon", "parent:pause")
+        if (
+            _value(packet, "PLAN_ID") != _value(self.dispatch, "PLAN_ID")
+            or _value(packet, "DISPATCH_ID") != _value(self.dispatch, "DISPATCH_ID")
+            or _value(packet, "AUDITOR_INSTANCE_ID") != _value(self.dispatch, "AUDITOR_INSTANCE_ID")
+        ):
+            return self._decision(False, "invalid_audit_abandon", "parent:pause")
+        job_key = ":".join(
+            str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
+        )
+        job = self.audit_jobs.get(job_key)
+        if not job or job.get("status") != "running":
+            return self._decision(False, "audit_job_not_running", "parent:pause")
+        job["status"] = "abandoned"
+        job["termination_reason"] = str(_value(packet, "TERMINATION_REASON"))
+        return self._decision(False, "audit_abandoned", "parent:sol")
+
     def audit_job(self, packet: Mapping[str, Any]) -> dict[str, Any]:
         action = str(_value(packet, "ACTION", "begin")).casefold()
         if action == "begin":
             return self.begin_audit(packet)
         if action == "complete":
             return self.complete_audit(packet)
+        if action == "abandon":
+            return self.abandon_audit(packet)
         return self._decision(False, "invalid_audit_action", "parent:pause")
 
     def register_repair(self, packet: Mapping[str, Any]) -> dict[str, Any]:
@@ -611,6 +638,7 @@ def main() -> int:
                 "audit_begin_fields": AUDIT_BEGIN_FIELDS,
                 "audit_incremental_fields": AUDIT_INCREMENTAL_FIELDS,
                 "audit_complete_fields": AUDIT_COMPLETE_FIELDS,
+                "audit_abandon_fields": AUDIT_ABANDON_FIELDS,
             }
         elif args.command == "start":
             if args.state.exists():

@@ -396,6 +396,9 @@ def validate_skill() -> None:
         "parent:repair_or_sol",
         "runtime_guard.py start",
         "runtime_guard.py audit",
+        "ACTION: abandon",
+        "never updates the",
+        "incremental-audit baseline",
         "Exit 2 means zero target calls",
         "deterministic `spinning` signal",
         "Parent never repairs or writes",
@@ -465,15 +468,41 @@ def validate_runtime_guard() -> None:
             continue
         for name in names - allowed_imports:
             error(f"{relative}: non-standard or undeclared import {name!r}")
+    string_constants = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    definitions = {
+        node.name for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    }
+    subcommands = {
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_parser"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    }
+    for term in ("validate_dispatch", "validate_repair", "abandon_audit"):
+        if term not in definitions:
+            error(f"{relative}: missing runtime gate {term!r}")
     for term in (
-        "validate_dispatch", "validate_repair", "MODEL_CALL_LIMIT",
-        "HYPOTHESIS_LIMIT", "MODEL_ACTIVE_SECONDS_LIMIT", "REPAIR_CYCLE_LIMIT",
-        "STAGNANT_CALL_LIMIT", "repeated_failure_without_new_evidence",
-        '"spinning"', "unauthorized_writer", "duplicate_audit_revision",
-        "uncached_input_tokens", "total_tokens", "EVIDENCE_FINGERPRINT",
-        "CONTRACT_VERSION", 'sub.add_parser("start"', 'sub.add_parser("event"',
-        'sub.add_parser("repair"', 'sub.add_parser("audit"',
-        'sub.add_parser("schema"',
+        "MODEL_CALL_LIMIT", "HYPOTHESIS_LIMIT", "MODEL_ACTIVE_SECONDS_LIMIT",
+        "REPAIR_CYCLE_LIMIT", "STAGNANT_CALL_LIMIT", "EVIDENCE_FINGERPRINT",
+        "CONTRACT_VERSION",
+    ):
+        if term not in string_constants:
+            error(f"{relative}: missing runtime gate {term!r}")
+    for term in ("start", "event", "repair", "audit", "schema"):
+        if term not in subcommands:
+            error(f"{relative}: missing runtime gate subcommand {term!r}")
+    for term in (
+        "repeated_failure_without_new_evidence", '"spinning"',
+        "unauthorized_writer", "duplicate_audit_revision", "audit_abandoned",
+        "uncached_input_tokens", "total_tokens",
     ):
         if term not in source:
             error(f"{relative}: missing runtime gate {term!r}")
@@ -529,7 +558,7 @@ def validate_manifest() -> None:
 def validate_runtime_language() -> None:
     for root in (ROOT / ".agents", ROOT / "agents"):
         for path in root.rglob("*"):
-            if not path.is_file():
+            if not path.is_file() or "__pycache__" in path.parts:
                 continue
             relative = path.relative_to(ROOT).as_posix()
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

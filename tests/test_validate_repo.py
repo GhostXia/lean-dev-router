@@ -5,6 +5,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import validate_repo
 
@@ -52,6 +53,13 @@ class ValidateRepositoryTests(unittest.TestCase):
             self.write(relative, source)
         validate_repo.validate_agents()
         self.assertTrue(any("luna-worker.toml" in e and "language" in e for e in validate_repo.ERRORS))
+
+    def test_runtime_language_ignores_python_bytecode_cache(self) -> None:
+        path = validate_repo.ROOT / "agents" / "__pycache__" / "runtime.pyc"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"\xff\x00")
+        validate_repo.validate_runtime_language()
+        self.assertEqual(validate_repo.ERRORS, [])
 
     def test_handoff_table_is_closed_and_parent_mechanical(self) -> None:
         expected = {
@@ -226,7 +234,7 @@ class ValidateRepositoryTests(unittest.TestCase):
         self.assertLessEqual(len(skill), 12_000)
         self.assertLessEqual(len(re.findall(r"\b[\w-]+\b", skill)), 1_500)
 
-    def test_runtime_guard_is_executable_and_required(self) -> None:
+    def test_runtime_guard_has_required_contract(self) -> None:
         source = self.source(".agents/skills/lean-dev-router/scripts/runtime_guard.py")
         self.write(".agents/skills/lean-dev-router/scripts/runtime_guard.py", source)
         validate_repo.validate_runtime_guard()
@@ -235,10 +243,25 @@ class ValidateRepositoryTests(unittest.TestCase):
         validate_repo.ERRORS.clear()
         self.write(
             ".agents/skills/lean-dev-router/scripts/runtime_guard.py",
-            source.replace("duplicate_audit_revision", "removed", 1),
+            source.replace("duplicate_audit_revision", "removed"),
         )
         validate_repo.validate_runtime_guard()
         self.assertTrue(any("duplicate_audit_revision" in error for error in validate_repo.ERRORS))
+
+    def test_runtime_guard_reports_read_syntax_and_import_errors(self) -> None:
+        with mock.patch.object(validate_repo, "read", side_effect=OSError("denied")):
+            validate_repo.validate_runtime_guard()
+        self.assertTrue(any("cannot read runtime guard" in error for error in validate_repo.ERRORS))
+
+        validate_repo.ERRORS.clear()
+        self.write(".agents/skills/lean-dev-router/scripts/runtime_guard.py", "def broken(:\n")
+        validate_repo.validate_runtime_guard()
+        self.assertTrue(any("invalid Python" in error for error in validate_repo.ERRORS))
+
+        validate_repo.ERRORS.clear()
+        self.write(".agents/skills/lean-dev-router/scripts/runtime_guard.py", "import requests\n")
+        validate_repo.validate_runtime_guard()
+        self.assertTrue(any("requests" in error for error in validate_repo.ERRORS))
 
     def test_four_backtick_fence_wraps_shorter_fence(self) -> None:
         self.assertEqual(
