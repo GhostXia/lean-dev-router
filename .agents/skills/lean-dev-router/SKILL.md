@@ -5,9 +5,8 @@ description: Route repository-bound engineering through Sol planning, parent sch
 
 # Lean Dev Router
 
-Use the fewest agents that meet the requested token-versus-latency priority.
-Sol owns engineering plans and authorization; the parent owns mechanical runtime
-scheduling; Luna writes; Terra audits and resolves bounded technical questions.
+Use the smallest sufficient pool. Sol plans and authorizes; the parent
+schedules mechanically; Luna writes; Terra audits and resolves technical questions.
 
 ## Language
 
@@ -19,8 +18,7 @@ commands, paths, model IDs, and agent names unchanged.
 ## Authority and entry
 
 - Every change-producing task starts with `sol_planner`. Sol fixes objective,
-  scope, acceptance, architecture, dependencies, risk budgets, initial write
-  contracts, preregistered audits, and exception routes. Only Sol authors or
+  scope, acceptance, dependencies, budgets, write contracts, audits, and routes. Only Sol authors or
   amends a `DISPATCH` and only Sol may request human authority.
 - Sol does not continuously schedule, wait on workers, or consolidate routine
   events. The parent executes the declared state machine without engineering
@@ -38,13 +36,11 @@ commands, paths, model IDs, and agent names unchanged.
 
 ## Bounded planning waves
 
-Sol emits a compact `PLAN_MANIFEST`: global invariants plus only the currently
-ready `DISPATCH_WAVE`. Each entry declares id, role, worktree, dependencies,
-revision rule, replay requirements, preregistered audit, normal transitions,
-and exception routes. Sol also declares an `EXPANSION_GATE` for the next wave.
-The parent requests another Sol plan only when that gate or an exception is
-reached. Do not pre-expand distant work or emit implementation code. This
-limits one-shot output and error propagation without making Sol a scheduler.
+Sol emits a compact `PLAN_MANIFEST`: global invariants plus the ready
+`DISPATCH_WAVE`. Entries declare id, role, worktree, dependencies, revision,
+replay, audit, transitions, routes, and the next `EXPANSION_GATE`.
+The parent requests Sol only at that gate or an exception. Do not pre-expand
+distant work or emit implementation code.
 
 ## Protocol
 
@@ -149,6 +145,10 @@ tools/permissions/network request dependency handling; unauthorized writes are
 scope failures; baseline drift is verification failure. Replay evidence is
 exactly cwd, environment delta, exact command, exit code, and compact result.
 Terra inherits it verbatim; missing replay fields make the audit incomplete.
+Pre-PASS technical resolution instead carries `DISPATCH_ID`, baseline, current
+diff/paths, failed assumptions and attempts, exact failure/replay, contract
+bounds, and remaining budget; final scope/revision is not required. Missing
+technical evidence requests `planning_resolution` so parent returns to Sol.
 Concurrent tests must prove the target failure/competition branch occurred;
 sleep may be only polling or a backstop timeout, never the sole synchronization
 proof. Baseline drift stops writes and produces a verification blocker.

@@ -149,6 +149,8 @@ def validate_agents() -> None:
             "luna_worker": DISPATCH_FIELDS + (
                 "PLAN_READY", "missing_dispatch", "scripts/check_scope.py",
                 "worktree-sha256:<64 lowercase hex>", "repair budget",
+                "Never plan the task, authorize writes, schedule peers, or request human authority.",
+                "pre-PASS route", "current diff/paths", "exact failure/replay",
             ),
             "sol_planner": DISPATCH_FIELDS + (
                 "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
@@ -158,11 +160,14 @@ def validate_agents() -> None:
                 "externally measurable latency", "sleep is only polling",
             ),
             "terra_auditor": (
+                "Never edit, authorize a write, schedule peers, or request human authority.",
                 "AUDIT_SCOPE/IMPACT_CONE", "callers/callees", "A =", "B =",
                 "C =", "D =", "DISPATCH_ID", "CONTRACT_EFFECT: unchanged",
                 "AFFECTED_PATHS", "ESCALATE/implementation",
                 "ESCALATE/planning_resolution",
                 "sleep alone is not synchronization proof",
+                "pre-PASS technical-resolution", "does not require final scope or revision",
+                "never BLOCKED/none",
             ),
         }
         for term in common + role_terms[name]:

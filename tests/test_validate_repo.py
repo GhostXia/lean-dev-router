@@ -178,6 +178,49 @@ class ValidateRepositoryTests(unittest.TestCase):
                 any(target in error and "envelope NEXT" in error for error in validate_repo.ERRORS)
             )
 
+    def test_pre_pass_technical_resolution_route_is_complete(self) -> None:
+        luna = self.source("agents/luna-worker.toml")
+        terra = self.source("agents/terra-auditor.toml")
+        self.assertEqual(
+            validate_repo.resolve_handoff_route(
+                "luna_worker", "ESCALATE", "technical_resolution"
+            ),
+            "parent:terra",
+        )
+        for term in ("pre-PASS route", "current diff/paths", "exact failure/replay"):
+            self.assertIn(term, luna)
+        for term in (
+            "does not require final scope or revision",
+            "ESCALATE/planning_resolution",
+            "never BLOCKED/none",
+        ):
+            self.assertIn(term, terra)
+
+    def test_worker_authority_boundaries_are_required(self) -> None:
+        paths = (
+            "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"
+        )
+        boundaries = {
+            "agents/luna-worker.toml": (
+                "Never plan the task, authorize writes, schedule peers, or request human authority.",
+                "Never plan the task, authorize writes, or request human authority.",
+            ),
+            "agents/terra-auditor.toml": (
+                "Never edit, authorize a write, schedule peers, or request human authority.",
+                "Never edit or request human authority.",
+            ),
+        }
+        for target, (required, weakened) in boundaries.items():
+            validate_repo.ERRORS.clear()
+            for path in paths:
+                source = self.source(path)
+                if path == target:
+                    self.assertIn(required, source)
+                    source = source.replace(required, weakened, 1)
+                self.write(path, source)
+            validate_repo.validate_agents()
+            self.assertTrue(any(target in error and required in error for error in validate_repo.ERRORS))
+
     def test_skill_stays_within_context_budget(self) -> None:
         skill = self.source(".agents/skills/lean-dev-router/SKILL.md")
         self.assertLessEqual(len(skill), 12_000)
