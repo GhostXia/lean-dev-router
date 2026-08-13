@@ -70,12 +70,14 @@ SUMMARY: concise result
 - 仅接受 L1/L2、固定目标/验收/约束，无重大决策、风险、外部操作、集成、冲突、歧义、扩展或架构/安全/兼容性变化。
 - 只能有一个组件、一个 dispatch、一个写批次，依赖深度 0，允许/必需路径均在固定 SCOPE_ROOTS 内。
 - parent 上限为 4 次调用、2 个假设、600 秒主动时间、1 次修复、1 次停滞；证据缺失在 Luna 前路由 parent:sol。
-- L3、B/D、耗尽或契约/范围变化路由 parent:sol；B 不得进入 Luna 修复。最终审计只能由独立 terra_auditor 执行。
+- L3、B/D、耗尽或契约/范围变化路由 parent:sol；B 不得进入 Luna 修复。
+- 最终审计是条件式能力。PLAN_MANIFEST 声明、任一风险标记或 integration gate 要求审计时，签发方必须在 Luna 前预注册合同；Luna PASS 后 runtime `audit begin` 才启动独立 terra_auditor，parent/planner 不得自审。
+- Audit begin/complete/abandon 必须携带 `AUDITOR_ROLE: terra_auditor`、预注册的 `AUDITOR_INSTANCE_ID` 和匹配的实际执行 `AGENT_INSTANCE_ID`，按大小写无关规则规范化并核对 Terra 角色租约。字段缺失或不匹配即 fail-closed；这是协调约束，不是密码学认证。
 
 ## 集成
 
-使用 PLAN_MANIFEST、DISPATCH_WAVE 和 EXPANSION_GATE。两个批次必须声明 integration_owner、integration_baseline、integration_paths_allow、integration_acceptance，并记录 N/A (batch coverage)、N/A (scope-check)、N/A (integration-check) 证据。
+使用 PLAN_MANIFEST、DISPATCH_WAVE 和 EXPANSION_GATE。两个批次必须声明 integration_owner、integration_baseline、integration_paths_allow、integration_acceptance 和最终组合态 Terra 审计，并记录 N/A (batch coverage)、N/A (scope-check)、N/A (integration-check) 证据。
 
 ## 最终门禁
 
-运行 runtime_guard.py start、runtime_guard.py audit、`python scripts/validate_repo.py` 和 unittest。范围证据使用 `python scripts/check_scope.py`；脏 revision 使用 `worktree-sha256:<64 lowercase hex>`。Terra A 修复必须有 CONTRACT_EFFECT: unchanged。
+Luna 前运行 runtime_guard.py start；仅在声明审计时，于 Luna PASS 后运行 runtime `audit begin`。随后运行 `python scripts/validate_repo.py` 和 unittest。范围证据使用 `python scripts/check_scope.py`；脏 revision 使用 `worktree-sha256:<64 lowercase hex>`。Terra A 修复必须有 CONTRACT_EFFECT: unchanged。

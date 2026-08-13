@@ -1,40 +1,250 @@
-# Lean Dev Router（中文说明）
+# Lean Dev Router 中文使用说明
 
-本文档仅供人类阅读。直接执行的英文 Skill 位于 [`.agents/skills/lean-dev-router/SKILL.md`](../../.agents/skills/lean-dev-router/SKILL.md)，根 Skill 与 `skill-variants/en/SKILL.md` 必须完全相同。
+> 本文档仅供人类阅读。可执行运行时以英文的 `.agents/skills/lean-dev-router/SKILL.md` 与 `agents/*.toml` 为唯一准则；本文档不会参与 Skill 或 Agent 的装配，也不定义机器可读取的行为。
 
-## 角色
+[返回英文 README](../../README.md)
 
-Sol 负责例外规划、DISPATCH 授权和用户决策；parent 只做机械调度；Luna 是唯一写入者；`terra_auditor` 是独立只读审计者。仓库只发布三个子配置：`luna_worker`、`sol_planner`、`terra_auditor`。parent 快速路径是 Terra High 主模型的条件能力，不是第四个子 Agent，也不是第二个 Sol。
+## 项目定位
+
+Lean Dev Router 用三个职责不同的角色处理仓库内的软件工程任务：
+
+- `sol_planner`（`gpt-5.6-sol`，medium）：例外与复杂任务的工程方案、普通 DISPATCH 授权、契约和用户决策门。
+- `luna_worker`（`gpt-5.6-luna`，max）：唯一写入者；仅在收到完整标准 `DISPATCH` 后实施与验证改动。
+- `terra_auditor`（`gpt-5.6-terra`，high，只读）：独立因果审计、诊断和不带写授权的最小修复建议。
+
+Terra High 父会话默认负责机械调度、排队、转交和面向用户的控制，不自行扩大工程决策。它不是第四个 Agent/profile；只有满足下述严格条件时，才拥有一次有界 L1/L2 dispatch 能力。Sol 的规划采用有界波次：每次只输出全局不变量、当前可执行的 `DISPATCH_WAVE` 与下一次 `EXPANSION_GATE`。
+
+目标不是每次都调用全部角色，而是用满足任务需要的最小组合完成工作。严格单批 L1/L2 可走 parent 快速路径；证据缺失、条件不合格、模糊、跨模块、风险或需要分批集成的任务，在 Luna 前回 Sol。
 
 ## parent 快速路径
 
-快速路径使用 `PLANNER_ROLE: parent` 和 `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`。runtime guard 只有在以下证据全部明确且固定时才会放行：L1/L2；目标、验收、约束固定且非空；没有重大决策、风险、外部操作、集成、冲突、歧义或契约扩展；没有契约/范围/验收/约束/架构/安全/兼容性变化；一个组件、一个 dispatch、一个写批次；依赖深度为 0；允许与必需路径均位于固定 `SCOPE_ROOTS`。
+快速路径必须同时使用 `PLANNER_ROLE: parent` 与 `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`，并且所有证据显式且固定：
 
-parent 上限是 4 次调用、2 个假设、600 秒主动时间、1 次修复、1 次停滞。证据缺失、L3、风险、多批次、B/D 发现或耗尽在 Luna 前路由 `parent:sol`；B 不得进入 Luna 修复。普通 Sol DISPATCH 仍兼容 v2，预算为 8/4/1200/2/2。
+- `LEVEL` 只能是 L1/L2；`OBJECTIVE_FIXED` 为 true；`OPEN_MAJOR_DECISIONS` 与全部 change flag 都是精确布尔值。
+- `BASELINE`、仓库相对的 `SCOPE_ROOTS`、`PATHS_ALLOW`、`ACCEPTANCE`、`CONSTRAINTS` 非空且固定；`REQUIRED_PATHS` 可为空，但 allowed/required 路径必须都在 `SCOPE_ROOTS` 内。
+- `RISK_FLAGS` 与 `EXTERNAL_ACTIONS` 为 none；架构、安全、兼容、契约、范围、验收和约束变化全部为 false。
+- `MAX_DISPATCHES`、`COMPONENT_COUNT`、`WRITE_BATCH_COUNT` 都是 1，`DEPENDENCY_DEPTH` 是 0；`INTEGRATION`、`CONFLICT`、`CONTRACT_EXPANDED`、`AMBIGUITY` 显式为 false/none。
+- 硬上限依次为 **4 次模型调用、2 个假设、600 秒模型主动时间、1 轮修复、1 次停滞调用**。
 
-## 协议和范围
+runtime guard 在启动 Luna 前拒绝缺失或不合格证据，并路由 `parent:sol`。L3、风险、冲突/集成、多组件、多 dispatch、多写批、歧义、契约扩张或其他 change flag，以及预算耗尽都回 Sol。B/D 是 **Terra 审计后的 finding 分类**，不是 Luna 前的 eligibility 输入；审计发现 B 或 D 时回 Sol，绝不能直接进入 Luna 修复。
 
-Luna 只有收到父会话原样转发的完整 `PROTOCOL: lean-dev-router/v2` `STATUS: DISPATCH` 才能执行工具或写入。`PATHS_ALLOW` 只授权持久写入，相关路径仅是可读上下文。接受 PASS 前运行：
+## 交接协议怎么读
 
-```powershell
-python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revision
+协议把“入站执行授权”和“出站结果”分开。Luna 写入前必须收到父会话原样转发的完整契约：
+
+```text
+PROTOCOL: lean-dev-router/v2
+STATUS: DISPATCH
+TARGET: implementation
+DISPATCH_ID: stable unique component/write identifier
+PLAN_ID: stable plan identifier
+PLANNER_ROLE: sol_planner | parent
+PLANNER_CAPABILITY: bounded_l1_l2_dispatch (parent fast path only)
+PLANNER_INSTANCE_ID: immutable planner or parent instance identifier
+AUDITOR_INSTANCE_ID: independent terra_auditor instance identifier
+TASK_SUMMARY: one bounded objective
+BASELINE: commit hash
+PATHS_ALLOW:
+- relative/path/or/subtree
+ACCEPTANCE:
+- objective check and expected result
+CONSTRAINTS:
+- fixed implementation or compatibility bound
+BUDGET:
+  MODEL_CALL_LIMIT: positive integer
+  HYPOTHESIS_LIMIT: positive integer
+  MODEL_ACTIVE_SECONDS_LIMIT: positive integer
+  REPAIR_CYCLE_LIMIT: positive integer
+  STAGNANT_CALL_LIMIT: positive integer
+NEXT: parent
 ```
 
-脚本不可用时，记录 tracked、普通 untracked 和 ignored untracked 三类 Git 枚举。干净状态使用提交 SHA；授权脏状态使用 `worktree-sha256:<64 lowercase hex>`。构建产物必须放在仓库外 scratch，或在范围检查前删除的临时目录。
+普通 Sol packet 不含 `PLANNER_CAPABILITY`，继续兼容 v2。parent packet 还必须携带上一节的 eligibility 字段；这些字段只收窄授权，不引入新协议版本。缺失或非法时不生成 Luna 调用，Luna 返回 `FAILURE: missing_dispatch`。
 
-## Terra 审计与集成
+三个角色统一返回独立的出站结果契约：
 
-最终审计必须预注册，且只能由独立 `terra_auditor` 执行；parent 不得自审。Terra 将发现分为 A（改动造成的验收缺陷）、B（必要但遗漏的范围）、C（无关既有问题）和 D（严重安全/数据丢失/兼容风险）。只有契约不变、路径在范围内的 A 修复可返回 Luna；B、D 和契约变化返回 Sol。
-
-两个或更多写批次需要 `integration_owner`、依赖顺序、`integration_baseline`、`integration_paths_allow`、`integration_acceptance` 和干净 integration worktree。组件 PASS 不等于整体 PASS。
-
-## 安装和验证
-
-请把 Skill 目录和 `agents/` 下三个 TOML 作为同一版本安装，并在替换后启动新任务。验证：
-
-```powershell
-python scripts/validate_repo.py
-python -m unittest discover -s tests -v
+```text
+PROTOCOL: lean-dev-router/v2
+AGENT: luna_worker | terra_auditor | sol_planner
+STATUS: PASS | BLOCKED | ESCALATE
+FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
+REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
+EVIDENCE:
+- path: relative/path/to/file
+  proof: short diff summary or `command` -> PASS/FAIL
+NEXT: parent
+SUMMARY: one concise sentence
 ```
 
-验证器会检查三个子配置、严格 parent 能力和 Sol 例外路由、封闭 handoff、审计身份独立、主 Skill 与英文变体相等、优化变体结构和大小，以及不再注册旧规划角色。
+Agent 返回的出站交接包含状态、失败类型、能力请求、证据、固定的 `NEXT: parent` 和一句摘要。重点检查三件事：
+
+1. 状态为成功时，失败类型必须为空。
+2. 仓库结论必须绑定真实文件路径或明确的仓库级检查结果。
+3. `REQUEST` 只描述下一步需要的能力，不点名其他 worker；父会话按“当前角色 + 能力请求”的固定表转发，不能根据证据自由推断路由。
+
+`PASS`、`BLOCKED`、`ESCALATE` 都只是结果，不能作为写入授权；`PLAN_READY` 也不是执行状态。
+
+封闭 handoff 表是唯一合法路由：
+
+| `AGENT` | `STATUS` | `REQUEST` | 机械目的地 |
+|:---|:---|:---|:---|
+| `luna_worker` | `PASS` | `none` | `parent:manifest_gate` |
+| `luna_worker` | `BLOCKED` | `none` | `parent:pause` |
+| `luna_worker` | `ESCALATE` | `technical_resolution` | `parent:terra` |
+| `terra_auditor` | `PASS` | `none` | `parent:manifest_gate` |
+| `terra_auditor` | `BLOCKED` | `none` | `parent:pause` |
+| `terra_auditor` | `ESCALATE` | `implementation` | `parent:repair_or_sol` |
+| `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
+| `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
+| `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
+| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
+
+升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验范围、稳定 revision、依赖与 replay；若签发方已预注册审计，则直接启动独立 Terra。只有满足同一 dispatch、契约/验收不变、路径在范围内且修复预算尚存的 A finding 可交回原 Luna；B/D、范围、方案、验收、公共接口、架构、安全边界、数据格式、资源限制、歧义或耗尽都回 Sol。只有 Sol 可以请求用户决策。
+
+`lean-dev-router/v2` 与 v1 不兼容：v2 强制要求 `REQUEST`，并禁止在 `NEXT` 中点名具体 Agent。协调者必须拒绝混用版本的交接，不能自动猜测或静默转换。
+
+从 v1 迁移时，应一次性替换 Skill 和三个 Agent TOML，把保存的协议模板改为 v2，为每个出站结果增加合法的 `REQUEST`，并把具名的出站 `NEXT` 改为 `NEXT: parent`。不要把进行中的 v1 交接链直接续接为 v2；结束或停止旧链后，从新的 v2 协调会话开始。
+
+协议的精确定义只维护在英文 Skill 中，避免中英文副本漂移。
+
+## 路径范围检查
+
+`scripts/check_scope.py` 用来检查一个写入批次是否只修改了允许的路径。它会同时收集：
+
+- 从基线开始的 tracked 改动；
+- 未被忽略的 untracked 文件；
+- 被忽略的 untracked 文件。
+
+工作树模式示例：
+
+```bash
+python scripts/check_scope.py \
+  --baseline <baseline-commit> \
+  --allow src \
+  --allow tests \
+  --revision
+```
+
+组合提交模式示例：
+
+```bash
+python scripts/check_scope.py \
+  --baseline <integration-baseline> \
+  --end <combined-commit> \
+  --allow src \
+  --allow tests
+```
+
+输出与退出码保持稳定：
+
+- `SCOPE: PASS`，退出码 `0`：所有发现的路径都在允许范围内。
+- `SCOPE: FAIL`，退出码 `1`：存在范围外路径。
+- `SCOPE: BLOCKED`，退出码 `2`：Git、提交或其他依赖不可用。
+
+范围通过后，干净提交输出精确 commit SHA；脏工作树输出 `worktree-sha256:<64位小写十六进制>`，覆盖基线、授权 tracked diff 以及授权的普通/ignored untracked 路径与内容。相同状态必须得到相同 revision，任何返工必须改变 revision。禁止用 `<luna-revision>` 或基线 SHA 冒充脏状态标识。
+
+`PATHS_ALLOW` 只授权持久产物。构建输出应放在仓库外；必须留在仓库中的一次性 artifact 要预先声明、开工前为空，并在范围检查前清除。保留或未声明的普通/ignored untracked 文件都会失败，artifact 不参与 revision。
+
+脚本使用 Git 的 NUL 分隔输出读取路径，因此不会把中文、空格、换行或其他特殊字符误当成显示层转义文本。
+
+脚本不可用时，协调者仍必须执行等价的 Git fallback 检查。工作树批次分别枚举 tracked、普通 untracked 和 ignored untracked 路径：
+
+```bash
+git diff --name-only --no-renames <baseline> --
+git ls-files --others --exclude-standard
+git ls-files --others --ignored --exclude-standard
+```
+
+组合提交把第一条命令改为 `git diff --name-only --no-renames <integration-baseline> <combined-commit> --`，并在干净的 integration worktree 中继续检查两类 untracked 路径。所有发现的路径都必须与完整 allow-list 比对并记录等价范围证据；脚本与 fallback 的验收语义相同。
+
+## 流式组件调度
+
+多个互不依赖的组件并行时，父会话在每个结果到达时立即执行 manifest 中已声明的下一步，不等待无依赖的同批 worker，也不例行回 Sol。只有组合集成与最终组合态审计允许设置全组件屏障。`token-first` 可以复用同一名未参与实现的 Terra，但不能因此等待其他组件。
+
+组件审计使用稳定的 `<component>:<revision>:<stage>` 任务键；相同 revision 只能注册一次。revision 改变后只增量审计差异、未关闭发现与受影响因果面，首次审计覆盖完整声明范围。批量创建部分失败时只重试缺失或失败项。Sol 保留为方案与例外决策端，不作为常驻协调者。
+
+Terra 的读取范围必须宽于改动范围：沿调用关系、数据/错误/资源流、配置、平台兼容、并发、安全、性能与测试调查。审计发现分为 A（改动导致的验收缺陷）、B（完成目标所需但遗漏的路径）、C（无关既存问题，通常仅跟进）、D（严重安全/数据丢失/兼容风险）。只有 dispatch 身份相同、契约/验收不变、affected paths 在范围内且仍有修复预算的 A 可返原 Luna；B、D 与任何契约变化都回 Sol。最终审计是条件式门禁，不要求每个任务都执行：PLAN_MANIFEST、任一风险标记或 integration gate 声明需要时，签发方必须在 Luna 前预注册审计合同；Luna `PASS` 且机械门禁通过后，parent 才运行 runtime `audit begin` 并启动身份独立的 `terra_auditor`。每个 audit begin/complete/abandon 包都携带 `AUDITOR_ROLE: terra_auditor`、预注册的 `AUDITOR_INSTANCE_ID` 和匹配的实际执行 `AGENT_INSTANCE_ID`；大小写无关身份或角色租约不一致均 fail-closed。这些字段是协调约束，不是密码学认证。已声明的最终审计不得由 parent 或 planner 自审。
+
+父会话在首次 Luna 调用前只执行一次 Skill 内置的 `scripts/runtime_guard.py start`；`start` 原子完成确定性预检与状态初始化，正常执行不得再增加一次独立 preflight。无状态 `preflight` 子命令只用于验证模板与已安装运行时。后续返工和审计在同一状态文件上使用相应子命令，不能重建状态。普通 Sol dispatch 的上限依次为 8 次模型调用、4 个不同假设、1200 秒模型主动时间、2 轮返工和 2 次停滞调用；parent 快速路径为更严格的 4/2/600/1/1，签发方只能收紧。每次调用记录角色/阶段、wall/主动时间、上游尝试、各类 token、假设、命令/错误及进展/证据。同一失败没有进展立即停止；达到适用的停滞上限触发 `spinning`。只有 revision、契约版本或证据改变才能解锁；任何耗尽都回 Sol，父会话不得代写。
+
+宿主能提供时间戳时，记录组件就绪与下一阶段启动时间。有空闲容量时应在 60 秒内启动；否则记录排队状态与原因，并在第一个符合条件的槽位释放时启动。把编译、CI、网络等外部等待与可控 handoff 延迟分开报告，parent 执行长命令时仍应及时消费完成事件。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
+
+## 集成收敛与最终门
+
+组件成功不具传递性。两个或更多写批次形成一个交付物时，Sol 必须定义共享契约、依赖顺序、`integration_worktree`、`integration_owner`、`integration_baseline`、`integration_paths_allow` 与 `integration_acceptance`。授权的 Luna integration owner 按依赖顺序组合已接受的提交；冲突或兼容性编辑必须回 Sol 取得新的 Luna 写批授权。整体 PASS 前必须在干净 integration worktree 上核验组合提交、三类路径范围和完整验收，并分别记录 `N/A (scope-check)` 与 `N/A (integration-check)` 证据，最后由独立 Terra 审计组合态。
+
+## 安全、执行与用户决策边界
+
+`DISPATCH` 是协议授权，不是密码学签名；`PATHS_ALLOW`、scope helper 和 runtime guard 是协调与漂移检测机制，不是操作系统 sandbox。Terra 的只读性依赖宿主 sandbox，文件权限和隔离 worktree 才是最终执行边界。本路由不授权生产部署、破坏性操作、外部承诺或业务/产品政策变化。
+
+Sol 可决定不改变固定目标、范围、验收与用户政策的可逆技术权衡。目标、方向、产品优先级、明确用户意图或不可逆/重大承诺必须返回：
+
+```text
+STATUS: BLOCKED
+FAILURE: major-decision
+REQUEST: human_authority
+NEXT: parent
+```
+
+Sol 最多给三个可行选项、关键权衡、受影响路径、一个建议和一个问题；路径始终是 `sol_planner → parent → user`，协议不定义 `NEXT: user`。
+
+## 安装
+
+Codex 用户必须把以下英文运行时作为同一版本整体安装：
+
+1. `.agents/skills/lean-dev-router/` 到 Codex 的 Skill 目录；
+2. `agents/` 下的三个 TOML 文件到 Codex 的 Agent 配置目录。
+
+不得混用不同版本的 Skill 与 Agent TOML。安装后启动新的 Codex 任务；不得把仍在进行的 v1 handoff 直接恢复为 v2。
+`runtime_guard.py` 随 Skill 安装；可变状态必须放在仓库外的临时目录。
+根目录的 `SKILL.md` 与 `skill-variants/en/SKILL.md` 完全相同，始终是发布用的英文主版本。`skill-variants/zhcn/SKILL.md` 仅用于本机中文测试。可用以下命令覆盖已安装的根 Skill，并随时恢复英文：
+
+启用中文测试版：
+
+```powershell
+Copy-Item skill-variants/zhcn/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
+```
+
+恢复英文发布版：
+
+```powershell
+Copy-Item skill-variants/en/SKILL.md "$env:USERPROFILE/.codex/skills/lean-dev-router/SKILL.md" -Force
+```
+
+从真实安装路径验证确定性入口，不创建 guard 状态：
+
+```powershell
+$guard = "$env:USERPROFILE/.codex/skills/lean-dev-router/scripts/runtime_guard.py"
+python $guard schema
+Get-Content dispatch.json -Raw | python $guard preflight
+```
+
+完整契约返回 exit 0 与 `allowed: true`；非法契约返回 exit 2 和稳定 JSON 错误。生产调度仍只调用一次 `start --state ...`，由它执行相同验证并初始化状态。
+该命令验证协议字段、ID、仓库相对 allow 路径、预算上限、baseline 哈希和可选具体 revision 语法；它不检查目标 worktree、不替代独立 scope 枚举，也不执行操作系统 sandbox。
+
+`skill-variants/en-optimized/SKILL.md`（E1）和 `skill-variants/zhcn-optimized/SKILL.md`（C1）是结构对齐的去重实验版本，不是发布默认。只在新的基准任务中替换已安装根 Skill，测试后恢复英文默认。
+
+每次替换后都启动新的 Codex 任务。
+
+### 可选范围检查工具
+
+`scripts/check_scope.py` 是仓库级便利工具，不是 Skill 或 Agent 的必需运行时文件。真正必须满足的是：接受 Luna 的 `PASS` 前取得范围证据。如果目标仓库没有该脚本，使用本文[路径范围检查](#路径范围检查)中的 Git fallback。安装 Skill 不会自动把 `scripts/check_scope.py` 添加到其他目标仓库。
+
+### 升级与验证
+
+1. 先结束或停止正在进行的 handoff 链；
+2. 使用同一个 release 同时替换 Skill 目录和三个 Agent TOML；
+3. 启动新的 Codex 任务，在依赖或写入 handoff 前确认实际 Agent、模型、reasoning effort、sandbox 与首个 `lean-dev-router/v2` 结果；
+4. 在该 release 的干净 checkout 中运行 `python scripts/validate_repo.py` 和 `python -m unittest discover -s tests -v`。
+
+### 卸载与回滚
+
+卸载时只删除已安装的 `lean-dev-router` Skill 目录和三个具名 Agent TOML，然后启动新的 Codex 任务；这不会修改目标仓库。回滚时必须用某一个旧 release 的完整文件同时替换两组运行时，不得混合版本，也不得跨版本继续尚未结束的 handoff。
+
+## 维护边界
+
+- 英文根 Skill 是发布主版本；修改契约时同步维护 `skill-variants/en/SKILL.md` 与测试用的 `skill-variants/zhcn/SKILL.md`。
+- `docs/zh-CN/` 只供人类阅读；可替换测试用的完整中文指令仅位于 `skill-variants/zhcn/SKILL.md`。
+- 除根 `.agents/skills/lean-dev-router/SKILL.md` 外，CI 会阻止非 ASCII 字符进入 `.agents/` 与 `agents/` 的运行时文件。
+- 修改运行行为后，应运行 `python scripts/validate_repo.py` 与 `python -m unittest discover -s tests -v`。

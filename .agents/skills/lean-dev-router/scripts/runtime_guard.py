@@ -47,6 +47,7 @@ REPAIR_FIELDS = (
     "PLAN_ID",
     "DISPATCH_ID",
     "AUDITOR_INSTANCE_ID",
+    "FINDING_CLASS",
     "CONTRACT_EFFECT",
     "AFFECTED_PATHS",
     "ACCEPTANCE",
@@ -91,18 +92,24 @@ PARENT_ELIGIBILITY_FIELDS = (
     "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
     "COMPATIBILITY_CHANGE",
 )
+PARENT_CHANGE_FIELDS = (
+    "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE",
+    "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
+    "COMPATIBILITY_CHANGE",
+)
 AUDIT_BEGIN_FIELDS = (
-    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
-    "AUDIT_SCOPE", "AUDIT_MODE",
+    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_ROLE",
+    "AUDITOR_INSTANCE_ID", "AGENT_INSTANCE_ID", "AUDIT_SCOPE", "AUDIT_MODE",
 )
 AUDIT_INCREMENTAL_FIELDS = ("PREVIOUS_REVISION", "UNRESOLVED_FINDINGS")
 AUDIT_COMPLETE_FIELDS = (
-    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
-    "TERMINATION_REASON", "VERIFIED", "UNVERIFIED",
+    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_ROLE",
+    "AUDITOR_INSTANCE_ID", "AGENT_INSTANCE_ID", "TERMINATION_REASON", "VERIFIED",
+    "UNVERIFIED",
 )
 AUDIT_ABANDON_FIELDS = (
-    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
-    "TERMINATION_REASON",
+    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_ROLE",
+    "AUDITOR_INSTANCE_ID", "AGENT_INSTANCE_ID", "TERMINATION_REASON",
 )
 WRITER_ROLE = "luna_worker"
 ROLES = {"sol_planner", "luna_worker", "terra_auditor", "parent"}
@@ -151,6 +158,11 @@ def _present(value: Any) -> bool:
     if isinstance(value, (list, tuple, dict, set)):
         return bool(value)
     return True
+
+
+def _identity(value: Any) -> str:
+    """Normalize coordinator-provided instance identifiers for comparison."""
+    return str(value or "").strip().casefold()
 
 
 def _positive_int(value: Any) -> int | None:
@@ -225,12 +237,11 @@ def _inside(path: str, roots: list[str]) -> bool:
 
 
 def _false_or_none(value: Any) -> bool:
-    """Accept the explicit false/none forms used by fast-path evidence."""
     if value is False or value is None or value == "none":
         return True
-    if isinstance(value, list):
-        return all(isinstance(item, str) and item.strip().casefold() == "none" for item in value)
-    return False
+    return isinstance(value, list) and all(
+        isinstance(item, str) and item.strip().casefold() == "none" for item in value
+    )
 
 
 def validate_parent_dispatch(packet: Mapping[str, Any]) -> list[str]:
@@ -263,17 +274,11 @@ def validate_parent_dispatch(packet: Mapping[str, Any]) -> list[str]:
         value = _value(packet, name)
         if isinstance(value, bool) or not isinstance(value, int) or value != expected:
             errors.append(f"{name} must equal {expected}")
-    for name in (
-        "INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY",
-        "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE",
-        "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
-        "COMPATIBILITY_CHANGE",
-    ):
-        if name in {"INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY"} and not any(
-            str(key).casefold() == name.casefold() for key in packet
-        ):
-            errors.append(f"{name} must be explicit for parent fast path")
-        elif any(str(key).casefold() == name.casefold() for key in packet) and not _false_or_none(_value(packet, name)):
+    for name in PARENT_CHANGE_FIELDS:
+        if _value(packet, name) is not False:
+            errors.append(f"{name} must be false")
+    for name in ("INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY"):
+        if not _false_or_none(_value(packet, name)):
             errors.append(f"{name} must be false/none")
     roots = _paths(_value(packet, "SCOPE_ROOTS"))
     required = _paths(_value(packet, "REQUIRED_PATHS"), allow_empty=True)
@@ -339,9 +344,9 @@ def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
         errors.append("PLANNER_CAPABILITY is only valid for parent fast path")
     if _value(packet, "PLANNER_INSTANCE_ID") == _value(packet, "AUDITOR_INSTANCE_ID"):
         errors.append("AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID")
-    auditor_instance = str(_value(packet, "AUDITOR_INSTANCE_ID", "")).strip().casefold()
-    planner_instance = str(_value(packet, "PLANNER_INSTANCE_ID", "")).strip().casefold()
-    parent_instance = str(_value(packet, "PARENT_INSTANCE_ID", "")).strip().casefold()
+    auditor_instance = _identity(_value(packet, "AUDITOR_INSTANCE_ID"))
+    planner_instance = _identity(_value(packet, "PLANNER_INSTANCE_ID"))
+    parent_instance = _identity(_value(packet, "PARENT_INSTANCE_ID"))
     if auditor_instance in {"parent", "parent-agent", "parent_instance", planner_instance}:
         errors.append("AUDITOR_INSTANCE_ID must identify an independent terra_auditor")
     if parent_instance and auditor_instance == parent_instance:
@@ -446,8 +451,8 @@ class RuntimeGuard:
         self.stages: dict[str, StageTelemetry] = {}
         self.latches: dict[str, dict[str, str]] = {}
         self.role_leases: dict[str, str] = {
-            str(_value(dispatch, "PLANNER_INSTANCE_ID")): str(_value(dispatch, "PLANNER_ROLE")),
-            str(_value(dispatch, "AUDITOR_INSTANCE_ID")): "terra_auditor",
+            _identity(_value(dispatch, "PLANNER_INSTANCE_ID")): str(_value(dispatch, "PLANNER_ROLE")),
+            _identity(_value(dispatch, "AUDITOR_INSTANCE_ID")): "terra_auditor",
         }
         self.audit_jobs: dict[str, dict[str, str]] = {}
         self.last_completed_audits: dict[str, str] = {}
@@ -468,7 +473,7 @@ class RuntimeGuard:
 
     def _lease_role(self, event: Mapping[str, Any], *, record: bool) -> None:
         role = str(_value(event, "ROLE", "")).strip()
-        instance = str(_value(event, "AGENT_INSTANCE_ID", "")).strip()
+        instance = _identity(_value(event, "AGENT_INSTANCE_ID"))
         if role not in ROLES or not instance:
             raise ValueError("event role and agent identity must be valid")
         leased = self.role_leases.get(instance)
@@ -620,14 +625,12 @@ class RuntimeGuard:
             packet, "DISPATCH_ID"
         ) != _value(self.dispatch, "DISPATCH_ID"):
             return self._decision(False, "invalid_audit_job", "parent:pause")
-        auditor = str(_value(packet, "AUDITOR_INSTANCE_ID"))
-        if auditor != str(_value(self.dispatch, "AUDITOR_INSTANCE_ID")):
-            return self._decision(False, "invalid_auditor_identity", "parent:pause")
-        auditor_role = _value(packet, "AUDITOR_ROLE", _value(packet, "ROLE"))
-        if auditor_role is not None and auditor_role != "terra_auditor":
-            return self._decision(False, "invalid_auditor_role", "parent:sol")
+        actor_error = self._audit_actor_error(packet)
+        if actor_error:
+            return self._decision(False, actor_error, "parent:sol")
         job_key = ":".join(
-            str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
+            [str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION")]
+            + [_identity(_value(packet, "AUDITOR_INSTANCE_ID"))]
         )
         if job_key in self.audit_jobs:
             return self._decision(False, "duplicate_audit_revision", "parent:manifest_gate")
@@ -660,11 +663,13 @@ class RuntimeGuard:
         if (
             _value(packet, "PLAN_ID") != _value(self.dispatch, "PLAN_ID")
             or _value(packet, "DISPATCH_ID") != _value(self.dispatch, "DISPATCH_ID")
-            or _value(packet, "AUDITOR_INSTANCE_ID") != _value(self.dispatch, "AUDITOR_INSTANCE_ID")
         ):
             return self._decision(False, "invalid_audit_completion", "parent:pause")
+        if self._audit_actor_error(packet):
+            return self._decision(False, "invalid_audit_completion", "parent:pause")
         job_key = ":".join(
-            str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
+            [str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION")]
+            + [_identity(_value(packet, "AUDITOR_INSTANCE_ID"))]
         )
         job = self.audit_jobs.get(job_key)
         if not job or job.get("status") != "running":
@@ -683,11 +688,13 @@ class RuntimeGuard:
         if (
             _value(packet, "PLAN_ID") != _value(self.dispatch, "PLAN_ID")
             or _value(packet, "DISPATCH_ID") != _value(self.dispatch, "DISPATCH_ID")
-            or _value(packet, "AUDITOR_INSTANCE_ID") != _value(self.dispatch, "AUDITOR_INSTANCE_ID")
         ):
             return self._decision(False, "invalid_audit_abandon", "parent:pause")
+        if self._audit_actor_error(packet):
+            return self._decision(False, "invalid_audit_abandon", "parent:pause")
         job_key = ":".join(
-            str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
+            [str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION")]
+            + [_identity(_value(packet, "AUDITOR_INSTANCE_ID"))]
         )
         job = self.audit_jobs.get(job_key)
         if not job or job.get("status") != "running":
@@ -706,15 +713,21 @@ class RuntimeGuard:
             return self.abandon_audit(packet)
         return self._decision(False, "invalid_audit_action", "parent:pause")
 
+    def _audit_actor_error(self, packet: Mapping[str, Any]) -> str:
+        """Enforce coordinator identity claims; this is not cryptographic authentication."""
+        if _value(packet, "AUDITOR_ROLE") != "terra_auditor":
+            return "invalid_auditor_role"
+        registered = _identity(_value(self.dispatch, "AUDITOR_INSTANCE_ID"))
+        declared = _identity(_value(packet, "AUDITOR_INSTANCE_ID"))
+        actor = _identity(_value(packet, "AGENT_INSTANCE_ID"))
+        if not declared or not actor or declared != registered or actor != registered:
+            return "invalid_auditor_identity"
+        if self.role_leases.get(actor) != "terra_auditor":
+            return "invalid_auditor_identity"
+        return ""
+
     def register_repair(self, packet: Mapping[str, Any]) -> dict[str, Any]:
-        finding = str(
-            _value(
-                packet,
-                "FINDING_CLASS",
-                _value(packet, "SEVERITY", _value(packet, "FINDING", "")),
-            )
-        ).strip().upper()
-        if finding in {"B", "D"}:
+        if _value(packet, "FINDING_CLASS") != "A":
             return self._decision(False, "finding_requires_sol", "parent:sol")
         errors = validate_repair(packet, self.dispatch)
         if errors:
@@ -795,7 +808,10 @@ class RuntimeGuard:
             if not isinstance(_value(data, name, {}), Mapping):
                 raise ValueError(f"snapshot {name} must be an object")
         guard.latches = dict(_value(data, "latches", {}))
-        guard.role_leases = dict(_value(data, "role_leases", guard.role_leases))
+        guard.role_leases = {
+            _identity(key): str(value)
+            for key, value in _value(data, "role_leases", guard.role_leases).items()
+        }
         guard.audit_jobs = dict(_value(data, "audit_jobs", {}))
         guard.last_completed_audits = dict(_value(data, "last_completed_audits", {}))
         guard.repair_cycles = {

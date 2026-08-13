@@ -41,6 +41,13 @@ def parent_contract() -> dict[str, object]:
         "ARCHITECTURE_CHANGE": False,
         "SECURITY_CHANGE": False,
         "COMPATIBILITY_CHANGE": False,
+        "BUDGET": {
+            "MODEL_CALL_LIMIT": 4,
+            "HYPOTHESIS_LIMIT": 2,
+            "MODEL_ACTIVE_SECONDS_LIMIT": 600,
+            "REPAIR_CYCLE_LIMIT": 1,
+            "STAGNANT_CALL_LIMIT": 1,
+        },
     }
 
 
@@ -58,6 +65,21 @@ class ValidatorContractTests(unittest.TestCase):
         contract = parent_contract()
         self.assertTrue(validate_repo.is_parent_fast_path_eligible(contract))
         self.assertEqual(validate_repo.route_planner(contract), "parent")
+        for field in validate_repo.PARENT_CHANGE_FIELDS:
+            for value in (None, "none", ["none"], True):
+                changed = dict(contract, **{field: value})
+                self.assertFalse(validate_repo.is_parent_fast_path_eligible(changed), (field, value))
+                self.assertEqual(validate_repo.route_planner(changed), "sol_planner", (field, value))
+
+        non_change_none = dict(
+            contract,
+            RISK_FLAGS=None,
+            EXTERNAL_ACTIONS=["none"],
+            INTEGRATION="none",
+            CONFLICT=None,
+            CONTRACT_EXPANDED=["none"],
+        )
+        self.assertTrue(validate_repo.is_parent_fast_path_eligible(non_change_none))
         for field, value in {
             "LEVEL": "L3",
             "RISK_FLAGS": ["security"],
@@ -79,10 +101,24 @@ class ValidatorContractTests(unittest.TestCase):
             changed.pop(field, None)
             self.assertFalse(validate_repo.is_parent_fast_path_eligible(changed), field)
 
+    def test_parent_predicate_routes_runtime_guard_mismatches_to_sol(self) -> None:
+        contract = parent_contract()
+        self.assertEqual(validate_repo.route_planner(contract), "parent")
+        for changed, label in (
+            (dict(contract, PLANNER_ROLE="sol_planner"), "sol_planner role"),
+            (dict(contract, BASELINE="not-a-git-sha"), "invalid baseline"),
+            (
+                dict(contract, BUDGET=dict(contract["BUDGET"], MODEL_CALL_LIMIT=5)),
+                "parent call ceiling",
+            ),
+        ):
+            self.assertEqual(validate_repo.route_planner(changed), "sol_planner", label)
+
     def test_identity_collision_and_auditor_independence(self) -> None:
         plan = parent_contract()
         self.assertEqual(validate_repo.validate_plan_identity(plan), [])
         self.assertTrue(validate_repo.validate_plan_identity(dict(plan, AUDITOR_INSTANCE_ID="parent-1")))
+        self.assertTrue(validate_repo.validate_plan_identity(dict(plan, AUDITOR_INSTANCE_ID="PARENT-1")))
         self.assertTrue(validate_repo.validate_plan_identity(dict(plan, AUDITOR_INSTANCE_ID="parent")))
         leases = validate_repo.RoleLeaseRegistry()
         self.assertTrue(leases.record_planned("plan-1", "parent-1", "parent"))

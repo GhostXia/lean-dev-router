@@ -15,12 +15,12 @@ Follow the parent task's primary language; when unspecified, use its dominant la
 
 - Sol fixes objective, scope, acceptance, dependencies, budgets, contracts, audits, and routes. Only Sol authors or amends a Sol DISPATCH or requests human authority.
 - The parent is a mechanical scheduler and may use only the conditional Terra High host-model capability described below. It cannot invent architecture, scope, acceptance, constraints, risk decisions, or product policy.
-- Luna is the sole writer under a complete inbound DISPATCH. Terra is independent and read-only; final audit is only by the preregistered terra_auditor.
+- Luna is the sole writer under a complete inbound DISPATCH. Terra is independent and read-only; when a final audit is required, only the preregistered terra_auditor performs it.
 - Deployment, destructive action, external commitment, and user-owned policy remain outside this routing authority.
 
 ## Bounded planning waves
 
-Sol emits PLAN_MANIFEST invariants plus the ready DISPATCH_WAVE; each entry declares worktree, dependencies, revision, replay, audit, routes, and EXPANSION_GATE. The parent does not pre-expand distant work and returns undefined or contract-changing states to Sol.
+Sol emits PLAN_MANIFEST invariants plus the ready DISPATCH_WAVE; each entry declares worktree, dependencies, revision, replay, whether an audit is required, routes, and EXPANSION_GATE. The parent does not pre-expand distant work and returns undefined or contract-changing states to Sol.
 
 ## Protocol
 
@@ -104,18 +104,28 @@ L3, risk, conflict/integration, multiple batches, B/D findings, ambiguity, exhau
 
 ## Risk fuse and replay
 
-`runtime_guard.py start --state <external-scratch-state>` performs preflight and initializes state atomically; `runtime_guard.py audit` registers the final review, while repair packets reuse that state and never restart it. The guard records calls, active and wall time, upstream attempts, token families, hypotheses, progress, errors, identities, and termination. Repeated failure without changed evidence, spinning, budget exhaustion, or baseline drift is fail-closed. Replay includes cwd, environment delta, exact command, exit code, and compact result.
+`runtime_guard.py start --state <external-scratch-state>` performs preflight and initializes state atomically. When a preregistered audit is required, the parent invokes `runtime_guard.py audit` with action `begin` only after Luna PASS and its scope/revision gates; repair packets reuse that state and never restart it. The guard records calls, active and wall time, upstream attempts, token families, hypotheses, progress, errors, identities, and termination. Repeated failure without changed evidence, spinning, budget exhaustion, or baseline drift is fail-closed. Replay includes cwd, environment delta, exact command, exit code, and compact result.
+
+Every runtime audit `begin`, `complete`, or `abandon` packet carries:
+
+```text
+AUDITOR_ROLE: terra_auditor
+AUDITOR_INSTANCE_ID: preregistered terra_auditor identity
+AGENT_INSTANCE_ID: executing terra_auditor identity
+```
+
+The identities must match after case-insensitive normalization and retain the `terra_auditor` role lease. Missing fields, parent/Sol roles, mismatches, or another role lease fail closed. These are coordination constraints, not cryptographic authentication.
 
 ## Terra causal audit and repair
 
-The final audit is preregistered before Luna and is performed only by an independent `terra_auditor`; the parent never self-audits. Terra reads the diff plus causal callers/callees, data/error/resource flow, configuration, platforms, compatibility, concurrency, security, performance, and tests. Findings include path, evidence, causality, severity, blocking decision, and owner:
+A final audit is conditional: it is required when the PLAN_MANIFEST, any risk flag, or the integration gate declares it. In those cases the issuing authority preregisters the audit contract before Luna; after Luna PASS and the mechanical gates, the parent runs runtime `audit begin` and launches an independent `terra_auditor`. The parent and planner never self-audit a declared final audit. Terra reads the diff plus causal callers/callees, data/error/resource flow, configuration, platforms, compatibility, concurrency, security, performance, and tests. Findings include path, evidence, causality, severity, blocking decision, and owner:
 
 - **A** is a change-caused acceptance defect. A bounded `CONTRACT_EFFECT: unchanged` repair may return to Luna only with matching DISPATCH_ID, in-scope AFFECTED_PATHS, unchanged acceptance, and remaining repair budget.
 - **B** is necessary omitted scope and **D** is severe security, data-loss, or compatibility risk; both route parent:sol and never enter Luna repair. **C** is an unrelated existing defect and is normally a non-blocking follow-up.
 
 ## Integration
 
-Two or more write batches require shared `integration_owner`, `integration_baseline`, `integration_paths_allow`, and `integration_acceptance`, plus dependency order and a clean integration worktree. Component PASS is not whole-task PASS. The integration owner combines accepted commits; conflicts or compatibility edits require a new Sol-authorized write batch. Final combined scope uses `N/A (integration-check)` and `N/A (scope-check)` evidence.
+Two or more write batches require shared `integration_owner`, `integration_baseline`, `integration_paths_allow`, and `integration_acceptance`, plus dependency order, a clean integration worktree, and a final combined-state Terra audit. Component PASS is not whole-task PASS. The integration owner combines accepted commits; conflicts or compatibility edits require a new Sol-authorized write batch. Final combined scope uses `N/A (integration-check)` and `N/A (scope-check)` evidence.
 
 ## Execution and human gate
 
@@ -142,4 +152,4 @@ Parallel Luna writers use isolated worktrees; read-only Terra may share a checko
 
 ## Final gates
 
-Run `python scripts/validate_repo.py` and `python -m unittest discover -s tests -v`. Confirm canonical Skill equality, aligned size-bounded variants, exactly three child profiles, closed routes, strict parent predicate, independent final auditor, clean integration scope, and concrete revision evidence before reporting completion.
+Run `python scripts/validate_repo.py` and `python -m unittest discover -s tests -v`. Confirm canonical Skill equality, aligned size-bounded variants, exactly three child profiles, closed routes, strict parent predicate, conditional independent final auditing, clean integration scope, and concrete revision evidence before reporting completion.

@@ -70,12 +70,14 @@ SUMMARY: concise result
 - Accept only L1/L2, fixed objective/acceptance/constraints, no major decision, risk, external action, integration, conflict, ambiguity, expansion, or architecture/security/compatibility change.
 - Require one component, one dispatch, one write batch, dependency depth 0, and allowed/required paths inside fixed SCOPE_ROOTS.
 - Parent ceilings are 4 calls, 2 hypotheses, 600 active seconds, 1 repair, and 1 stagnant call; missing evidence routes parent:sol before Luna.
-- L3, B/D findings, exhaustion, or contract/scope changes route parent:sol; B never enters Luna repair. Final audit is independent terra_auditor only.
+- L3, B/D findings, exhaustion, or contract/scope changes route parent:sol; B never enters Luna repair.
+- Final audit is conditional. A PLAN_MANIFEST declaration, any risk flag, or the integration gate requires the issuer to preregister its contract before Luna. After Luna PASS, runtime `audit begin` starts an independent terra_auditor; parent/planner cannot self-audit.
+- Audit begin/complete/abandon requires `AUDITOR_ROLE: terra_auditor`, preregistered `AUDITOR_INSTANCE_ID`, and matching executing `AGENT_INSTANCE_ID` under case-insensitive normalization and the Terra role lease. Missing/mismatched fields fail closed; this is coordination, not cryptographic authentication.
 
 ## Integration
 
-Use PLAN_MANIFEST, DISPATCH_WAVE, and EXPANSION_GATE. Two batches require integration_owner, integration_baseline, integration_paths_allow, and integration_acceptance; record N/A (batch coverage), N/A (scope-check), and N/A (integration-check) evidence.
+Use PLAN_MANIFEST, DISPATCH_WAVE, and EXPANSION_GATE. Two batches require integration_owner, integration_baseline, integration_paths_allow, integration_acceptance, and a final combined-state Terra audit; record N/A (batch coverage), N/A (scope-check), and N/A (integration-check) evidence.
 
 ## Final gates
 
-Run runtime_guard.py start and runtime_guard.py audit, then `python scripts/validate_repo.py` and the unittest suite. Scope evidence uses `python scripts/check_scope.py`; dirty revisions use `worktree-sha256:<64 lowercase hex>`. A Terra A repair requires CONTRACT_EFFECT: unchanged.
+Run runtime_guard.py start before Luna; only when audit is declared, run runtime `audit begin` after Luna PASS. Then run `python scripts/validate_repo.py` and the unittest suite. Scope evidence uses `python scripts/check_scope.py`; dirty revisions use `worktree-sha256:<64 lowercase hex>`. A Terra A repair requires CONTRACT_EFFECT: unchanged.

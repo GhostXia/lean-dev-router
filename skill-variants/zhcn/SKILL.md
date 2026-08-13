@@ -15,12 +15,12 @@ description: 通过 Sol 例外规划、受限 Terra High parent 快速路径、L
 
 - Sol 固定目标、范围、验收、依赖、预算、契约、审计与路由；只有 Sol 可以签发或修改 Sol DISPATCH，或请求 human_authority。
 - parent 只是机械调度器，只能使用下述条件式 Terra High 主模型能力；不得自行发明架构、范围、验收、约束、风险决策或产品政策。
-- Luna 在完整入站 DISPATCH 下是唯一写入者。Terra 独立且只读；最终审计只能由预注册的 terra_auditor 执行。
+- Luna 在完整入站 DISPATCH 下是唯一写入者。Terra 独立且只读；需要最终审计时，只能由预注册的 terra_auditor 执行。
 - 部署、破坏性操作、外部承诺和用户政策不属于本路由授权。
 
 ## 有界规划波次
 
-Sol 输出包含全局不变量和可执行 DISPATCH_WAVE 的 PLAN_MANIFEST，每项声明 worktree、依赖、revision、复现、审计、路由和 EXPANSION_GATE。parent 不预展开远期工作；未定义或改变契约的状态返回 Sol。
+Sol 输出包含全局不变量和可执行 DISPATCH_WAVE 的 PLAN_MANIFEST，每项声明 worktree、依赖、revision、复现、是否需要审计、路由和 EXPANSION_GATE。parent 不预展开远期工作；未定义或改变契约的状态返回 Sol。
 
 ## 协议
 
@@ -104,18 +104,28 @@ L3、风险、冲突/集成、多批次、B/D 发现、歧义、耗尽，或契�
 
 ## 风险熔断与复现
 
-`runtime_guard.py start --state <external-scratch-state>` 原子执行预检并初始化状态；`runtime_guard.py audit` 注册最终审计，修复包复用同一状态且不得重启。Guard 记录调用、主动/墙钟时间、上游尝试、token、假设、进展、错误和身份。无新证据的重复失败、spinning、预算耗尽或 baseline 漂移都会 fail-closed。复现证据包含 cwd、环境差异、完整命令、退出码和紧凑结果。
+`runtime_guard.py start --state <external-scratch-state>` 原子执行预检并初始化状态。需要已预注册的审计时，parent 只能在 Luna PASS 且范围/revision 门禁通过后调用 `runtime_guard.py audit` 的 `begin` action；修复包复用同一状态且不得重启。Guard 记录调用、主动/墙钟时间、上游尝试、token、假设、进展、错误和身份。无新证据的重复失败、spinning、预算耗尽或 baseline 漂移都会 fail-closed。复现证据包含 cwd、环境差异、完整命令、退出码和紧凑结果。
+
+每个 runtime audit `begin`、`complete` 或 `abandon` 包都携带：
+
+```text
+AUDITOR_ROLE: terra_auditor
+AUDITOR_INSTANCE_ID: 预注册的 terra_auditor 身份
+AGENT_INSTANCE_ID: 实际执行的 terra_auditor 身份
+```
+
+两个身份经大小写无关规范化后必须一致，且该实例必须保持 `terra_auditor` 角色租约。字段缺失、parent/Sol 角色、身份不匹配或被租给其他角色都 fail-closed。这些是协调约束，不是密码学认证。
 
 ## Terra 因果审计与修复
 
-最终审计在 Luna 前预注册，只能由独立 `terra_auditor` 执行；parent 不得自审。Terra 检查 diff 及因果调用者/被调用者、数据/错误/资源流、配置、平台、兼容性、并发、安全、性能和测试。每个发现带路径、证据、因果、严重性、阻断决定和负责人：
+最终审计是条件式能力：PLAN_MANIFEST、任一风险标记或 integration gate 声明需要时，签发方必须在 Luna 前预注册审计合同；Luna PASS 且机械门禁通过后，parent 才调用 runtime `audit begin` 并启动独立 `terra_auditor`。已声明的最终审计不得由 parent 或 planner 自审。Terra 检查 diff 及因果调用者/被调用者、数据/错误/资源流、配置、平台、兼容性、并发、安全、性能和测试。每个发现带路径、证据、因果、严重性、阻断决定和负责人：
 
 - **A** 是改动造成的验收缺陷；只有 `CONTRACT_EFFECT: unchanged`、匹配 DISPATCH_ID、范围内 AFFECTED_PATHS、验收不变且预算剩余时才可返回 Luna。
 - **B** 是完成目标所需但遗漏的范围，**D** 是严重安全/数据丢失/兼容风险；二者均路由 parent:sol，不得进入 Luna 修复。**C** 是无关既有问题，通常仅跟进。
 
 ## 集成
 
-两个或更多写入批次必须声明 `integration_owner`、`integration_baseline`、`integration_paths_allow`、`integration_acceptance`、依赖顺序和干净 integration worktree。组件 PASS 不等于整体 PASS。冲突或兼容性改动需要新的 Sol 授权写批次；组合态使用 `N/A (integration-check)` 与 `N/A (scope-check)` 证据。
+两个或更多写入批次必须声明 `integration_owner`、`integration_baseline`、`integration_paths_allow`、`integration_acceptance`、依赖顺序、干净 integration worktree 和最终组合态 Terra 审计。组件 PASS 不等于整体 PASS。冲突或兼容性改动需要新的 Sol 授权写批次；组合态使用 `N/A (integration-check)` 与 `N/A (scope-check)` 证据。
 
 ## 执行与用户门禁
 

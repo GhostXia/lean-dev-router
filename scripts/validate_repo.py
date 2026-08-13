@@ -35,17 +35,30 @@ BUDGET_FIELDS = (
 SOL_PRODUCTION_SCHEMA = DISPATCH_FIELDS + BUDGET_FIELDS
 PARENT_FAST_PATH_CAPABILITY = "bounded_l1_l2_dispatch"
 PARENT_FAST_PATH_FIELDS = (
-    "PLANNER_CAPABILITY", "LEVEL", "OBJECTIVE_FIXED", "BASELINE", "SCOPE_ROOTS",
+    "PLANNER_ROLE", "PLANNER_CAPABILITY", "LEVEL", "OBJECTIVE_FIXED", "BASELINE", "SCOPE_ROOTS",
     "ACCEPTANCE", "CONSTRAINTS", "OPEN_MAJOR_DECISIONS", "RISK_FLAGS",
     "EXTERNAL_ACTIONS", "MAX_DISPATCHES", "COMPONENT_COUNT", "DEPENDENCY_DEPTH",
     "PATHS_ALLOW", "REQUIRED_PATHS", "WRITE_BATCH_COUNT", "INTEGRATION", "CONFLICT",
     "CONTRACT_EXPANDED", "AMBIGUITY", "CONTRACT_CHANGE", "SCOPE_CHANGE",
     "ACCEPTANCE_CHANGE", "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
+    "COMPATIBILITY_CHANGE", "BUDGET",
+)
+PARENT_CHANGE_FIELDS = (
+    "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE",
+    "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
     "COMPATIBILITY_CHANGE",
 )
+PARENT_FAST_PATH_BUDGET = {
+    "MODEL_CALL_LIMIT": 4,
+    "HYPOTHESIS_LIMIT": 2,
+    "MODEL_ACTIVE_SECONDS_LIMIT": 600,
+    "REPAIR_CYCLE_LIMIT": 1,
+    "STAGNANT_CALL_LIMIT": 1,
+}
 OUTBOUND_FIELDS = (
     "PROTOCOL", "AGENT", "STATUS", "FAILURE", "REQUEST", "EVIDENCE", "NEXT", "SUMMARY",
 )
+AUDIT_IDENTITY_FIELDS = ("AUDITOR_ROLE", "AUDITOR_INSTANCE_ID", "AGENT_INSTANCE_ID")
 HANDOFF_ROUTES = {
     ("luna_worker", "PASS", "none"): "parent:manifest_gate",
     ("luna_worker", "BLOCKED", "none"): "parent:pause",
@@ -121,6 +134,24 @@ def _strict_int(value: object) -> int | None:
     return None if isinstance(value, bool) or not isinstance(value, int) else value
 
 
+def _lower_git_hex(value: object) -> bool:
+    return isinstance(value, str) and len(value) in {40, 64} and re.fullmatch(r"[0-9a-f]+", value) is not None
+
+
+def _parent_budget_reasons(value: object) -> list[str]:
+    """Mirror runtime_guard.validate_budget for the parent ceiling."""
+    if not isinstance(value, Mapping):
+        return ["BUDGET must be an object"]
+    reasons: list[str] = []
+    for field, ceiling in PARENT_FAST_PATH_BUDGET.items():
+        actual = _strict_int(_contract_value(value, field))
+        if actual is None or actual <= 0:
+            reasons.append(f"BUDGET.{field} must be a positive integer")
+        elif actual > ceiling:
+            reasons.append(f"BUDGET.{field} exceeds the parent runtime ceiling")
+    return reasons
+
+
 def _path_inside(path: str, roots: set[str]) -> bool:
     return any(root == "." or path == root or path.startswith(root.rstrip("/") + "/") for root in roots)
 
@@ -148,6 +179,8 @@ def _repository_paths(value: object, *, allow_empty: bool) -> list[str] | None:
 def parent_fast_path_ineligibility_reasons(contract: Mapping[str, object]) -> list[str]:
     """Return deterministic reasons a parent capability must route to Sol."""
     reasons = [f"conflicting case-insensitive field {name}" for name in _conflicting_fields(contract)]
+    if _contract_value(contract, "PLANNER_ROLE") != "parent":
+        reasons.append("PLANNER_ROLE must equal parent")
     if _contract_value(contract, "PLANNER_CAPABILITY") != PARENT_FAST_PATH_CAPABILITY:
         reasons.append("PLANNER_CAPABILITY must equal bounded_l1_l2_dispatch")
     if str(_contract_value(contract, "LEVEL", "")).strip().upper() not in {"L1", "L2"}:
@@ -157,6 +190,9 @@ def parent_fast_path_ineligibility_reasons(contract: Mapping[str, object]) -> li
     for field in ("BASELINE", "SCOPE_ROOTS", "ACCEPTANCE", "CONSTRAINTS"):
         if not _non_empty(_contract_value(contract, field)):
             reasons.append(f"{field} must be non-empty")
+    if not _lower_git_hex(_contract_value(contract, "BASELINE")):
+        reasons.append("BASELINE must be a 40 or 64 character lowercase Git hex")
+    reasons.extend(_parent_budget_reasons(_contract_value(contract, "BUDGET")))
     if _contract_value(contract, "OPEN_MAJOR_DECISIONS") is not False:
         reasons.append("OPEN_MAJOR_DECISIONS must be false")
     for field in ("RISK_FLAGS", "EXTERNAL_ACTIONS"):
@@ -166,17 +202,11 @@ def parent_fast_path_ineligibility_reasons(contract: Mapping[str, object]) -> li
     for field, expected in exact.items():
         if _strict_int(_contract_value(contract, field)) != expected:
             reasons.append(f"{field} must equal {expected}")
-    for field in (
-        "INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY", "CONTRACT_CHANGE",
-        "SCOPE_CHANGE", "ACCEPTANCE_CHANGE", "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE",
-        "SECURITY_CHANGE", "COMPATIBILITY_CHANGE",
-    ):
-        required = field in {
-            "INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY",
-            "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE", "CONSTRAINT_CHANGE",
-            "ARCHITECTURE_CHANGE", "SECURITY_CHANGE", "COMPATIBILITY_CHANGE",
-        }
-        if (required and not _has_field(contract, field)) or (_has_field(contract, field) and not _false_or_none(_contract_value(contract, field))):
+    for field in PARENT_CHANGE_FIELDS:
+        if _contract_value(contract, field) is not False:
+            reasons.append(f"{field} must be false")
+    for field in ("INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY"):
+        if not _has_field(contract, field) or not _false_or_none(_contract_value(contract, field)):
             reasons.append(f"{field} must be false/none")
     roots_list = _repository_paths(_contract_value(contract, "SCOPE_ROOTS"), allow_empty=False)
     roots = set(roots_list or [])
@@ -221,8 +251,8 @@ def validate_plan_identity(plan: Mapping[str, object], *, expected_role: str | N
         errors.append(f"PLANNER_ROLE must be {expected_role}")
     elif expected_role is None and role not in {"sol_planner", "parent"}:
         errors.append("PLANNER_ROLE must identify an authorized planner")
-    planner = str(_contract_value(plan, "PLANNER_INSTANCE_ID", ""))
-    auditor = str(_contract_value(plan, "AUDITOR_INSTANCE_ID", ""))
+    planner = str(_contract_value(plan, "PLANNER_INSTANCE_ID", "")).strip().casefold()
+    auditor = str(_contract_value(plan, "AUDITOR_INSTANCE_ID", "")).strip().casefold()
     if auditor and auditor == planner:
         errors.append("AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID")
     if auditor.casefold() in {"parent", "parent-agent"}:
@@ -241,7 +271,7 @@ class RoleLeaseRegistry:
     def lease(self, plan_id: str, agent_instance_id: str, role: str) -> bool:
         if not all(str(value).strip() for value in (plan_id, agent_instance_id, role)):
             return False
-        key = (str(plan_id), str(agent_instance_id))
+        key = (str(plan_id), str(agent_instance_id).strip().casefold())
         if key in self._leases and self._leases[key] != role:
             return False
         self._leases[key] = role
@@ -250,7 +280,7 @@ class RoleLeaseRegistry:
     def _record(self, bucket: dict[str, set[str]], plan_id: str, agent: str, role: str) -> bool:
         if not self.lease(plan_id, agent, role):
             return False
-        bucket.setdefault(str(agent), set()).add(str(plan_id))
+        bucket.setdefault(str(agent).strip().casefold(), set()).add(str(plan_id))
         return True
 
     def record_planned(self, plan_id: str, agent: str, role: str) -> bool:
@@ -263,14 +293,14 @@ class RoleLeaseRegistry:
         return role == "terra_auditor" and self.lease(plan_id, agent, role)
 
     def lease_role(self, plan_id: str, agent: str) -> str | None:
-        return self._leases.get((str(plan_id), str(agent)))
+        return self._leases.get((str(plan_id), str(agent).strip().casefold()))
 
     def validate_plan(self, plan: Mapping[str, object]) -> list[str]:
         errors = validate_plan_identity(plan)
         plan_id = str(_contract_value(plan, "PLAN_ID", ""))
-        planner = str(_contract_value(plan, "PLANNER_INSTANCE_ID", ""))
+        planner = str(_contract_value(plan, "PLANNER_INSTANCE_ID", "")).strip().casefold()
         role = str(_contract_value(plan, "PLANNER_ROLE", ""))
-        auditor = str(_contract_value(plan, "AUDITOR_INSTANCE_ID", ""))
+        auditor = str(_contract_value(plan, "AUDITOR_INSTANCE_ID", "")).strip().casefold()
         if self.lease_role(plan_id, planner) != role:
             errors.append("planner instance has no matching role lease")
         if plan_id not in self._planned.get(planner, set()):
@@ -284,6 +314,8 @@ class RoleLeaseRegistry:
         return list(dict.fromkeys(errors))
 
     def validate_audit(self, plan_id: str, planner_instance_id: str, auditor_instance_id: str) -> bool:
+        planner_instance_id = str(planner_instance_id).strip().casefold()
+        auditor_instance_id = str(auditor_instance_id).strip().casefold()
         if not auditor_instance_id or auditor_instance_id == planner_instance_id:
             return False
         if self.lease_role(plan_id, planner_instance_id) not in {"sol_planner", "parent"}:
@@ -402,7 +434,10 @@ def validate_agents() -> None:
         elif name == "sol_planner":
             required = ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "PLANNER_CAPABILITY", "bounded_l1_l2_dispatch", "human_authority")
         else:
-            required = ("read-only", "AUDIT_SCOPE/IMPACT_CONE", "A =", "B =", "C =", "D =", "independent", "AUDITOR_INSTANCE_ID")
+            required = (
+                "read-only", "AUDIT_SCOPE/IMPACT_CONE", "A =", "B =", "C =", "D =",
+                "independent", *AUDIT_IDENTITY_FIELDS,
+            )
         for term in required:
             if term not in instructions:
                 error(f"{relative}: missing role contract text {term!r}")
@@ -573,6 +608,18 @@ def validate_runtime_guard() -> None:
     for term in ("PLANNER_CAPABILITY", PARENT_FAST_PATH_CAPABILITY, "MODEL_CALL_LIMIT", "HYPOTHESIS_LIMIT", "REPAIR_CYCLE_LIMIT", "STAGNANT_CALL_LIMIT", "finding_requires_sol", "parent_cannot_self_audit"):
         if term not in source:
             error(f"{relative}: missing runtime gate {term!r}")
+    assignments: dict[str, object] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            try:
+                assignments[node.targets[0].id] = ast.literal_eval(node.value)
+            except (ValueError, TypeError):
+                continue
+    for schema in ("AUDIT_BEGIN_FIELDS", "AUDIT_COMPLETE_FIELDS", "AUDIT_ABANDON_FIELDS"):
+        fields = assignments.get(schema, ())
+        for field in AUDIT_IDENTITY_FIELDS:
+            if field not in fields:
+                error(f"{relative}: {schema} missing required audit identity field {field!r}")
     for command in ("preflight", "start", "event", "repair", "audit", "schema"):
         if f'add_parser("{command}"' not in source:
             error(f"{relative}: missing runtime gate subcommand {command!r}")
