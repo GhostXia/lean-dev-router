@@ -19,6 +19,8 @@ description: 由 Sol 规划、父代理调度、Luna 实现、Terra 因果审计
 - `luna_worker` 只执行有效契约，只作不改变契约的局部选择。只读的 `terra_auditor` 提供因果证据、审计发现和有界修复建议，不能授权写入。
 - 明确的审计、诊断或证据优先调查从 Terra 开始；需要规划、授权或重大决策时加入 Sol。
 - 部署、破坏性操作、外部承诺和产品政策不在本路由权限内，除非用户明确授权。
+- 依赖准备有明确的执行边界：只有 DISPATCH 契约为 Luna 声明的依赖准备命令或工具才能执行；父代理和 Terra 绝不准备依赖。
+- 未声明、缺失或超出契约的工具/依赖属于零执行障碍。Luna 返回带 `technical_resolution` 的 `ESCALATE`，由 `parent:terra` 机械路由，绝不使用 `BLOCKED/none`。
 
 ## 有界规划波次
 
@@ -113,6 +115,8 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 `PASS` 前的技术诊断须携带 `DISPATCH_ID`、baseline、当前 diff/paths、失败假设与尝试、完整失败/复现证据、契约边界和剩余预算，不要求最终 scope 或 revision。技术证据不足时请求 `technical_resolution`，由父代理交给 Terra 处理。并发测试必须证明目标失败或竞争分支确实发生；sleep 只能用于轮询或兜底 timeout，不能单独作为同步证据。baseline 漂移立即停止写入并产生 verification blocker。
 
+`parent:pause` 是零执行状态：父代理不得运行 `npm ci`、安装工具、修改环境、清除 latch 或自行恢复 Luna。
+
 ## 流式处理与预注册审计
 
 独立组件的结果到达即处理，不等待无关 sibling；只有组合集成使用 all-component barrier。job key 固定为 `<component>:<revision>:<stage>`，状态为 `queued`、`running`、`complete` 或 `failed`，只重试缺失或失败的 key。`token-first` 可复用一名未参与实现的 Terra，但不得制造 sibling wait。有时间戳且有容量时须在 60 秒内启动，否则记录排队原因，并在第一个可用 slot 释放时启动。父代理执行长命令时仍须及时消费事件，并单独报告外部等待。
@@ -133,6 +137,8 @@ Terra 沿因果影响锥读取 `PATHS_ALLOW` 之外的 caller/callee、数据/�
 契约不变的修复由 Terra 返回 `REQUEST: implementation`，并携带原 `PLAN_ID`、`DISPATCH_ID`、预注册的 `AUDITOR_INSTANCE_ID`、`CONTRACT_EFFECT: unchanged`、位于 `PATHS_ALLOW` 内的 `AFFECTED_PATHS`、原 `ACCEPTANCE`、顺序递增的 `REPAIR_CYCLE`、新 `REVISION` 和新的 `EVIDENCE_FINGERPRINT`。父代理核对 ID、Luna 证据、预注册审计和默认两轮修复预算，再机械地交回原 Luna。新状态取得新 revision 并重新审计。
 
 任何 scope、plan、acceptance、constraint、公开接口、架构、安全边界、数据格式或资源限制变化，以及歧义或预算耗尽，都回到 Sol。Terra 自身绝不写修复。
+
+Terra 绝不安装或运行工具，也绝不修改环境。在 technical-resolution 路由中，只有契约不变且带 `CONTRACT_EFFECT: unchanged` 的有界建议才返回 `ESCALATE`/`implementation`；任何依赖声明或其他契约变化都返回带 `ESCALATE`/`planning_resolution` 的 `parent:sol`。
 
 ## 集成
 

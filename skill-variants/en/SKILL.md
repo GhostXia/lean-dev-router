@@ -28,6 +28,9 @@ code, commands, paths, model IDs, and agent names unchanged.
 - Audits/diagnosis may start with Terra; planning or authorization returns Sol.
 - Deployment, destructive action, external commitment, and product policy are
   outside this routing authority unless the user explicitly authorizes them.
+- Contract-declared dependency prep is Luna-only; parent/Terra never run
+  undeclared, missing, or out-of-contract tools/dependencies: zero-execution ->
+  Luna `ESCALATE`/`technical_resolution` -> `parent:terra`, never `BLOCKED/none`.
 
 ## Bounded planning waves
 
@@ -110,10 +113,10 @@ The parent applies these mechanical actions; prose cannot override them:
 
 ## Scope, artifacts, and revision
 
-`PATHS_ALLOW` authorizes persistent writes only. Build output goes to external
-scratch. A disposable artifact root must be predeclared, absent or clean at
-preflight, and removed before scope passes. Retained or undeclared standard or
-ignored untracked paths fail; artifacts never enter revision identity.
+`PATHS_ALLOW` authorizes persistent writes only. Build output uses external
+scratch. A predeclared disposable root must be absent/clean at preflight and
+removed before scope; retained/undeclared paths fail and artifacts never enter
+revision identity.
 
 Verify every allow entry together with:
 
@@ -121,17 +124,14 @@ Verify every allow entry together with:
 python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revision
 ```
 
-Use a repeated `--allow <paths_allow_entry>` flag for each entry. The helper
-checks tracked, standard-untracked, and ignored-untracked paths. If the helper
-is unavailable, run the documented three Git enumerations and do not invent a
-dirty revision. Missing or failed scope evidence rejects `PASS`.
+Repeat `--allow <paths_allow_entry>` per entry; the helper checks tracked,
+standard-untracked, and ignored-untracked paths. If unavailable, run the three
+Git enumerations; missing/failed scope evidence rejects `PASS`.
 
-After scope passes, resolve state. A clean committed state
-uses its exact commit SHA. A dirty state uses
-`worktree-sha256:<64 lowercase hex>` over the resolved baseline, authorized
-tracked binary diffs, and authorized untracked path/content with safe framing.
-The same state reproduces the same revision; any repair changes it. Reject
-placeholders such as `<luna-revision>` and baseline-only dirty keys.
+After scope, clean state uses its exact commit SHA; dirty state uses
+`worktree-sha256:<64 lowercase hex>` over baseline, authorized tracked binary
+diffs, and framed authorized untracked paths/content. Equal state reproduces
+equal revision; repairs change it. Reject placeholders and baseline-only keys.
 
 ## Risk fuse and replay
 
@@ -143,33 +143,31 @@ Use `repair`/`audit` against that state; never restart it. Exit 2 means zero tar
 tighten them. Tool/external waits are excluded, but commands keep timeouts.
 
 Each `event` records identity, revision/stage, calls, wall/active time, upstream
-attempts, all token/cache families, hypothesis, command/error, progress/evidence,
-and termination. The guard derives uncached and total tokens. Repeated failure
-without changed progress stops; two stagnant calls are the deterministic `spinning` signal.
-A stop latches until revision, contract, or evidence changes. Luna exhaustion
-routes Terra; Terra exhaustion routes Sol. Parent never repairs or writes after
-Luna failure/interruption.
+attempts, token/cache families, hypothesis, command/error, progress/evidence,
+termination; guard derives uncached/total tokens. Unchanged failure stops; two
+stagnant calls are deterministic `spinning`. A stop latches until revision,
+contract, or evidence changes. Luna exhaustion routes Terra; Terra exhaustion
+routes Sol. Parent never repairs/writes after Luna failure/interruption.
 
 Within the limit use at most three distinct attempts per failing gate; never
-rerun an unchanged command without changed state, evidence, or hypothesis.
-Technical uncertainty requests `technical_resolution`; missing tools use
-dependency handling; unauthorized writes are scope failures; Baseline drift is
-verification failure. Replay is cwd, environment delta, exact command, exit code, and compact result.
-Pre-PASS diagnosis also carries `DISPATCH_ID`, current
-diff/paths, attempts, contract bounds, and remaining budget. Concurrent tests
-must prove the target failure/competition branch; sleep is only polling or a backstop timeout,
-never synchronization proof.
+rerun unchanged commands. Technical uncertainty requests `technical_resolution`;
+missing tools use dependency handling; unauthorized writes are scope failures;
+Baseline drift is verification failure. Replay is cwd, environment delta, exact
+command, exit code, and compact result. Pre-PASS diagnosis carries `DISPATCH_ID`,
+diff/paths, attempts, contract bounds, and remaining budget. Concurrent tests must
+prove the target branch; sleep is polling/backstop only, never synchronization.
+
+`parent:pause` is zero-execution: parent must not run `npm ci`, install tools,
+mutate environment, clear latch, or resume Luna.
 
 ## Streaming and preregistered audit
 
-Process each independent component result as it arrives; never wait for
-unrelated siblings. Only combined integration uses an all-component barrier.
-Use stable `<component>:<revision>:<stage>` job keys with `queued`, `running`,
-`complete`, or `failed`; retry only missing or failed keys. `token-first` may
-reuse one uninvolved Terra but cannot create a sibling wait. When timestamps
-exist, start within 60 seconds if capacity exists, otherwise record the queue
-reason and start at the first eligible slot release. Keep event consumption
-responsive during long parent commands and report external waits separately.
+Process independent results as they arrive; only combined integration uses an
+all-component barrier. Stable `<component>:<revision>:<stage>` keys are
+`queued`/`running`/`complete`/`failed`; retry missing/failed keys. `token-first`
+may reuse one uninvolved Terra without sibling wait. With capacity, start within
+60 seconds; otherwise record queue and start at first eligible slot release.
+Consume events during long commands and report external waits separately.
 
 Sol preregisters each audit with the same `DISPATCH_ID`, component,
 dependencies, revision/job-key
@@ -206,6 +204,10 @@ returns the original Luna. The new state gets a new revision and re-audit.
 Any change to scope, plan, acceptance, constraints, public interface,
 architecture, security boundary, data format, resource limit, or an ambiguous
 or exhausted repair returns to Sol. Terra never writes the repair itself.
+
+Terra never installs/runs tools or mutates environment. Technical-resolution
+advice returns `ESCALATE`/`implementation` only when unchanged; contract/
+dependency changes return `ESCALATE`/`planning_resolution` -> `parent:sol`.
 
 ## Integration
 

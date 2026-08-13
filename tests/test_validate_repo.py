@@ -199,6 +199,25 @@ class ValidateRepositoryTests(unittest.TestCase):
             errors = self.validate_skill(original.replace(term, "removed", 1))
             self.assertTrue(any(term in error for error in errors), term)
 
+    def test_dependency_routing_and_pause_zero_execution_anchors(self) -> None:
+        original = self.source(".agents/skills/lean-dev-router/SKILL.md")
+        required = (
+            "Contract-declared dependency prep is Luna-only",
+            "zero-execution ->",
+            "never `BLOCKED/none`",
+            "`parent:pause` is zero-execution: parent must not run",
+            "clear latch",
+            "Terra never installs/runs tools or mutates environment.",
+            "dependency changes return",
+        )
+        self.assertEqual(self.validate_skill(original), [])
+        for term in required:
+            with self.subTest(term=term):
+                validate_repo.ERRORS.clear()
+                changed = original.replace(term, "removed", 1)
+                errors = self.validate_skill(changed)
+                self.assertTrue(any(term in error for error in errors), term)
+
     def test_protocol_rejects_missing_request_and_illegal_route(self) -> None:
         original = self.source(".agents/skills/lean-dev-router/SKILL.md")
         without_request = original.replace(
@@ -248,6 +267,25 @@ class ValidateRepositoryTests(unittest.TestCase):
                 self.write(other, source.replace(term, "removed", 1) if other == path else source)
             validate_repo.validate_agents()
             self.assertTrue(any(path in error and term in error for error in validate_repo.ERRORS))
+
+    def test_agent_profiles_require_dependency_boundaries(self) -> None:
+        originals = {
+            path: self.source(path) for path in (
+                "agents/luna-worker.toml", "agents/sol-planner.toml", "agents/terra-auditor.toml"
+            )
+        }
+        required = {
+            "agents/luna-worker.toml": "Execute dependency preparation only when the DISPATCH contract explicitly declares",
+            "agents/sol-planner.toml": "Declare every dependency-preparation command or tool explicitly",
+            "agents/terra-auditor.toml": "Stay read-only during technical resolution",
+        }
+        for target, term in required.items():
+            with self.subTest(target=target):
+                validate_repo.ERRORS.clear()
+                for path, source in originals.items():
+                    self.write(path, source.replace(term, "removed", 1) if path == target else source)
+                validate_repo.validate_agents()
+                self.assertTrue(any(target in error and term in error for error in validate_repo.ERRORS))
 
     def test_sol_profile_requires_complete_dispatch_producer_schema(self) -> None:
         required = ("AGENT: sol_planner",) + validate_repo.SOL_PRODUCTION_SCHEMA
