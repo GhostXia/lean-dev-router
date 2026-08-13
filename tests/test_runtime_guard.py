@@ -259,6 +259,103 @@ class DispatchValidationTests(unittest.TestCase):
         errors = runtime_guard.validate_dispatch(value)
         self.assertTrue(any("PLANNER_ROLE" in error for error in errors))
 
+    def test_eligible_parent_fast_path_dispatch_is_accepted(self) -> None:
+        value = dispatch()
+        value.update(
+            {
+                "PLANNER_ROLE": "parent",
+                "PLANNER_CAPABILITY": "bounded_l1_l2_dispatch",
+                "LEVEL": "L2",
+                "OBJECTIVE_FIXED": True,
+                "SCOPE_ROOTS": ["src"],
+                "OPEN_MAJOR_DECISIONS": False,
+                "RISK_FLAGS": [],
+                "EXTERNAL_ACTIONS": "none",
+                "MAX_DISPATCHES": 1,
+                "COMPONENT_COUNT": 1,
+                "DEPENDENCY_DEPTH": 0,
+                "REQUIRED_PATHS": [],
+                "WRITE_BATCH_COUNT": 1,
+                "INTEGRATION": False,
+                "CONFLICT": False,
+                "CONTRACT_EXPANDED": False,
+                "AMBIGUITY": False,
+                "CONTRACT_CHANGE": False,
+                "SCOPE_CHANGE": False,
+                "ACCEPTANCE_CHANGE": False,
+                "CONSTRAINT_CHANGE": False,
+                "ARCHITECTURE_CHANGE": False,
+                "SECURITY_CHANGE": False,
+                "COMPATIBILITY_CHANGE": False,
+                "BUDGET": {
+                    "MODEL_CALL_LIMIT": 4, "HYPOTHESIS_LIMIT": 2,
+                    "MODEL_ACTIVE_SECONDS_LIMIT": 600, "REPAIR_CYCLE_LIMIT": 1,
+                    "STAGNANT_CALL_LIMIT": 1,
+                },
+            }
+        )
+        self.assertEqual(runtime_guard.validate_dispatch(value), [])
+
+        for field, invalid in (
+            ("RISK_FLAGS", ["security"]),
+            ("PATHS_ALLOW", ["outside/file.py"]),
+            ("WRITE_BATCH_COUNT", 2),
+            ("PLANNER_CAPABILITY", "other"),
+            ("COMPONENT_COUNT", 2),
+        ):
+            changed = dict(value, **{field: invalid})
+            self.assertTrue(runtime_guard.validate_dispatch(changed), field)
+
+        missing = dict(value)
+        missing.pop("REQUIRED_PATHS")
+        self.assertTrue(runtime_guard.validate_dispatch(missing))
+
+    def test_parent_fast_path_budget_and_sol_exhaustion(self) -> None:
+        value = dispatch()
+        value.update(
+            {
+                "PLANNER_ROLE": "parent",
+                "PLANNER_CAPABILITY": "bounded_l1_l2_dispatch",
+                "LEVEL": "L1", "OBJECTIVE_FIXED": True, "SCOPE_ROOTS": ["src"],
+                "OPEN_MAJOR_DECISIONS": False, "RISK_FLAGS": "none", "EXTERNAL_ACTIONS": "none",
+                "MAX_DISPATCHES": 1, "COMPONENT_COUNT": 1, "DEPENDENCY_DEPTH": 0,
+                "REQUIRED_PATHS": [], "WRITE_BATCH_COUNT": 1, "INTEGRATION": False,
+                "CONFLICT": False, "CONTRACT_EXPANDED": False, "AMBIGUITY": False,
+                "CONTRACT_CHANGE": False, "SCOPE_CHANGE": False, "ACCEPTANCE_CHANGE": False,
+                "CONSTRAINT_CHANGE": False, "ARCHITECTURE_CHANGE": False,
+                "SECURITY_CHANGE": False, "COMPATIBILITY_CHANGE": False,
+                "BUDGET": {
+                    "MODEL_CALL_LIMIT": 4, "HYPOTHESIS_LIMIT": 2,
+                    "MODEL_ACTIVE_SECONDS_LIMIT": 600, "REPAIR_CYCLE_LIMIT": 1,
+                    "STAGNANT_CALL_LIMIT": 1,
+                },
+            }
+        )
+        guard = runtime_guard.RuntimeGuard(value)
+        result = guard.observe(event(PROGRESS_FINGERPRINT="p-1"))
+        self.assertTrue(result["allowed"])
+        result = guard.observe(event(PROGRESS_FINGERPRINT="p-1"))
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "spinning")
+        self.assertEqual(result["destination"], "parent:sol")
+
+    def test_parent_and_planner_identity_cannot_be_final_auditor(self) -> None:
+        value = dispatch()
+        value["PLANNER_ROLE"] = "parent"
+        value["PLANNER_CAPABILITY"] = "bounded_l1_l2_dispatch"
+        value.update({
+            "LEVEL": "L1", "OBJECTIVE_FIXED": True, "SCOPE_ROOTS": ["src"],
+            "OPEN_MAJOR_DECISIONS": False, "RISK_FLAGS": "none", "EXTERNAL_ACTIONS": "none",
+            "MAX_DISPATCHES": 1, "COMPONENT_COUNT": 1, "DEPENDENCY_DEPTH": 0,
+            "REQUIRED_PATHS": [], "WRITE_BATCH_COUNT": 1, "INTEGRATION": False,
+            "CONFLICT": False, "CONTRACT_EXPANDED": False, "AMBIGUITY": False,
+            "CONTRACT_CHANGE": False, "SCOPE_CHANGE": False, "ACCEPTANCE_CHANGE": False,
+            "CONSTRAINT_CHANGE": False, "ARCHITECTURE_CHANGE": False,
+            "SECURITY_CHANGE": False, "COMPATIBILITY_CHANGE": False,
+        })
+        value["AUDITOR_INSTANCE_ID"] = value["PLANNER_INSTANCE_ID"]
+        self.assertTrue(runtime_guard.validate_dispatch(value))
+
 
 class RuntimeBudgetTests(unittest.TestCase):
     def test_counts_tokens_time_and_upstream_attempts(self) -> None:
@@ -427,6 +524,13 @@ class RepairAndAuditTests(unittest.TestCase):
         self.assertEqual(outside["reason"], "invalid_repair")
         exhausted = guard.register_repair(self.repair(REPAIR_CYCLE=3))
         self.assertEqual(exhausted["reason"], "invalid_repair")
+
+    def test_b_finding_routes_sol_and_never_enters_luna_repair(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        result = guard.register_repair(self.repair(FINDING_CLASS="B"))
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "finding_requires_sol")
+        self.assertEqual(result["destination"], "parent:sol")
 
     def test_same_revision_audit_is_registered_once(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())

@@ -25,6 +25,7 @@ DISPATCH_FIELDS = (
     "DISPATCH_ID",
     "PLAN_ID",
     "PLANNER_ROLE",
+    "PLANNER_CAPABILITY",
     "PLANNER_INSTANCE_ID",
     "AUDITOR_INSTANCE_ID",
     "TASK_SUMMARY",
@@ -73,6 +74,23 @@ DEFAULT_BUDGET = {
     "REPAIR_CYCLE_LIMIT": 2,
     "STAGNANT_CALL_LIMIT": 2,
 }
+PARENT_FAST_PATH_CAPABILITY = "bounded_l1_l2_dispatch"
+PARENT_FAST_PATH_BUDGET = {
+    "MODEL_CALL_LIMIT": 4,
+    "HYPOTHESIS_LIMIT": 2,
+    "MODEL_ACTIVE_SECONDS_LIMIT": 600,
+    "REPAIR_CYCLE_LIMIT": 1,
+    "STAGNANT_CALL_LIMIT": 1,
+}
+PARENT_ELIGIBILITY_FIELDS = (
+    "LEVEL", "OBJECTIVE_FIXED", "SCOPE_ROOTS", "ACCEPTANCE", "CONSTRAINTS",
+    "OPEN_MAJOR_DECISIONS", "RISK_FLAGS", "EXTERNAL_ACTIONS", "MAX_DISPATCHES",
+    "COMPONENT_COUNT", "DEPENDENCY_DEPTH", "REQUIRED_PATHS", "PATHS_ALLOW",
+    "WRITE_BATCH_COUNT", "INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED",
+    "AMBIGUITY", "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE",
+    "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
+    "COMPATIBILITY_CHANGE",
+)
 AUDIT_BEGIN_FIELDS = (
     "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
     "AUDIT_SCOPE", "AUDIT_MODE",
@@ -191,6 +209,14 @@ def _paths(value: Any, *, allow_empty: bool = False) -> list[str] | None:
     return result
 
 
+def _none_items(value: Any) -> bool:
+    if value is None or value == [] or value == "none":
+        return True
+    return isinstance(value, list) and all(
+        isinstance(item, str) and item.strip().casefold() == "none" for item in value
+    )
+
+
 def _inside(path: str, roots: list[str]) -> bool:
     return any(
         root == "." or path == root or path.startswith(root.rstrip("/") + "/")
@@ -198,12 +224,79 @@ def _inside(path: str, roots: list[str]) -> bool:
     )
 
 
+def _false_or_none(value: Any) -> bool:
+    """Accept the explicit false/none forms used by fast-path evidence."""
+    if value is False or value is None or value == "none":
+        return True
+    if isinstance(value, list):
+        return all(isinstance(item, str) and item.strip().casefold() == "none" for item in value)
+    return False
+
+
+def validate_parent_dispatch(packet: Mapping[str, Any]) -> list[str]:
+    """Validate the strict Terra High parent bounded L1/L2 capability."""
+    errors: list[str] = []
+    if _value(packet, "PLANNER_CAPABILITY") != PARENT_FAST_PATH_CAPABILITY:
+        errors.append("PLANNER_CAPABILITY must equal bounded_l1_l2_dispatch")
+    for name in PARENT_ELIGIBILITY_FIELDS:
+        if not any(str(key).casefold() == name.casefold() for key in packet):
+            errors.append(f"{name} must be explicit for parent fast path")
+    if str(_value(packet, "LEVEL", "")).upper() not in {"L1", "L2"}:
+        errors.append("LEVEL must be L1 or L2")
+    for name in ("OBJECTIVE_FIXED", "OPEN_MAJOR_DECISIONS"):
+        expected = True if name == "OBJECTIVE_FIXED" else False
+        if _value(packet, name) is not expected:
+            errors.append(f"{name} must be {str(expected).lower()}")
+    for name in ("BASELINE", "SCOPE_ROOTS", "ACCEPTANCE", "CONSTRAINTS"):
+        if not _present(_value(packet, name)):
+            errors.append(f"{name} must be non-empty")
+    for name in ("RISK_FLAGS", "EXTERNAL_ACTIONS"):
+        if not _none_items(_value(packet, name)):
+            errors.append(f"{name} must be none")
+    exact = {
+        "MAX_DISPATCHES": 1,
+        "COMPONENT_COUNT": 1,
+        "DEPENDENCY_DEPTH": 0,
+        "WRITE_BATCH_COUNT": 1,
+    }
+    for name, expected in exact.items():
+        value = _value(packet, name)
+        if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+            errors.append(f"{name} must equal {expected}")
+    for name in (
+        "INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY",
+        "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE",
+        "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
+        "COMPATIBILITY_CHANGE",
+    ):
+        if name in {"INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY"} and not any(
+            str(key).casefold() == name.casefold() for key in packet
+        ):
+            errors.append(f"{name} must be explicit for parent fast path")
+        elif any(str(key).casefold() == name.casefold() for key in packet) and not _false_or_none(_value(packet, name)):
+            errors.append(f"{name} must be false/none")
+    roots = _paths(_value(packet, "SCOPE_ROOTS"))
+    required = _paths(_value(packet, "REQUIRED_PATHS"), allow_empty=True)
+    allowed = _paths(_value(packet, "PATHS_ALLOW"))
+    if roots is None:
+        errors.append("SCOPE_ROOTS must be non-empty repository-relative paths")
+    if required is None:
+        errors.append("REQUIRED_PATHS must be repository-relative paths")
+    if allowed is None:
+        errors.append("PATHS_ALLOW must be non-empty repository-relative paths")
+    if roots is not None:
+        for label, paths in (("PATHS_ALLOW", allowed), ("REQUIRED_PATHS", required)):
+            if paths is not None and any(not _inside(path, roots) for path in paths):
+                errors.append(f"{label} must stay inside SCOPE_ROOTS")
+    return list(dict.fromkeys(errors))
+
+
 def fingerprint(value: Any) -> str:
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def validate_budget(value: Any) -> list[str]:
+def validate_budget(value: Any, *, ceiling: Mapping[str, int] | None = None) -> list[str]:
     if not isinstance(value, Mapping):
         return ["BUDGET must be an object"]
     errors: list[str] = []
@@ -211,14 +304,24 @@ def validate_budget(value: Any) -> list[str]:
         actual = _positive_int(_value(value, field_name))
         if actual is None:
             errors.append(f"BUDGET.{field_name} must be a positive integer")
-        elif actual > DEFAULT_BUDGET[field_name]:
+        limit = (ceiling or DEFAULT_BUDGET)[field_name]
+        if actual is not None and actual > limit:
             errors.append(f"BUDGET.{field_name} exceeds the runtime ceiling")
     return errors
 
 
 def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
     """Validate a complete packet before parent spawns Luna."""
-    errors = [f"{name} must be non-empty" for name in DISPATCH_FIELDS if not _present(_value(packet, name))]
+    planner_role = _value(packet, "PLANNER_ROLE")
+    required_fields = tuple(
+        name for name in DISPATCH_FIELDS
+        if name != "PLANNER_CAPABILITY" or planner_role == "parent"
+    )
+    errors = [
+        f"{name} must be non-empty"
+        for name in required_fields
+        if not _present(_value(packet, name))
+    ]
     expected = {
         "PROTOCOL": "lean-dev-router/v2",
         "STATUS": "DISPATCH",
@@ -228,17 +331,32 @@ def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
     for name, value in expected.items():
         if _value(packet, name) != value:
             errors.append(f"{name} must equal {value}")
-    if _value(packet, "PLANNER_ROLE") != "sol_planner":
-        errors.append("PLANNER_ROLE must equal sol_planner")
+    if planner_role not in {"sol_planner", "parent"}:
+        errors.append("PLANNER_ROLE must identify an authorized planner")
+    elif planner_role == "parent":
+        errors.extend(validate_parent_dispatch(packet))
+    elif _present(_value(packet, "PLANNER_CAPABILITY")):
+        errors.append("PLANNER_CAPABILITY is only valid for parent fast path")
     if _value(packet, "PLANNER_INSTANCE_ID") == _value(packet, "AUDITOR_INSTANCE_ID"):
         errors.append("AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID")
+    auditor_instance = str(_value(packet, "AUDITOR_INSTANCE_ID", "")).strip().casefold()
+    planner_instance = str(_value(packet, "PLANNER_INSTANCE_ID", "")).strip().casefold()
+    parent_instance = str(_value(packet, "PARENT_INSTANCE_ID", "")).strip().casefold()
+    if auditor_instance in {"parent", "parent-agent", "parent_instance", planner_instance}:
+        errors.append("AUDITOR_INSTANCE_ID must identify an independent terra_auditor")
+    if parent_instance and auditor_instance == parent_instance:
+        errors.append("AUDITOR_INSTANCE_ID must differ from PARENT_INSTANCE_ID")
+    auditor_role = _value(packet, "AUDITOR_ROLE")
+    if auditor_role is not None and auditor_role != "terra_auditor":
+        errors.append("AUDITOR_ROLE must be terra_auditor")
     baseline = _value(packet, "BASELINE")
     if not _lower_hex(baseline, (40, 64)):
         errors.append("BASELINE must be a 40 or 64 character lowercase Git hex")
     if _paths(_value(packet, "PATHS_ALLOW")) is None:
         errors.append("PATHS_ALLOW must be non-empty repository-relative paths")
     errors.extend(validate_revision(_value(packet, "REVISION"), baseline))
-    errors.extend(validate_budget(_value(packet, "BUDGET")))
+    ceiling = PARENT_FAST_PATH_BUDGET if planner_role == "parent" else DEFAULT_BUDGET
+    errors.extend(validate_budget(_value(packet, "BUDGET"), ceiling=ceiling))
     return list(dict.fromkeys(errors))
 
 
@@ -376,6 +494,11 @@ class RuntimeGuard:
         """Record one completed model call and return a mechanical route decision."""
         if _value(event, "ACTION") == "write" and _value(event, "ROLE") != WRITER_ROLE:
             return self._decision(False, "unauthorized_writer", "parent:pause")
+        if str(_value(event, "ROLE", "")).strip() == "parent" and (
+            str(_value(event, "STAGE", "")).casefold() == "audit"
+            or str(_value(event, "ACTION", "")).casefold() == "audit"
+        ):
+            return self._decision(False, "parent_cannot_self_audit", "parent:sol")
         telemetry_fields = EVENT_FIELDS[8:]
         event_keys = {str(name).casefold() for name in event}
         if any(name.casefold() not in event_keys for name in EVENT_FIELDS) or any(
@@ -500,6 +623,9 @@ class RuntimeGuard:
         auditor = str(_value(packet, "AUDITOR_INSTANCE_ID"))
         if auditor != str(_value(self.dispatch, "AUDITOR_INSTANCE_ID")):
             return self._decision(False, "invalid_auditor_identity", "parent:pause")
+        auditor_role = _value(packet, "AUDITOR_ROLE", _value(packet, "ROLE"))
+        if auditor_role is not None and auditor_role != "terra_auditor":
+            return self._decision(False, "invalid_auditor_role", "parent:sol")
         job_key = ":".join(
             str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
         )
@@ -581,6 +707,15 @@ class RuntimeGuard:
         return self._decision(False, "invalid_audit_action", "parent:pause")
 
     def register_repair(self, packet: Mapping[str, Any]) -> dict[str, Any]:
+        finding = str(
+            _value(
+                packet,
+                "FINDING_CLASS",
+                _value(packet, "SEVERITY", _value(packet, "FINDING", "")),
+            )
+        ).strip().upper()
+        if finding in {"B", "D"}:
+            return self._decision(False, "finding_requires_sol", "parent:sol")
         errors = validate_repair(packet, self.dispatch)
         if errors:
             return {"allowed": False, "reason": "invalid_repair", "destination": "parent:sol", "errors": errors}
@@ -599,8 +734,10 @@ class RuntimeGuard:
 
     def _destination(self, role: str) -> str:
         if role == "luna_worker":
-            return "parent:terra"
+            return "parent:sol" if _value(self.dispatch, "PLANNER_ROLE") == "parent" else "parent:terra"
         if role == "terra_auditor":
+            return "parent:sol"
+        if role == "parent":
             return "parent:sol"
         return "parent:pause"
 
