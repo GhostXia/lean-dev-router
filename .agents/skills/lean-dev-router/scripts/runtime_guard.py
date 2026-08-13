@@ -543,7 +543,7 @@ class RuntimeGuard:
         """Record one completed model call and return a mechanical route decision."""
         if _value(event, "ACTION") == "write" and _value(event, "ROLE") != WRITER_ROLE:
             return self._decision(False, "unauthorized_writer", "parent:pause")
-        if str(_value(event, "ROLE", "")).strip() == "parent" and (
+        if str(_value(event, "ROLE", "")).strip().casefold() == "parent" and (
             str(_value(event, "STAGE", "")).casefold() == "audit"
             or str(_value(event, "ACTION", "")).casefold() == "audit"
         ):

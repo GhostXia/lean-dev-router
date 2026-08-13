@@ -229,17 +229,8 @@ def is_parent_fast_path_eligible(contract: Mapping[str, object]) -> bool:
     return not parent_fast_path_ineligibility_reasons(contract)
 
 
-parent_fast_path_eligible = is_parent_fast_path_eligible
-parent_fast_path_eligibility = is_parent_fast_path_eligible
-eligibility_reasons = parent_fast_path_ineligibility_reasons
-
-
 def route_planner(contract: Mapping[str, object]) -> str:
     return "parent" if is_parent_fast_path_eligible(contract) else "sol_planner"
-
-
-route_contract = route_planner
-select_planner = route_planner
 
 
 def validate_plan_identity(plan: Mapping[str, object], *, expected_role: str | None = None) -> list[str]:

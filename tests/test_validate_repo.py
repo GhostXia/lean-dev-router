@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,6 +61,16 @@ class ValidatorContractTests(unittest.TestCase):
     def tearDown(self) -> None:
         validate_repo.ROOT = self.root
         validate_repo.ERRORS = self.errors
+
+    def copy_fixture(self, directory: str, *relative_paths: str) -> Path:
+        fixture_root = Path(directory)
+        for relative in relative_paths:
+            source = self.root / relative
+            target = fixture_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        validate_repo.ROOT = fixture_root
+        return fixture_root
 
     def test_parent_fast_path_accepts_strict_l1_and_routes_failures_to_sol(self) -> None:
         contract = parent_contract()
@@ -145,6 +156,65 @@ class ValidatorContractTests(unittest.TestCase):
         validate_repo.validate_repository_contract()
         self.assertEqual(validate_repo.ERRORS, [], "\n".join(validate_repo.ERRORS))
         self.assertFalse((validate_repo.ROOT / "agents/terra-planner.toml").exists())
+
+    def test_validate_agents_rejects_wrong_model(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.copy_fixture(
+                directory,
+                "agents/luna-worker.toml",
+                "agents/sol-planner.toml",
+                "agents/terra-auditor.toml",
+            )
+            luna = root / "agents/luna-worker.toml"
+            luna.write_text(
+                luna.read_text(encoding="utf-8").replace(
+                    'model = "gpt-5.6-luna"', 'model = "gpt-5.6-terra"'
+                ),
+                encoding="utf-8",
+            )
+            validate_repo.validate_agents()
+            self.assertTrue(any("expected model='gpt-5.6-luna'" in item for item in validate_repo.ERRORS))
+
+    def test_validate_skill_rejects_canonical_variant_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = (
+                ".agents/skills/lean-dev-router/SKILL.md",
+                "skill-variants/en/SKILL.md",
+                "skill-variants/zhcn/SKILL.md",
+                "skill-variants/en-optimized/SKILL.md",
+                "skill-variants/zhcn-optimized/SKILL.md",
+            )
+            root = self.copy_fixture(directory, *paths)
+            canonical = root / paths[0]
+            canonical.write_text(
+                canonical.read_text(encoding="utf-8") + "\nfixture drift\n",
+                encoding="utf-8",
+            )
+            validate_repo.validate_skill()
+            self.assertTrue(any("must exactly match" in item for item in validate_repo.ERRORS))
+
+    def test_validate_handoff_table_rejects_missing_routes(self) -> None:
+        validate_repo.validate_handoff_table(
+            "fixture.md",
+            "| `luna_worker` | `PASS` | `none` | `parent:manifest_gate` |",
+        )
+        self.assertTrue(any("missing handoff route" in item for item in validate_repo.ERRORS))
+
+    def test_validate_markdown_reports_opening_fence_line(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "broken.md").write_text("heading\n\n```text\nunclosed\n", encoding="utf-8")
+            validate_repo.ROOT = root
+            validate_repo.validate_markdown()
+            self.assertIn("broken.md:3: unclosed Markdown code fence", validate_repo.ERRORS)
+
+    def test_validate_license_rejects_non_mit_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "LICENSE").write_text("not the expected license\n", encoding="utf-8")
+            validate_repo.ROOT = root
+            validate_repo.validate_license()
+            self.assertIn("LICENSE: expected MIT license text", validate_repo.ERRORS)
 
     def test_runtime_language_ignores_bytecode_cache(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

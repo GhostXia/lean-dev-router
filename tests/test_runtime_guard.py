@@ -402,6 +402,13 @@ class DispatchValidationTests(unittest.TestCase):
 
 
 class RuntimeBudgetTests(unittest.TestCase):
+    def test_parent_self_audit_role_is_case_insensitive(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        result = guard.observe(event(ROLE=" PARENT ", ACTION="AuDiT"))
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "parent_cannot_self_audit")
+        self.assertEqual(result["destination"], "parent:sol")
+
     def test_counts_tokens_time_and_upstream_attempts(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
         result = guard.observe(event(PROGRESS_FINGERPRINT="progress-1"))
