@@ -53,7 +53,7 @@ BUDGET:
 NEXT: parent
 ```
 
-Every field required by the selected role is non-empty, IDs are stable, planner and auditor identities differ, and paths are repository-relative. Missing authorization makes Luna perform no implementation and return `FAILURE: missing_dispatch`. A Terra assignment is an ordinary read-only instruction, not an outbound result envelope and never `STATUS: DISPATCH`.
+Every field required by the selected role is non-empty, IDs are stable, planner and auditor identities differ, and paths are repository-relative. The parent guard rejects an invalid packet and routes `parent:sol` before Luna is spawned. If Luna is nevertheless invoked defensively without valid authorization, it performs no inspection or write and returns `BLOCKED/none` to `parent:pause`. A Terra assignment is an ordinary read-only instruction, not an outbound result envelope and never `STATUS: DISPATCH`.
 
 Roles return one compact envelope:
 
@@ -88,7 +88,7 @@ SUMMARY: one concise sentence
 
 ## Fast path eligibility
 
-The parent capability is a Terra High host-model prerequisite, not a fourth child profile and not a second Sol. Runtime guard accepts it only when all evidence is explicit and fixed:
+The parent capability is a Terra High host-model prerequisite, not a fourth child profile and not a second Sol. Packet fields are eligibility claims, not proof of authority. For `preflight` or `start`, the host must pass `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high` outside the packet; runtime guard binds that context to `PLANNER_INSTANCE_ID` and rejects a missing, mismatched, or non-Terra-High binding before Luna. This is a host coordination boundary, not cryptographic attestation. Runtime guard then accepts the packet only when all evidence is explicit and fixed:
 
 - `PLANNER_ROLE: parent` and `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`; `LEVEL` is L1 or L2; `OBJECTIVE_FIXED`, `OPEN_MAJOR_DECISIONS`, and all change flags are exact booleans.
 - `BASELINE`, `SCOPE_ROOTS`, `ACCEPTANCE`, and `CONSTRAINTS` are non-empty; `RISK_FLAGS` and `EXTERNAL_ACTIONS` are none; no architecture, security, compatibility, contract, scope, acceptance, or constraint change is allowed.
@@ -104,7 +104,7 @@ L3, risk, conflict/integration, multiple batches, B/D findings, ambiguity, exhau
 
 ## Risk fuse and replay
 
-`runtime_guard.py start --state <external-scratch-state>` performs preflight and initializes state atomically. When a preregistered audit is required, the parent invokes `runtime_guard.py audit` with action `begin` only after Luna PASS and its scope/revision gates; repair packets reuse that state and never restart it. The guard records calls, active and wall time, upstream attempts, token families, hypotheses, progress, errors, identities, and termination. Repeated failure without changed evidence, spinning, budget exhaustion, or baseline drift is fail-closed. Replay includes cwd, environment delta, exact command, exit code, and compact result.
+`runtime_guard.py start --state <external-scratch-state>` performs preflight and initializes state atomically; a parent fast-path invocation also supplies the host-owned trusted instance, `gpt-5.6-terra` model, and `high` reasoning options above. When a preregistered audit is required, the parent invokes `runtime_guard.py audit` with action `begin` only after Luna PASS and its scope/revision gates; repair packets reuse that state and never restart it. The guard records calls, active and wall time, upstream attempts, token families, hypotheses, progress, errors, identities, and termination. Repeated failure without changed evidence, spinning, budget exhaustion, or baseline drift is fail-closed. Replay includes cwd, environment delta, exact command, exit code, and compact result.
 
 Every runtime audit `begin`, `complete`, or `abandon` packet carries:
 

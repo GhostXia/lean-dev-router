@@ -67,6 +67,7 @@ SUMMARY: concise result
 
 ## 快速路径资格
 
+- packet 能力字段不能证明授权。parent packet 要求宿主在 packet 外向 runtime guard 传入 `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high`，并与 PLANNER_INSTANCE_ID 和 Terra High 配置匹配，否则在 Luna 前失败。这是协调身份绑定，不是密码学证明。
 - 仅接受 L1/L2、固定目标/验收/约束，无重大决策、风险、外部操作、集成、冲突、歧义、扩展或架构/安全/兼容性变化。
 - 只能有一个组件、一个 dispatch、一个写批次，依赖深度 0，允许/必需路径均在固定 SCOPE_ROOTS 内。
 - parent 上限为 4 次调用、2 个假设、600 秒主动时间、1 次修复、1 次停滞；证据缺失在 Luna 前路由 parent:sol。
@@ -80,4 +81,4 @@ SUMMARY: concise result
 
 ## 最终门禁
 
-Luna 前运行 runtime_guard.py start；仅在声明审计时，于 Luna PASS 后运行 runtime `audit begin`。随后运行 `python scripts/validate_repo.py` 和 unittest。范围证据使用 `python scripts/check_scope.py`；脏 revision 使用 `worktree-sha256:<64 lowercase hex>`。Terra A 修复必须有 CONTRACT_EFFECT: unchanged。
+Luna 前运行 runtime_guard.py start；parent 快速路径还传入上述宿主持有的 instance/model/reasoning 参数。非法 packet 在 Luna 前路由 parent:sol；若 Luna 被错误调用，则不得检查或写入，并返回 BLOCKED/none 到 parent:pause。仅在声明审计时，于 Luna PASS 后运行 runtime `audit begin`。随后运行 `python scripts/validate_repo.py` 和 unittest。范围证据使用 `python scripts/check_scope.py`；脏 revision 使用 `worktree-sha256:<64 lowercase hex>`。Terra A 修复必须有 CONTRACT_EFFECT: unchanged。

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import sys
 import tomllib
@@ -430,7 +431,10 @@ def validate_agents() -> None:
             if term not in instructions:
                 error(f"{relative}: missing envelope field {term}")
         if name == "luna_worker":
-            required = ("valid inbound DISPATCH", "missing_dispatch", "PATHS_ALLOW", "runtime guard", "check_scope.py")
+            required = (
+                "valid inbound DISPATCH", "BLOCKED/none", "parent:pause",
+                "PATHS_ALLOW", "runtime guard", "check_scope.py",
+            )
         elif name == "sol_planner":
             required = ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "PLANNER_CAPABILITY", "bounded_l1_l2_dispatch", "human_authority")
         else:
@@ -605,7 +609,13 @@ def validate_runtime_guard() -> None:
     for term in ("validate_dispatch", "validate_parent_dispatch", "preflight_dispatch", "validate_revision", "validate_repair", "abandon_audit"):
         if term not in source:
             error(f"{relative}: missing runtime gate {term!r}")
-    for term in ("PLANNER_CAPABILITY", PARENT_FAST_PATH_CAPABILITY, "MODEL_CALL_LIMIT", "HYPOTHESIS_LIMIT", "REPAIR_CYCLE_LIMIT", "STAGNANT_CALL_LIMIT", "finding_requires_sol", "parent_cannot_self_audit"):
+    for term in (
+        "PLANNER_CAPABILITY", PARENT_FAST_PATH_CAPABILITY, "MODEL_CALL_LIMIT",
+        "HYPOTHESIS_LIMIT", "REPAIR_CYCLE_LIMIT", "STAGNANT_CALL_LIMIT",
+        "finding_requires_sol", "parent_cannot_self_audit",
+        "--trusted-parent-instance-id", "--trusted-parent-model",
+        "--trusted-parent-reasoning-effort", "TRUSTED_PARENT_MODEL",
+    ):
         if term not in source:
             error(f"{relative}: missing runtime gate {term!r}")
     assignments: dict[str, object] = {}
@@ -687,11 +697,17 @@ def validate_markdown() -> None:
             continue
         text = path.read_text(encoding="utf-8")
         fence: str | None = None
+        fence_line = 0
         for number, line in enumerate(text.splitlines(), start=1):
             if re.match(r"^\s*(```+|~~~+)", line):
-                fence = None if fence else line.strip()[0]
+                if fence:
+                    fence = None
+                    fence_line = 0
+                else:
+                    fence = line.strip()[0]
+                    fence_line = number
         if fence:
-            error(f"{path.relative_to(ROOT).as_posix()}:{number}: unclosed Markdown code fence")
+            error(f"{path.relative_to(ROOT).as_posix()}:{fence_line}: unclosed Markdown code fence")
         for match in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", text):
             target = match.group(1).split(maxsplit=1)[0].strip("<>")
             if target.startswith(("http://", "https://", "#", "mailto:")):
@@ -729,6 +745,62 @@ def validate_repository_contract() -> None:
             if snippet not in text:
                 error(f"{relative}: missing contract text {snippet!r}")
     validate_license()
+    validate_issue40_assets()
+
+
+def validate_issue40_assets() -> None:
+    relative = "experiments/issue-40-cli/manifest.json"
+    try:
+        manifest = json.loads(read(relative))
+        samples = json.loads(read("experiments/issue-40-cli/results.json"))["samples"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        error(f"{relative}: cannot load experiment evidence: {exc}")
+        return
+    results = manifest.get("results") if isinstance(manifest, dict) else None
+    if not isinstance(results, list) or len(results) != 24:
+        error(f"{relative}: expected 24 reconciled results")
+        return
+    sample_ids = {
+        (sample.get("variant"), sample.get("language"), sample.get("run")): sample.get("session_id")
+        for sample in samples if isinstance(sample, dict)
+    }
+    cells = []
+    for result in results:
+        if not isinstance(result, dict) or not isinstance(result.get("cell"), list):
+            error(f"{relative}: malformed result row")
+            continue
+        cell = tuple(result["cell"])
+        cells.append(cell)
+        if result.get("ok") is not True or not result.get("session_file"):
+            error(f"{relative}: cell {cell!r} lacks successful session evidence")
+        if len(result.get("token_events") or []) < 2:
+            error(f"{relative}: cell {cell!r} lacks required token-count evidence")
+        if sample_ids.get(cell) != result.get("session_id"):
+            error(f"{relative}: cell {cell!r} disagrees with results.json")
+    if cells != sorted(cells) or len(set(cells)) != 24:
+        error(f"{relative}: result cells must be unique and deterministically sorted")
+
+    prompts = sorted((ROOT / "experiments/issue-40-cli").glob("prompt_*.txt"))
+    if len(prompts) != 24:
+        error("experiments/issue-40-cli: expected 24 captured prompts")
+    for path in prompts:
+        examples = [line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith('{"variant"')]
+        try:
+            example = json.loads(examples[-1])
+        except (IndexError, json.JSONDecodeError) as exc:
+            error(f"{path.relative_to(ROOT).as_posix()}: invalid JSON output example: {exc}")
+            continue
+        if len(example.get("cases", [])) != 8:
+            error(f"{path.relative_to(ROOT).as_posix()}: output example must contain 8 cases")
+
+    runner = read("experiments/run_issue40_short_test_cli.py")
+    for marker in (
+        "--workdir", "--codex-cli", "--sessions-dir",
+        'model_reasoning_effort="max"', "REQUIRED_TOKEN_EVENTS",
+        "results.sort", "return 0 if ok == len(cells) else 1",
+    ):
+        if marker not in runner:
+            error(f"experiments/run_issue40_short_test_cli.py: missing evidence control {marker!r}")
 
 
 def validate_license() -> None:

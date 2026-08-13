@@ -67,6 +67,7 @@ SUMMARY: concise result
 
 ## Fast path eligibility
 
+- Packet capability fields are not authority proof. For a parent packet, the host passes `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high` outside the packet; the context must match PLANNER_INSTANCE_ID and Terra High or fail before Luna. This is coordination binding, not cryptographic attestation.
 - Accept only L1/L2, fixed objective/acceptance/constraints, no major decision, risk, external action, integration, conflict, ambiguity, expansion, or architecture/security/compatibility change.
 - Require one component, one dispatch, one write batch, dependency depth 0, and allowed/required paths inside fixed SCOPE_ROOTS.
 - Parent ceilings are 4 calls, 2 hypotheses, 600 active seconds, 1 repair, and 1 stagnant call; missing evidence routes parent:sol before Luna.
@@ -80,4 +81,4 @@ Use PLAN_MANIFEST, DISPATCH_WAVE, and EXPANSION_GATE. Two batches require integr
 
 ## Final gates
 
-Run runtime_guard.py start before Luna; only when audit is declared, run runtime `audit begin` after Luna PASS. Then run `python scripts/validate_repo.py` and the unittest suite. Scope evidence uses `python scripts/check_scope.py`; dirty revisions use `worktree-sha256:<64 lowercase hex>`. A Terra A repair requires CONTRACT_EFFECT: unchanged.
+Run runtime_guard.py start before Luna; parent fast path also passes the host-owned trusted instance/model/reasoning options above. Invalid packets route parent:sol before Luna; a defensively mis-invoked Luna returns BLOCKED/none to parent:pause without inspection or writes. Only when audit is declared, run runtime `audit begin` after Luna PASS. Then run `python scripts/validate_repo.py` and the unittest suite. Scope evidence uses `python scripts/check_scope.py`; dirty revisions use `worktree-sha256:<64 lowercase hex>`. A Terra A repair requires CONTRACT_EFFECT: unchanged.

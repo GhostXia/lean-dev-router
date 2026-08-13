@@ -76,6 +76,8 @@ DEFAULT_BUDGET = {
     "STAGNANT_CALL_LIMIT": 2,
 }
 PARENT_FAST_PATH_CAPABILITY = "bounded_l1_l2_dispatch"
+TRUSTED_PARENT_MODEL = "gpt-5.6-terra"
+TRUSTED_PARENT_REASONING_EFFORT = "high"
 PARENT_FAST_PATH_BUDGET = {
     "MODEL_CALL_LIMIT": 4,
     "HYPOTHESIS_LIMIT": 2,
@@ -315,7 +317,11 @@ def validate_budget(value: Any, *, ceiling: Mapping[str, int] | None = None) -> 
     return errors
 
 
-def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
+def validate_dispatch(
+    packet: Mapping[str, Any], *, trusted_parent_instance_id: str | None = None,
+    trusted_parent_model: str | None = None,
+    trusted_parent_reasoning_effort: str | None = None,
+) -> list[str]:
     """Validate a complete packet before parent spawns Luna."""
     planner_role = _value(packet, "PLANNER_ROLE")
     required_fields = tuple(
@@ -362,12 +368,36 @@ def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
     errors.extend(validate_revision(_value(packet, "REVISION"), baseline))
     ceiling = PARENT_FAST_PATH_BUDGET if planner_role == "parent" else DEFAULT_BUDGET
     errors.extend(validate_budget(_value(packet, "BUDGET"), ceiling=ceiling))
+    if planner_role == "parent":
+        trusted_parent = _identity(trusted_parent_instance_id)
+        if not trusted_parent:
+            errors.append("trusted parent instance identity is required outside the packet")
+        elif trusted_parent != planner_instance:
+            errors.append("PLANNER_INSTANCE_ID must match the trusted parent instance identity")
+        if str(trusted_parent_model or "").strip().casefold() != TRUSTED_PARENT_MODEL:
+            errors.append(f"trusted parent model must equal {TRUSTED_PARENT_MODEL}")
+        if (
+            str(trusted_parent_reasoning_effort or "").strip().casefold()
+            != TRUSTED_PARENT_REASONING_EFFORT
+        ):
+            errors.append(
+                f"trusted parent reasoning effort must equal {TRUSTED_PARENT_REASONING_EFFORT}"
+            )
     return list(dict.fromkeys(errors))
 
 
-def preflight_dispatch(packet: Mapping[str, Any]) -> dict[str, Any]:
+def preflight_dispatch(
+    packet: Mapping[str, Any], *, trusted_parent_instance_id: str | None = None,
+    trusted_parent_model: str | None = None,
+    trusted_parent_reasoning_effort: str | None = None,
+) -> dict[str, Any]:
     """Return the stable spawn decision shared by preflight and start."""
-    errors = validate_dispatch(packet)
+    errors = validate_dispatch(
+        packet,
+        trusted_parent_instance_id=trusted_parent_instance_id,
+        trusted_parent_model=trusted_parent_model,
+        trusted_parent_reasoning_effort=trusted_parent_reasoning_effort,
+    )
     result: dict[str, Any] = {
         "allowed": not errors,
         "reason": "dispatch_valid" if not errors else "invalid_dispatch",
@@ -443,11 +473,25 @@ class StageTelemetry:
 class RuntimeGuard:
     """Deterministic parent state for one dispatch lifecycle."""
 
-    def __init__(self, dispatch: Mapping[str, Any]) -> None:
-        errors = validate_dispatch(dispatch)
+    def __init__(
+        self, dispatch: Mapping[str, Any], *, trusted_parent_instance_id: str | None = None,
+        trusted_parent_model: str | None = None,
+        trusted_parent_reasoning_effort: str | None = None,
+    ) -> None:
+        errors = validate_dispatch(
+            dispatch,
+            trusted_parent_instance_id=trusted_parent_instance_id,
+            trusted_parent_model=trusted_parent_model,
+            trusted_parent_reasoning_effort=trusted_parent_reasoning_effort,
+        )
         if errors:
             raise ValueError("; ".join(errors))
         self.dispatch = dict(dispatch)
+        self.trusted_parent_instance_id = _identity(trusted_parent_instance_id)
+        self.trusted_parent_model = str(trusted_parent_model or "").strip().casefold()
+        self.trusted_parent_reasoning_effort = str(
+            trusted_parent_reasoning_effort or ""
+        ).strip().casefold()
         self.stages: dict[str, StageTelemetry] = {}
         self.latches: dict[str, dict[str, str]] = {}
         self.role_leases: dict[str, str] = {
@@ -778,6 +822,9 @@ class RuntimeGuard:
     def snapshot(self) -> dict[str, Any]:
         return {
             "dispatch": self.dispatch,
+            "trusted_parent_instance_id": self.trusted_parent_instance_id,
+            "trusted_parent_model": self.trusted_parent_model,
+            "trusted_parent_reasoning_effort": self.trusted_parent_reasoning_effort,
             "stages": {key: value.public() for key, value in self.stages.items()},
             "latches": self.latches,
             "role_leases": self.role_leases,
@@ -793,7 +840,14 @@ class RuntimeGuard:
         dispatch = _value(data, "dispatch", {})
         if not isinstance(dispatch, Mapping):
             raise ValueError("snapshot dispatch must be an object")
-        guard = cls(dispatch)
+        guard = cls(
+            dispatch,
+            trusted_parent_instance_id=str(_value(data, "trusted_parent_instance_id", "")),
+            trusted_parent_model=str(_value(data, "trusted_parent_model", "")),
+            trusted_parent_reasoning_effort=str(
+                _value(data, "trusted_parent_reasoning_effort", "")
+            ),
+        )
         stages = _value(data, "stages", {})
         if not isinstance(stages, Mapping):
             raise ValueError("snapshot stages must be an object")
@@ -860,9 +914,15 @@ def _save(path: Path, guard: RuntimeGuard) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("preflight", help="validate dispatch without creating state")
+    preflight = sub.add_parser("preflight", help="validate dispatch without creating state")
+    preflight.add_argument("--trusted-parent-instance-id")
+    preflight.add_argument("--trusted-parent-model")
+    preflight.add_argument("--trusted-parent-reasoning-effort")
     start = sub.add_parser("start", help="validate dispatch and initialize state")
     start.add_argument("--state", type=Path, required=True)
+    start.add_argument("--trusted-parent-instance-id")
+    start.add_argument("--trusted-parent-model")
+    start.add_argument("--trusted-parent-reasoning-effort")
     event = sub.add_parser("event", help="record one model-call event")
     event.add_argument("--state", type=Path, required=True)
     repair = sub.add_parser("repair", help="validate repair packet against dispatch")
@@ -879,6 +939,10 @@ def main() -> int:
                 "dispatch_fields": DISPATCH_FIELDS,
                 "budget_fields": BUDGET_FIELDS,
                 "default_budget": DEFAULT_BUDGET,
+                "trusted_parent_binding": (
+                    "--trusted-parent-instance-id, --trusted-parent-model=gpt-5.6-terra, "
+                    "--trusted-parent-reasoning-effort=high (required for parent fast path)"
+                ),
                 "event_fields": EVENT_FIELDS,
                 "repair_fields": REPAIR_FIELDS,
                 "audit_begin_fields": AUDIT_BEGIN_FIELDS,
@@ -888,7 +952,12 @@ def main() -> int:
             }
         elif args.command == "preflight":
             packet = _stdin_json()
-            result = preflight_dispatch(packet)
+            result = preflight_dispatch(
+                packet,
+                trusted_parent_instance_id=args.trusted_parent_instance_id,
+                trusted_parent_model=args.trusted_parent_model,
+                trusted_parent_reasoning_effort=args.trusted_parent_reasoning_effort,
+            )
         elif args.command == "start":
             if args.state.exists():
                 result = {
@@ -899,11 +968,21 @@ def main() -> int:
                 print(json.dumps(result, ensure_ascii=False, sort_keys=True))
                 return 2
             packet = _stdin_json()
-            result = preflight_dispatch(packet)
+            result = preflight_dispatch(
+                packet,
+                trusted_parent_instance_id=args.trusted_parent_instance_id,
+                trusted_parent_model=args.trusted_parent_model,
+                trusted_parent_reasoning_effort=args.trusted_parent_reasoning_effort,
+            )
             if not result["allowed"]:
                 print(json.dumps(result, ensure_ascii=False, sort_keys=True))
                 return 2
-            guard = RuntimeGuard(packet)
+            guard = RuntimeGuard(
+                packet,
+                trusted_parent_instance_id=args.trusted_parent_instance_id,
+                trusted_parent_model=args.trusted_parent_model,
+                trusted_parent_reasoning_effort=args.trusted_parent_reasoning_effort,
+            )
             _save(args.state, guard)
         elif args.command == "event":
             guard = _load(args.state)

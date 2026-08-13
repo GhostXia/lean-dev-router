@@ -4,7 +4,7 @@ This guide measures routing behavior, cost, scope safety, and independent audit 
 
 ## Routes under test
 
-The ordinary route is Sol DISPATCH -> Luna write -> independent `terra_auditor` audit. The optional Terra High host-model capability is represented only as `PLANNER_ROLE: parent` plus `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`; it is accepted for one strict L1/L2 component with one dispatch and one write batch. L3, risk, integration/conflict, ambiguity, contract or scope expansion, architecture/security/compatibility changes, B/D findings, and exhaustion route `parent:sol`.
+The ordinary route is Sol DISPATCH -> Luna write -> independent `terra_auditor` audit. The optional Terra High host-model path is requested in the packet with `PLANNER_ROLE: parent` plus `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`, but those fields do not authorize themselves. The host must also supply a trusted parent instance matching `PLANNER_INSTANCE_ID`, model `gpt-5.6-terra`, and reasoning effort `high`; only then is one strict L1/L2 component with one dispatch and one write batch eligible. L3, risk, integration/conflict, ambiguity, contract or scope expansion, architecture/security/compatibility changes, B/D findings, and exhaustion route `parent:sol`.
 
 The parent fast-path ceilings are 4 model calls, 2 hypotheses, 600 model-active seconds, 1 repair cycle, and 1 stagnant call. Sol retains 8 calls, 4 hypotheses, 1200 seconds, 2 repairs, and 2 stagnant calls. Missing or ineligible evidence must fail before Luna.
 
@@ -12,8 +12,8 @@ The parent fast-path ceilings are 4 model calls, 2 hypotheses, 600 model-active 
 
 Use one fresh session, one immutable plan identity, an independent `terra_auditor` identity, and a temporary runtime-guard state outside the repository. Capture real planner/parent/auditor instance IDs, destination, and model call count.
 
-1. Eligible L1: fixed objective/acceptance/constraints, no risk/action, one component/dispatch/write batch, depth 0, paths inside fixed `SCOPE_ROOTS`. Expected destination: Luna; budget: 4/2/600/1/1.
-2. L3 or risk: change exactly one strict predicate. Expected destination: `parent:sol`; Luna calls: 0.
+1. Eligible L1: fixed objective/acceptance/constraints, explicit `CONTRACT_EFFECT: unchanged` (or the equivalent exact false contract/API/schema/compatibility change flags), no risk/action, one component/dispatch/write batch, depth 0, paths inside fixed `SCOPE_ROOTS`, and a host-owned trusted parent context matching `PLANNER_INSTANCE_ID`, `gpt-5.6-terra`, and `high` reasoning. Expected destination: Luna; budget: 4/2/600/1/1.
+2. L3, risk, or contract change: change exactly one strict predicate, including a separate L1/L2 case with `CONTRACT_EFFECT: changed` or any contract/API/schema/compatibility change flag true. Expected destination: `parent:sol`; Luna calls: 0.
 3. Identity collision: set `AUDITOR_INSTANCE_ID == PLANNER_INSTANCE_ID` or use the parent identity as final auditor. Expected rejection before target calls.
 4. B finding: return an audit finding classified B. Expected `parent:sol`; no Luna repair call.
 

@@ -36,7 +36,7 @@ Terra High parent 的自主权仍然很窄：它可以在协议已经定义的�
 
 ## parent 快速路径
 
-快速路径必须同时使用 `PLANNER_ROLE: parent` 与 `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`，并且所有证据显式且固定：
+快速路径必须同时使用 `PLANNER_ROLE: parent` 与 `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`；宿主调用 `preflight` 或 `start` 时还必须在 packet 外传入 `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high`，runtime guard 将身份与 `PLANNER_INSTANCE_ID` 及 Terra High 配置绑定。缺失或不匹配会 fail-closed；这是协调层身份绑定，不是密码学证明。之后所有资格证据还必须显式且固定：
 
 - `LEVEL` 只能是 L1/L2；`OBJECTIVE_FIXED` 为 true；`OPEN_MAJOR_DECISIONS` 与全部 change flag 都是精确布尔值。
 - `BASELINE`、仓库相对的 `SCOPE_ROOTS`、`PATHS_ALLOW`、`ACCEPTANCE`、`CONSTRAINTS` 非空且固定；`REQUIRED_PATHS` 可为空，但 allowed/required 路径必须都在 `SCOPE_ROOTS` 内。
@@ -77,7 +77,7 @@ BUDGET:
 NEXT: parent
 ```
 
-普通 Sol packet 不含 `PLANNER_CAPABILITY`，继续兼容 v2。parent packet 还必须携带上一节的 eligibility 字段；这些字段只收窄授权，不引入新协议版本。缺失或非法时不生成 Luna 调用，Luna 返回 `FAILURE: missing_dispatch`。
+普通 Sol packet 不含 `PLANNER_CAPABILITY`，继续兼容 v2。parent packet 还必须携带上一节的 eligibility 字段；这些字段只表达资格，不能自行证明授权。宿主还必须在 packet 外向 runtime guard 传入上述 trusted instance/model/reasoning 上下文，并与 `PLANNER_INSTANCE_ID` 和 Terra High 匹配。字段缺失、绑定缺失或不匹配、以及其他非法情况都会在 Luna 启动前路由 `parent:sol`。若 Luna 在防御场景下仍被误调用，它不得检查或写入，并返回 `BLOCKED/none` 到 `parent:pause`。
 
 三个角色统一返回独立的出站结果契约：
 
@@ -238,7 +238,7 @@ python $guard schema
 Get-Content dispatch.json -Raw | python $guard preflight
 ```
 
-完整契约返回 exit 0 与 `allowed: true`；非法契约返回 exit 2 和稳定 JSON 错误。生产调度仍只调用一次 `start --state ...`，由它执行相同验证并初始化状态。
+parent 快速路径 packet 的 `preflight` 与 `start` 还要追加 `--trusted-parent-instance-id <host-parent-id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high`；普通 Sol packet 不使用这些参数。完整契约和可信 Terra High 绑定返回 exit 0 与 `allowed: true`；非法契约返回 exit 2 和稳定 JSON 错误。生产调度仍只调用一次 `start --state ...`，由它执行相同验证并初始化状态。
 该命令验证协议字段、ID、仓库相对 allow 路径、预算上限、baseline 哈希和可选具体 revision 语法；它不检查目标 worktree、不替代独立 scope 枚举，也不执行操作系统 sandbox。
 
 `skill-variants/en-optimized/SKILL.md`（E1）和 `skill-variants/zhcn-optimized/SKILL.md`（C1）是结构对齐的去重实验版本，不是发布默认。只在新的基准任务中替换已安装根 Skill，测试后恢复英文默认。

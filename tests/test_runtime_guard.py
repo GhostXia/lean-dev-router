@@ -45,6 +45,49 @@ def dispatch() -> dict[str, object]:
     }
 
 
+def parent_dispatch(**overrides: object) -> dict[str, object]:
+    value = dispatch()
+    value.update(
+        {
+            "PLANNER_ROLE": "parent",
+            "PLANNER_CAPABILITY": "bounded_l1_l2_dispatch",
+            "LEVEL": "L1",
+            "OBJECTIVE_FIXED": True,
+            "SCOPE_ROOTS": ["src"],
+            "OPEN_MAJOR_DECISIONS": False,
+            "RISK_FLAGS": "none",
+            "EXTERNAL_ACTIONS": "none",
+            "MAX_DISPATCHES": 1,
+            "COMPONENT_COUNT": 1,
+            "DEPENDENCY_DEPTH": 0,
+            "REQUIRED_PATHS": [],
+            "WRITE_BATCH_COUNT": 1,
+            "INTEGRATION": False,
+            "CONFLICT": False,
+            "CONTRACT_EXPANDED": False,
+            "AMBIGUITY": False,
+            "CONTRACT_CHANGE": False,
+            "SCOPE_CHANGE": False,
+            "ACCEPTANCE_CHANGE": False,
+            "CONSTRAINT_CHANGE": False,
+            "ARCHITECTURE_CHANGE": False,
+            "SECURITY_CHANGE": False,
+            "COMPATIBILITY_CHANGE": False,
+            "BUDGET": dict(runtime_guard.PARENT_FAST_PATH_BUDGET),
+        }
+    )
+    value.update(overrides)
+    return value
+
+
+def trusted_parent_kwargs(value: dict[str, object]) -> dict[str, str]:
+    return {
+        "trusted_parent_instance_id": str(value["PLANNER_INSTANCE_ID"]),
+        "trusted_parent_model": "gpt-5.6-terra",
+        "trusted_parent_reasoning_effort": "high",
+    }
+
+
 def event(**overrides: object) -> dict[str, object]:
     value: dict[str, object] = {
         "PLAN_ID": "p-1",
@@ -264,41 +307,46 @@ class DispatchValidationTests(unittest.TestCase):
         self.assertTrue(any("PLANNER_ROLE" in error for error in errors))
 
     def test_eligible_parent_fast_path_dispatch_is_accepted(self) -> None:
-        value = dispatch()
-        value.update(
-            {
-                "PLANNER_ROLE": "parent",
-                "PLANNER_CAPABILITY": "bounded_l1_l2_dispatch",
-                "LEVEL": "L2",
-                "OBJECTIVE_FIXED": True,
-                "SCOPE_ROOTS": ["src"],
-                "OPEN_MAJOR_DECISIONS": False,
-                "RISK_FLAGS": [],
-                "EXTERNAL_ACTIONS": "none",
-                "MAX_DISPATCHES": 1,
-                "COMPONENT_COUNT": 1,
-                "DEPENDENCY_DEPTH": 0,
-                "REQUIRED_PATHS": [],
-                "WRITE_BATCH_COUNT": 1,
-                "INTEGRATION": False,
-                "CONFLICT": False,
-                "CONTRACT_EXPANDED": False,
-                "AMBIGUITY": False,
-                "CONTRACT_CHANGE": False,
-                "SCOPE_CHANGE": False,
-                "ACCEPTANCE_CHANGE": False,
-                "CONSTRAINT_CHANGE": False,
-                "ARCHITECTURE_CHANGE": False,
-                "SECURITY_CHANGE": False,
-                "COMPATIBILITY_CHANGE": False,
-                "BUDGET": {
-                    "MODEL_CALL_LIMIT": 4, "HYPOTHESIS_LIMIT": 2,
-                    "MODEL_ACTIVE_SECONDS_LIMIT": 600, "REPAIR_CYCLE_LIMIT": 1,
-                    "STAGNANT_CALL_LIMIT": 1,
-                },
-            }
+        value = parent_dispatch(LEVEL="L2", RISK_FLAGS=[])
+        self.assertEqual(
+            runtime_guard.validate_dispatch(
+                value, **trusted_parent_kwargs(value)
+            ),
+            [],
         )
-        self.assertEqual(runtime_guard.validate_dispatch(value), [])
+        denied = runtime_guard.preflight_dispatch(value)
+        self.assertFalse(denied["allowed"])
+        self.assertEqual(denied["destination"], "parent:sol")
+        self.assertIn("trusted parent instance identity", " ".join(denied["errors"]))
+        mismatch = runtime_guard.preflight_dispatch(
+            value, **dict(trusted_parent_kwargs(value), trusted_parent_instance_id="different-parent")
+        )
+        self.assertFalse(mismatch["allowed"])
+        wrong_model = runtime_guard.preflight_dispatch(
+            value, **dict(trusted_parent_kwargs(value), trusted_parent_model="gpt-5.6-luna")
+        )
+        self.assertFalse(wrong_model["allowed"])
+        accepted = runtime_guard.preflight_dispatch(value, **trusted_parent_kwargs(value))
+        self.assertTrue(accepted["allowed"])
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "parent-state.json"
+            denied_cli = subprocess.run(
+                [sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state)],
+                input=json.dumps(value), text=True, capture_output=True, check=False, timeout=30,
+            )
+            self.assertEqual(denied_cli.returncode, 2)
+            self.assertFalse(state.exists())
+            accepted_cli = subprocess.run(
+                [
+                    sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state),
+                    "--trusted-parent-instance-id", str(value["PLANNER_INSTANCE_ID"]),
+                    "--trusted-parent-model", "gpt-5.6-terra",
+                    "--trusted-parent-reasoning-effort", "high",
+                ],
+                input=json.dumps(value), text=True, capture_output=True, check=False, timeout=30,
+            )
+            self.assertEqual(accepted_cli.returncode, 0, accepted_cli.stderr)
+            self.assertTrue(state.exists())
 
         for field in runtime_guard.PARENT_CHANGE_FIELDS:
             for invalid in (None, "none", ["none"], True):
@@ -313,7 +361,13 @@ class DispatchValidationTests(unittest.TestCase):
             CONFLICT=None,
             CONTRACT_EXPANDED=["none"],
         )
-        self.assertEqual(runtime_guard.validate_dispatch(non_change_none), [])
+        self.assertEqual(
+            runtime_guard.validate_dispatch(
+                non_change_none,
+                **trusted_parent_kwargs(non_change_none),
+            ),
+            [],
+        )
 
         for field, invalid in (
             ("RISK_FLAGS", ["security"]),
@@ -330,27 +384,10 @@ class DispatchValidationTests(unittest.TestCase):
         self.assertTrue(runtime_guard.validate_dispatch(missing))
 
     def test_parent_fast_path_budget_and_sol_exhaustion(self) -> None:
-        value = dispatch()
-        value.update(
-            {
-                "PLANNER_ROLE": "parent",
-                "PLANNER_CAPABILITY": "bounded_l1_l2_dispatch",
-                "LEVEL": "L1", "OBJECTIVE_FIXED": True, "SCOPE_ROOTS": ["src"],
-                "OPEN_MAJOR_DECISIONS": False, "RISK_FLAGS": "none", "EXTERNAL_ACTIONS": "none",
-                "MAX_DISPATCHES": 1, "COMPONENT_COUNT": 1, "DEPENDENCY_DEPTH": 0,
-                "REQUIRED_PATHS": [], "WRITE_BATCH_COUNT": 1, "INTEGRATION": False,
-                "CONFLICT": False, "CONTRACT_EXPANDED": False, "AMBIGUITY": False,
-                "CONTRACT_CHANGE": False, "SCOPE_CHANGE": False, "ACCEPTANCE_CHANGE": False,
-                "CONSTRAINT_CHANGE": False, "ARCHITECTURE_CHANGE": False,
-                "SECURITY_CHANGE": False, "COMPATIBILITY_CHANGE": False,
-                "BUDGET": {
-                    "MODEL_CALL_LIMIT": 4, "HYPOTHESIS_LIMIT": 2,
-                    "MODEL_ACTIVE_SECONDS_LIMIT": 600, "REPAIR_CYCLE_LIMIT": 1,
-                    "STAGNANT_CALL_LIMIT": 1,
-                },
-            }
+        value = parent_dispatch()
+        guard = runtime_guard.RuntimeGuard(
+            value, **trusted_parent_kwargs(value)
         )
-        guard = runtime_guard.RuntimeGuard(value)
         result = guard.observe(event(PROGRESS_FINGERPRINT="p-1"))
         self.assertTrue(result["allowed"])
         result = guard.observe(event(PROGRESS_FINGERPRINT="p-1"))
@@ -359,19 +396,7 @@ class DispatchValidationTests(unittest.TestCase):
         self.assertEqual(result["destination"], "parent:sol")
 
     def test_parent_and_planner_identity_cannot_be_final_auditor(self) -> None:
-        value = dispatch()
-        value["PLANNER_ROLE"] = "parent"
-        value["PLANNER_CAPABILITY"] = "bounded_l1_l2_dispatch"
-        value.update({
-            "LEVEL": "L1", "OBJECTIVE_FIXED": True, "SCOPE_ROOTS": ["src"],
-            "OPEN_MAJOR_DECISIONS": False, "RISK_FLAGS": "none", "EXTERNAL_ACTIONS": "none",
-            "MAX_DISPATCHES": 1, "COMPONENT_COUNT": 1, "DEPENDENCY_DEPTH": 0,
-            "REQUIRED_PATHS": [], "WRITE_BATCH_COUNT": 1, "INTEGRATION": False,
-            "CONFLICT": False, "CONTRACT_EXPANDED": False, "AMBIGUITY": False,
-            "CONTRACT_CHANGE": False, "SCOPE_CHANGE": False, "ACCEPTANCE_CHANGE": False,
-            "CONSTRAINT_CHANGE": False, "ARCHITECTURE_CHANGE": False,
-            "SECURITY_CHANGE": False, "COMPATIBILITY_CHANGE": False,
-        })
+        value = parent_dispatch()
         value["AUDITOR_INSTANCE_ID"] = value["PLANNER_INSTANCE_ID"]
         self.assertTrue(runtime_guard.validate_dispatch(value))
 

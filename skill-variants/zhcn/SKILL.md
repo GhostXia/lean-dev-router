@@ -9,7 +9,7 @@ description: 通过 Sol 例外规划、受限 Terra High parent 快速路径、L
 
 ## 语言
 
-遵循父任务的主要语言；没有信号时使用英文。代码、命令、路径、模型 ID 和 Agent 名称保持不变。
+遵循父任务的主要语言；未明确指定时使用任务的主导语言。代码、命令、路径、模型 ID 和 Agent 名称保持不变。
 
 ## 权限与入口
 
@@ -53,7 +53,7 @@ BUDGET:
 NEXT: parent
 ```
 
-选定角色所需字段必须非空，ID 稳定，planner 与 auditor 不同，路径必须是仓库相对路径。授权缺失时 Luna 不得检查实现或写入，返回 `FAILURE: missing_dispatch`。Terra 任务是普通只读指令，不是出站结果信封，也不能使用 `STATUS: DISPATCH`。
+选定角色所需字段必须非空，ID 稳定，planner 与 auditor 不同，路径必须是仓库相对路径。parent guard 在 Luna 启动前拒绝非法 packet，并路由 `parent:sol`。如果 Luna 在防御场景下仍被错误调用，它不得检查或写入，并返回 `BLOCKED/none` 到 `parent:pause`。Terra 任务是普通只读指令，不是出站结果信封，也不能使用 `STATUS: DISPATCH`。
 
 角色返回紧凑结果信封：
 
@@ -88,7 +88,7 @@ SUMMARY: one concise sentence
 
 ## 快速路径资格
 
-parent 能力只是 Terra High 主模型前置条件，不是第四个子 Agent，也不是第二个 Sol。runtime guard 只有在证据明确且固定时才接受：
+parent 能力只是 Terra High 主模型前置条件，不是第四个子 Agent，也不是第二个 Sol。packet 字段只是资格声明，不能证明授权。宿主调用 `preflight` 或 `start` 时必须在 packet 之外传入 `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high`；runtime guard 将该上下文绑定到 `PLANNER_INSTANCE_ID`，缺失、不匹配或并非 Terra High 时在 Luna 前拒绝。这是宿主协调边界，不是密码学证明。之后 runtime guard 才检查全部明确且固定的证据：
 
 - `PLANNER_ROLE: parent` 且 `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`；`LEVEL` 为 L1 或 L2；`OBJECTIVE_FIXED`、`OPEN_MAJOR_DECISIONS` 与所有变更标记必须是精确布尔值。
 - `BASELINE`、`SCOPE_ROOTS`、`ACCEPTANCE`、`CONSTRAINTS` 非空；`RISK_FLAGS`、`EXTERNAL_ACTIONS` 为 none；禁止架构、安全、兼容性、契约、范围、验收和约束变更。
@@ -104,7 +104,7 @@ L3、风险、冲突/集成、多批次、B/D 发现、歧义、耗尽，或契�
 
 ## 风险熔断与复现
 
-`runtime_guard.py start --state <external-scratch-state>` 原子执行预检并初始化状态。需要已预注册的审计时，parent 只能在 Luna PASS 且范围/revision 门禁通过后调用 `runtime_guard.py audit` 的 `begin` action；修复包复用同一状态且不得重启。Guard 记录调用、主动/墙钟时间、上游尝试、token、假设、进展、错误和身份。无新证据的重复失败、spinning、预算耗尽或 baseline 漂移都会 fail-closed。复现证据包含 cwd、环境差异、完整命令、退出码和紧凑结果。
+`runtime_guard.py start --state <external-scratch-state>` 原子执行预检并初始化状态；parent 快速路径还必须传入上述宿主持有的 instance、`gpt-5.6-terra` model 与 `high` reasoning 参数。需要已预注册的审计时，parent 只能在 Luna PASS 且范围/revision 门禁通过后调用 `runtime_guard.py audit` 的 `begin` action；修复包复用同一状态且不得重启。Guard 记录调用、主动/墙钟时间、上游尝试、token、假设、进展、错误和身份。无新证据的重复失败、spinning、预算耗尽或 baseline 漂移都会 fail-closed。复现证据包含 cwd、环境差异、完整命令、退出码和紧凑结果。
 
 每个 runtime audit `begin`、`complete` 或 `abandon` 包都携带：
 
