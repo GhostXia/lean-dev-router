@@ -65,7 +65,7 @@ PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
-REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
+REQUEST: none | execution | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or `command` -> PASS/FAIL
@@ -88,7 +88,7 @@ SUMMARY: one concise sentence
 | `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
 | `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
 | `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
-| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `execution` | `parent:luna` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
 
 ## 范围、产物与版本
@@ -107,7 +107,7 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 ## 风险熔断与复现
 
-首次调用 Luna 前，父代理仅一次执行 `<skill-dir>/scripts/runtime_guard.py start --state <external-scratch-state>` 并传入 `DISPATCH`。后续 `repair` 与 `audit` 共用该状态，禁止重启；Exit 2 表示目标调用数为零。`BUDGET` 是每个角色/阶段的硬预算，上限为 8 次调用、4 个假设、1200 秒模型主动时间、2 轮修复和 2 次停滞调用，Sol 只能收紧。外部等待不计主动时间，但命令必须设置 timeout。
+首次调用 Luna 前，父代理仅一次执行 `<skill-dir>/scripts/runtime_guard.py start --state <external-scratch-state>` 并传入 `DISPATCH`。后续 `execution`、`repair` 与 `audit` 共用该状态，禁止重启；Exit 2 表示目标调用数为零。`BUDGET` 是每个角色/阶段的硬预算，上限为 8 次调用、4 个假设、1200 秒模型主动时间、2 轮修复和 2 次停滞调用，Sol 只能收紧。初始执行最多两次顺序递增尝试，且只接受 DISPATCH 与干净 BASELINE 不变、零产物的重试；脏/改变/耗尽或已有证据的重试回 Sol。外部等待不计主动时间，但命令必须设置 timeout。
 
 每个 `event` 记录身份、revision/stage、调用、wall/active time、上游尝试、全部 token/cache families、假设、命令/错误、进展/证据与终止原因；guard 推导 uncached 与总 token。无新进展的重复失败必须停止；两次停滞构成确定性的 `spinning` 信号。停止状态锁存到 revision、契约或证据变化。Luna 预算耗尽转 Terra，Terra 预算耗尽转 Sol。父代理在 Luna 失败或中断后绝不修复或写入。
 
@@ -115,13 +115,13 @@ python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revisi
 
 `PASS` 前的技术诊断须携带 `DISPATCH_ID`、baseline、当前 diff/paths、失败假设与尝试、完整失败/复现证据、契约边界和剩余预算，不要求最终 scope 或 revision。技术证据不足时请求 `technical_resolution`，由父代理交给 Terra 处理。并发测试必须证明目标失败或竞争分支确实发生；sleep 只能用于轮询或兜底 timeout，不能单独作为同步证据。baseline 漂移立即停止写入并产生 verification blocker。
 
-`parent:pause` 是零执行状态：父代理不得运行 `npm ci`、安装工具、修改环境、清除 latch 或自行恢复 Luna。
+`parent:pause` 是零执行状态：父代理不得运行 `npm ci`、安装工具、修改环境、清除 latch 或自行恢复 Luna。初始执行与无产物重试只能用 `REQUEST: execution` 返回 `parent:luna`；`REQUEST: implementation` 仅保留给 Terra 的契约不变修复。
 
 ## 流式处理与预注册审计
 
 独立组件的结果到达即处理，不等待无关 sibling；只有组合集成使用 all-component barrier。job key 固定为 `<component>:<revision>:<stage>`，状态为 `queued`、`running`、`complete` 或 `failed`，只重试缺失或失败的 key。`token-first` 可复用一名未参与实现的 Terra，但不得制造 sibling wait。有时间戳且有容量时须在 60 秒内启动，否则记录排队原因，并在第一个可用 slot 释放时启动。父代理执行长命令时仍须及时消费事件，并单独报告外部等待。
 
-Sol 为每次审计预注册相同 `DISPATCH_ID`、组件、依赖、revision/job-key 规则、`TASK_OBJECTIVE`、`CHANGE_SCOPE`、更宽的 `AUDIT_SCOPE/IMPACT_CONE`、验收、复现证据和越界策略。Luna `PASS` 后，父代理验证 scope、具体 revision、依赖、复现证据和审计契约，随后直接启动 Terra，不经过常规 Luna-to-Sol-to-Terra 跳转。前置条件不完整或未定义时回到 Sol。
+Sol 为每次审计预注册相同 `DISPATCH_ID`、组件、依赖、revision/job-key 规则、`TASK_OBJECTIVE`、`CHANGE_SCOPE`、更宽的 `AUDIT_SCOPE/IMPACT_CONE`、验收、复现证据和越界策略。只有匹配的 Luna `PASS` 提供原 dispatch 身份、具体 revision、scope/replay 证据、显式未变依赖和 telemetry 后，满足前置条件随后直接启动 Terra（Luna-to-Sol-to-Terra）。缺少 Luna 执行或产物时返回机器可读的 `REQUEST: execution` 给 `parent:luna`；部分/矛盾证据或任何契约、依赖声明变化都回 Sol，且不启动 Terra。
 
 用 `runtime_guard.py audit` 登记；相同 revision 不得重复审计。首次完整审计，后续 revision 只审 delta 与既有发现。提前终止时父代理记录 `ACTION: abandon` 及原因，路由至 Sol，且绝不更新增量审计基线。
 
@@ -138,7 +138,7 @@ Terra 沿因果影响锥读取 `PATHS_ALLOW` 之外的 caller/callee、数据/�
 
 任何 scope、plan、acceptance、constraint、公开接口、架构、安全边界、数据格式或资源限制变化，以及歧义或预算耗尽，都回到 Sol。Terra 自身绝不写修复。
 
-Terra 绝不安装或运行工具，也绝不修改环境。在 technical-resolution 路由中，只有契约不变且带 `CONTRACT_EFFECT: unchanged` 的有界建议才返回 `ESCALATE`/`implementation`；任何依赖声明或其他契约变化都返回带 `ESCALATE`/`planning_resolution` 的 `parent:sol`。
+Terra 绝不安装或运行工具，也绝不修改环境。在 technical-resolution 路由中，只有契约不变且带 `CONTRACT_EFFECT: unchanged` 的有界修复才返回 `ESCALATE`/`implementation`；初始执行/无产物重试使用 `REQUEST: execution`，任何依赖声明或其他契约变化都返回带 `ESCALATE`/`planning_resolution` 的 `parent:sol`。
 
 ## 集成
 
@@ -146,7 +146,7 @@ Terra 绝不安装或运行工具，也绝不修改环境。在 technical-resolu
 
 ## 执行与用户门禁
 
-并行 Luna writer 使用隔离 worktree；只读 Terra 可共享 checkout。默认代理池上限为 token-first 3、balanced 6、latency-first 10。Sol 无法嵌套 spawn 时，以 `BLOCKED/dependency/REQUEST implementation` 返回 literal manifest，父代理只负责机械转发，不能重新规划。
+并行 Luna writer 使用隔离 worktree；只读 Terra 可共享 checkout。默认代理池上限为 token-first 3、balanced 6、latency-first 10。Sol 无法嵌套 spawn 时，以 `BLOCKED/dependency/REQUEST execution` 返回 literal manifest，父代理只负责机械转发，不能重新规划。
 
 Sol 只决定固定契约内可逆的技术取舍。目标、范围、验收、政策，以及实质性的兼容性、安全、隐私、许可、迁移、成本或产品承诺，必须使用 `BLOCKED/major-decision/REQUEST human_authority`。Sol 至多给出三个选项、一个建议和一个问题；父代理原样交给用户，不得自行把回答转换成契约。
 

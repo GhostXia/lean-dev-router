@@ -28,7 +28,12 @@ Agent 返回的出站交接包含状态、失败类型、能力请求、证据�
 
 `PASS`、`BLOCKED`、`ESCALATE` 都只是结果，不能作为写入授权；`PLAN_READY` 也不是执行状态。
 
-升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验范围、稳定 revision、依赖与 replay；若 Sol 已预注册审计，则直接启动 Terra。Terra 发现不改变原契约且仍在 `PATHS_ALLOW` 内的缺陷时，父会话可在返工预算内直接交回原 Luna；涉及范围、方案、验收、公共接口、架构、安全边界、数据格式、资源限制或歧义时才回 Sol。只有 Sol 可以请求用户决策。
+`REQUEST: execution` 只表示初次 Luna 执行或无产物重试能力，机械目的地为
+`parent:luna`；它要求原始 `DISPATCH`、干净 `BASELINE` 和零产物，guard 只允许
+两次顺序递增尝试。`REQUEST: implementation` 只表示 Terra 在最终审计后提出的
+A 类契约不变修复，不能与初始执行混用；所有出站结果继续使用 `NEXT: parent`。
+
+升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验匹配的 dispatch 身份、具体 revision、scope/replay 证据、显式依赖和 telemetry；缺少 Luna 执行或产物时返回机器可读的 `REQUEST: execution` 给 `parent:luna`，不启动 Terra。只有全部审计前置条件满足且 Sol 已预注册审计，才直接启动 Terra。Terra 发现不改变原契约且仍在 `PATHS_ALLOW` 内的 A 类缺陷时，父会话可在返工预算内直接交回原 Luna；部分/矛盾证据以及范围、方案、验收、依赖、公共接口、架构、安全边界、数据格式、资源限制或歧义变化时回 Sol。只有 Sol 可以请求用户决策。
 
 `lean-dev-router/v2` 与 v1 不兼容：v2 强制要求 `REQUEST`，并禁止在 `NEXT` 中点名具体 Agent。协调者必须拒绝混用版本的交接，不能自动猜测或静默转换。
 
@@ -94,7 +99,7 @@ git ls-files --others --ignored --exclude-standard
 
 Terra 的读取范围必须宽于改动范围：沿调用关系、数据/错误/资源流、配置、平台兼容、并发、安全、性能与测试调查。范围外发现分为 A（改动导致的验收缺陷）、B（完成目标所需但遗漏的路径）、C（无关既存问题，通常仅跟进）、D（严重安全/数据丢失/兼容风险）。A 可在原契约内返 Luna；B 与契约变化回 Sol；D 阻断或升级。
 
-父会话在首次 Luna 调用前只执行一次 Skill 内置的 `scripts/runtime_guard.py start`；`start` 原子完成确定性预检与状态初始化，正常执行不得再增加一次独立 preflight。无状态 `preflight` 子命令只用于验证模板与已安装运行时。后续返工和审计在同一状态文件上使用相应子命令，不能重建状态。运行时最大值依次为 8 次模型调用、4 个不同假设、1200 秒模型主动时间、2 轮返工和 2 次停滞调用，Sol 只能收紧。每次调用记录角色/阶段、wall/主动时间、上游尝试、各类 token、假设、命令/错误及进展/证据。同一失败没有进展立即停止；停滞触发 `spinning`。只有 revision、契约版本或证据改变才能解锁。Luna 耗尽交 Terra，Terra 耗尽回 Sol；父会话不得代写。
+父会话在首次 Luna 调用前只执行一次 Skill 内置的 `scripts/runtime_guard.py start`；`start` 原子完成确定性预检与状态初始化，正常执行不得再增加一次独立 preflight。无状态 `preflight` 子命令只用于验证模板与已安装运行时。初始 `execution`、返工和审计在同一状态文件上使用相应子命令，不能重建状态。运行时最大值依次为 8 次模型调用、4 个不同假设、1200 秒模型主动时间、2 轮返工和 2 次停滞调用，Sol 只能收紧。guard 还持久化初始执行次数，拒绝非顺序、耗尽、脏/改变、已有证据、返工或审计后的重试。每次调用记录角色/阶段、wall/主动时间、上游尝试、各类 token、假设、命令/错误及进展/证据。同一失败没有进展立即停止；停滞触发 `spinning`。只有 revision、契约版本或证据改变才能解锁。Luna 耗尽交 Terra，Terra 耗尽回 Sol；父会话不得代写。
 
 宿主能提供时间戳时，记录组件就绪与下一阶段启动时间。有空闲容量时应在 60 秒内启动；否则记录排队状态与原因，并在第一个符合条件的槽位释放时启动。把编译、CI、网络等外部等待与可控 handoff 延迟分开报告，parent 执行长命令时仍应及时消费完成事件。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
 

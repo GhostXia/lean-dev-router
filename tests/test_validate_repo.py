@@ -82,7 +82,7 @@ class ValidateRepositoryTests(unittest.TestCase):
             ("terra_auditor", "ESCALATE", "planning_resolution"): "parent:sol",
             ("sol_planner", "PASS", "none"): "parent:manifest_gate",
             ("sol_planner", "BLOCKED", "none"): "parent:pause",
-            ("sol_planner", "BLOCKED", "implementation"): "parent:luna",
+            ("sol_planner", "BLOCKED", "execution"): "parent:luna",
             ("sol_planner", "BLOCKED", "human_authority"): "parent:user",
         }
         self.assertEqual(validate_repo.HANDOFF_ROUTES, expected)
@@ -91,7 +91,7 @@ class ValidateRepositoryTests(unittest.TestCase):
         all_routes = itertools.product(
             ("luna_worker", "terra_auditor", "sol_planner"),
             ("PASS", "BLOCKED", "ESCALATE"),
-            ("none", "implementation", "technical_resolution", "planning_resolution", "human_authority"),
+            ("none", "execution", "implementation", "technical_resolution", "planning_resolution", "human_authority"),
         )
         for route in set(all_routes) - set(expected):
             with self.assertRaises(ValueError):
@@ -221,15 +221,15 @@ class ValidateRepositoryTests(unittest.TestCase):
     def test_protocol_rejects_missing_request_and_illegal_route(self) -> None:
         original = self.source(".agents/skills/lean-dev-router/SKILL.md")
         without_request = original.replace(
-            "REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority\n",
+            "REQUEST: none | execution | implementation | technical_resolution | planning_resolution | human_authority\n",
             "", 1,
         )
         self.assertTrue(any("outbound protocol" in e for e in self.validate_skill(without_request)))
 
         validate_repo.ERRORS.clear()
         illegal = original.replace(
-            "| `luna_worker` | `ESCALATE` | `technical_resolution` | `parent:terra` |",
-            "| `luna_worker` | `ESCALATE` | `human_authority` | `parent:user` |",
+            "| `sol_planner` | `BLOCKED` | `execution` | `parent:luna` |",
+            "| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |",
         )
         self.assertTrue(any("illegal handoff" in e for e in self.validate_skill(illegal)))
 

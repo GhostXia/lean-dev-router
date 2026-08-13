@@ -259,6 +259,44 @@ class DispatchValidationTests(unittest.TestCase):
         errors = runtime_guard.validate_dispatch(value)
         self.assertTrue(any("PLANNER_ROLE" in error for error in errors))
 
+    def test_execution_route_is_bounded_to_unchanged_zero_product_attempts(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        packet = {
+            "ACTION": "execute",
+            "PLAN_ID": "p-1",
+            "DISPATCH_ID": "d-1",
+            "EXECUTION_ATTEMPT": 1,
+            "REVISION": "a" * 40,
+            "DISPATCH_FINGERPRINT": runtime_guard.fingerprint(dispatch()),
+            "PRODUCT_COUNT": 0,
+        }
+        self.assertEqual(guard.register_execution(packet)["destination"], "parent:luna")
+        self.assertEqual(
+            guard.register_execution(dict(packet, EXECUTION_ATTEMPT=2))["destination"],
+            "parent:luna",
+        )
+        exhausted = guard.register_execution(dict(packet, EXECUTION_ATTEMPT=3))
+        self.assertEqual(exhausted["reason"], "execution_attempt_limit")
+        dirty = runtime_guard.RuntimeGuard(dispatch()).register_execution(
+            dict(packet, REVISION="worktree-sha256:" + "b" * 64)
+        )
+        self.assertEqual(dirty["destination"], "parent:sol")
+
+    def test_execution_route_rejects_post_evidence_and_product(self) -> None:
+        value = dispatch()
+        guard = runtime_guard.RuntimeGuard(value)
+        packet = {
+            "ACTION": "execute", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
+            "EXECUTION_ATTEMPT": 1, "REVISION": "a" * 40,
+            "DISPATCH_FINGERPRINT": runtime_guard.fingerprint(value), "PRODUCT_COUNT": 0,
+        }
+        product = guard.register_execution(dict(packet, PRODUCT_COUNT=1))
+        self.assertEqual(product["destination"], "parent:sol")
+        guard = runtime_guard.RuntimeGuard(value)
+        self.assertTrue(guard.register_execution(packet)["allowed"])
+        post_evidence = guard.register_execution(dict(packet, EXECUTION_ATTEMPT=2, EVIDENCE_FINGERPRINT="e"))
+        self.assertEqual(post_evidence["destination"], "parent:sol")
+
 
 class RuntimeBudgetTests(unittest.TestCase):
     def test_counts_tokens_time_and_upstream_attempts(self) -> None:
@@ -393,6 +431,44 @@ class RuntimeBudgetTests(unittest.TestCase):
 
 
 class RepairAndAuditTests(unittest.TestCase):
+    def luna_pass(self, guard: runtime_guard.RuntimeGuard) -> dict[str, object]:
+        result = guard.observe(
+            event(
+                REVISION="a" * 40,
+                OUTCOME="pass",
+                PROGRESS_FINGERPRINT="luna-pass",
+                PRODUCT_COUNT=1,
+                SCOPE_EVIDENCE="scope-pass",
+                REPLAY_EVIDENCE="replay-pass",
+                DEPENDENCIES=[],
+            )
+        )
+        self.assertTrue(result["allowed"])
+        assert guard.luna_pass is not None
+        return guard.luna_pass
+
+    def audit_packet(self, guard: runtime_guard.RuntimeGuard, **overrides: object) -> dict[str, object]:
+        evidence = guard.luna_pass or {}
+        packet: dict[str, object] = {
+            "ACTION": "begin",
+            "PLAN_ID": "p-1",
+            "DISPATCH_ID": "d-1",
+            "REVISION": "a" * 40,
+            "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "AUDIT_SCOPE": ["src/one.py"],
+            "AUDIT_MODE": "full",
+            "LUNA_STATUS": "PASS",
+            "LUNA_DISPATCH_ID": "d-1",
+            "LUNA_REVISION": evidence.get("REVISION", ""),
+            "LUNA_EVIDENCE_FINGERPRINT": evidence.get("EVIDENCE_FINGERPRINT", ""),
+            "SCOPE_EVIDENCE": "scope-pass",
+            "REPLAY_EVIDENCE": "replay-pass",
+            "DEPENDENCIES": [],
+            "TELEMETRY": evidence.get("TELEMETRY", {}),
+        }
+        packet.update(overrides)
+        return packet
+
     def repair(self, **overrides: object) -> dict[str, object]:
         value: dict[str, object] = {
             "PLAN_ID": "p-1",
@@ -430,20 +506,15 @@ class RepairAndAuditTests(unittest.TestCase):
 
     def test_same_revision_audit_is_registered_once(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
-        packet = {
-            "ACTION": "begin",
-            "PLAN_ID": "p-1",
-            "DISPATCH_ID": "d-1",
-            "REVISION": "r-2",
-            "AUDITOR_INSTANCE_ID": "terra-audit-1",
-            "AUDIT_SCOPE": ["src/one.py", "callers"],
-            "AUDIT_MODE": "full",
-        }
+        self.luna_pass(guard)
+        packet = self.audit_packet(guard, AUDIT_SCOPE=["src/one.py", "callers"])
         self.assertTrue(guard.begin_audit(packet)["allowed"])
         duplicate = guard.begin_audit(packet)
         self.assertFalse(duplicate["allowed"])
         self.assertEqual(duplicate["reason"], "duplicate_audit_revision")
-        concurrent = guard.begin_audit(dict(packet, REVISION="r-3"))
+        concurrent = guard.begin_audit(
+            dict(packet, REVISION="worktree-sha256:" + "b" * 64)
+        )
         self.assertFalse(concurrent["allowed"])
         self.assertEqual(concurrent["reason"], "audit_already_running")
 
@@ -451,7 +522,7 @@ class RepairAndAuditTests(unittest.TestCase):
             "ACTION": "complete",
             "PLAN_ID": "p-1",
             "DISPATCH_ID": "d-1",
-            "REVISION": "r-2",
+            "REVISION": "a" * 40,
             "AUDITOR_INSTANCE_ID": "terra-audit-1",
             "TERMINATION_REASON": "pass",
             "VERIFIED": ["acceptance"],
@@ -460,44 +531,53 @@ class RepairAndAuditTests(unittest.TestCase):
         self.assertTrue(guard.audit_job(complete)["allowed"])
         incremental = dict(
             packet,
-            REVISION="r-3",
+            REVISION="worktree-sha256:" + "b" * 64,
             AUDIT_MODE="incremental",
-            PREVIOUS_REVISION="r-2",
+             PREVIOUS_REVISION="a" * 40,
             UNRESOLVED_FINDINGS=[],
         )
         self.assertTrue(guard.audit_job(incremental)["allowed"])
 
+    def test_audit_requires_matching_luna_pass_and_prerequisites(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        packet = self.audit_packet(guard)
+        missing = guard.begin_audit(packet)
+        self.assertEqual(missing["request"], "execution")
+        self.luna_pass(guard)
+        incomplete = guard.begin_audit(dict(packet, SCOPE_EVIDENCE=""))
+        self.assertEqual(incomplete["destination"], "parent:sol")
+        mismatched = guard.begin_audit(
+            dict(self.audit_packet(guard), LUNA_EVIDENCE_FINGERPRINT="wrong")
+        )
+        self.assertEqual(mismatched["destination"], "parent:sol")
+
     def test_changed_revision_rejects_full_reaudit(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
-        begin = {
-            "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-            "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
-            "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
-        }
+        self.luna_pass(guard)
+        begin = self.audit_packet(guard)
         guard.audit_job(begin)
         guard.audit_job(
             {
                 "ACTION": "complete", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-                "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+                "REVISION": "a" * 40, "AUDITOR_INSTANCE_ID": "terra-audit-1",
                 "TERMINATION_REASON": "pass", "VERIFIED": [], "UNVERIFIED": [],
             }
         )
-        result = guard.audit_job(dict(begin, REVISION="r-3"))
+        result = guard.audit_job(
+            dict(begin, REVISION="worktree-sha256:" + "b" * 64)
+        )
         self.assertFalse(result["allowed"])
         self.assertEqual(result["reason"], "invalid_incremental_audit")
 
     def test_abandoned_audit_releases_slot_without_incremental_baseline(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
-        begin = {
-            "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-            "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
-            "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
-        }
+        self.luna_pass(guard)
+        begin = self.audit_packet(guard)
         self.assertTrue(guard.audit_job(begin)["allowed"])
         abandoned = guard.audit_job(
             {
                 "ACTION": "abandon", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-                "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+                "REVISION": "a" * 40, "AUDITOR_INSTANCE_ID": "terra-audit-1",
                 "TERMINATION_REASON": "model_call_limit",
             }
         )
@@ -505,7 +585,13 @@ class RepairAndAuditTests(unittest.TestCase):
         self.assertEqual(abandoned["reason"], "audit_abandoned")
         self.assertEqual(abandoned["destination"], "parent:sol")
         self.assertEqual(guard.last_completed_audits, {})
-        next_audit = guard.audit_job(dict(begin, REVISION="r-3"))
+        next_audit = guard.audit_job(
+            dict(
+                begin,
+                REVISION="worktree-sha256:" + "b" * 64,
+                 AUDIT_MODE="full",
+            )
+        )
         self.assertTrue(next_audit["allowed"])
 
     def test_abandon_rejects_wrong_identity_and_non_running_job(self) -> None:

@@ -53,6 +53,16 @@ REPAIR_FIELDS = (
     "REVISION",
     "EVIDENCE_FINGERPRINT",
 )
+EXECUTION_FIELDS = (
+    "ACTION",
+    "PLAN_ID",
+    "DISPATCH_ID",
+    "EXECUTION_ATTEMPT",
+    "REVISION",
+    "DISPATCH_FINGERPRINT",
+    "PRODUCT_COUNT",
+)
+EXECUTION_ATTEMPT_LIMIT = 2
 TOKEN_FIELDS = (
     "INPUT_TOKENS",
     "CACHED_INPUT_TOKENS",
@@ -76,6 +86,16 @@ DEFAULT_BUDGET = {
 AUDIT_BEGIN_FIELDS = (
     "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
     "AUDIT_SCOPE", "AUDIT_MODE",
+)
+AUDIT_PREREQUISITE_FIELDS = (
+    "LUNA_STATUS",
+    "LUNA_DISPATCH_ID",
+    "LUNA_REVISION",
+    "LUNA_EVIDENCE_FINGERPRINT",
+    "SCOPE_EVIDENCE",
+    "REPLAY_EVIDENCE",
+    "DEPENDENCIES",
+    "TELEMETRY",
 )
 AUDIT_INCREMENTAL_FIELDS = ("PREVIOUS_REVISION", "UNRESOLVED_FINDINGS")
 AUDIT_COMPLETE_FIELDS = (
@@ -135,12 +155,57 @@ def _present(value: Any) -> bool:
     return True
 
 
+def _has(data: Mapping[str, Any], *keys: str) -> bool:
+    folded = {str(candidate).casefold() for candidate in data}
+    return any(key.casefold() in folded for key in keys)
+
+
+def _first(data: Mapping[str, Any], *keys: str, default: Any = None) -> Any:
+    for key in keys:
+        value = _value(data, key, None)
+        if value is not None:
+            return value
+    return default
+
+
 def _positive_int(value: Any) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int) and value > 0:
         return value
     return None
+
+
+def _concrete_revision(value: Any, baseline: Any) -> bool:
+    """Return whether a revision is a concrete clean or dirty identity."""
+    if value == baseline and _lower_hex(baseline, (40, 64)):
+        return True
+    return (
+        isinstance(value, str)
+        and value.startswith("worktree-sha256:")
+        and _lower_hex(value[len("worktree-sha256:"):], (64,))
+    )
+
+
+def _zero_product(packet: Mapping[str, Any]) -> bool:
+    """Accept the common product encodings only when they explicitly mean zero."""
+    if _has(packet, "PRODUCT_COUNT", "PRODUCTS_COUNT"):
+        value = _first(packet, "PRODUCT_COUNT", "PRODUCTS_COUNT")
+        return isinstance(value, int) and not isinstance(value, bool) and value == 0
+    if _has(packet, "PRODUCTS", "PRODUCT", "LUNA_PRODUCT"):
+        value = _first(packet, "PRODUCTS", "PRODUCT", "LUNA_PRODUCT")
+        if value is None or value is False:
+            return True
+        if isinstance(value, (list, tuple, dict, set, str)):
+            return len(value) == 0
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+    return True
+
+
+def _nonzero_product(packet: Mapping[str, Any]) -> bool:
+    if not _has(packet, "PRODUCT_COUNT", "PRODUCTS_COUNT", "PRODUCTS", "PRODUCT", "LUNA_PRODUCT"):
+        return False
+    return not _zero_product(packet)
 
 
 def _lower_hex(value: Any, lengths: tuple[int, ...]) -> bool:
@@ -256,6 +321,36 @@ def preflight_dispatch(packet: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def validate_execution(packet: Mapping[str, Any], dispatch: Mapping[str, Any]) -> list[str]:
+    """Validate an initial Luna execution or a zero-product retry packet."""
+    errors: list[str] = []
+    for name in ("PLAN_ID", "DISPATCH_ID", "EXECUTION_ATTEMPT", "REVISION"):
+        if not _present(_first(packet, name, "ATTEMPT" if name == "EXECUTION_ATTEMPT" else name)):
+            errors.append(f"{name} must be non-empty")
+    if _value(packet, "PLAN_ID") != _value(dispatch, "PLAN_ID"):
+        errors.append("PLAN_ID must match the original dispatch")
+    if _value(packet, "DISPATCH_ID") != _value(dispatch, "DISPATCH_ID"):
+        errors.append("DISPATCH_ID must match the original dispatch")
+    attempt = _first(packet, "EXECUTION_ATTEMPT", "ATTEMPT")
+    if _positive_int(attempt) is None:
+        errors.append("EXECUTION_ATTEMPT must be a positive integer")
+    baseline = _value(dispatch, "BASELINE")
+    revision = _value(packet, "REVISION")
+    if revision != baseline:
+        errors.append("initial execution requires the unchanged clean BASELINE revision")
+    dispatch_key = _value(packet, "DISPATCH_FINGERPRINT")
+    if dispatch_key != fingerprint(dispatch):
+        errors.append("DISPATCH_FINGERPRINT must match the unchanged DISPATCH")
+    if not _zero_product(packet):
+        errors.append("initial execution retries require zero product")
+    if _has(packet, "EVIDENCE_FINGERPRINT", "SCOPE_EVIDENCE", "REPLAY_EVIDENCE"):
+        errors.append("initial execution retries cannot carry post-execution evidence")
+    action = str(_value(packet, "ACTION", "retry")).casefold()
+    if action not in {"start", "execute", "retry"}:
+        errors.append("ACTION must be start, execute, or retry")
+    return list(dict.fromkeys(errors))
+
+
 def validate_repair(packet: Mapping[str, Any], dispatch: Mapping[str, Any]) -> list[str]:
     """Validate a contract-preserving repair before Luna is resumed."""
     errors = [f"{name} must be non-empty" for name in REPAIR_FIELDS if not _present(_value(packet, name))]
@@ -274,6 +369,13 @@ def validate_repair(packet: Mapping[str, Any], dispatch: Mapping[str, Any]) -> l
     limit = _positive_int(_value(_value(dispatch, "BUDGET", {}), "REPAIR_CYCLE_LIMIT"))
     if cycle is None or limit is None or cycle > limit:
         errors.append("REPAIR_CYCLE exceeds the dispatch budget")
+    for name in ("TASK_SUMMARY", "CONSTRAINTS", "DEPENDENCIES", "DISPATCH_FINGERPRINT"):
+        if _has(packet, name):
+            expected = fingerprint(dispatch) if name == "DISPATCH_FINGERPRINT" else _value(dispatch, name)
+            if _value(packet, name) != expected:
+                errors.append(f"{name} must remain unchanged for repair")
+    if _has(packet, "PATHS_ALLOW") and _value(packet, "PATHS_ALLOW") != _value(dispatch, "PATHS_ALLOW"):
+        errors.append("PATHS_ALLOW must remain unchanged for repair")
     return list(dict.fromkeys(errors))
 
 
@@ -335,6 +437,42 @@ class RuntimeGuard:
         self.last_completed_audits: dict[str, str] = {}
         self.repair_cycles: dict[str, int] = {}
         self.repair_evidence: dict[str, list[str]] = {}
+        self.execution_attempts: int = 0
+        self.execution_history: list[dict[str, Any]] = []
+        self.luna_pass: dict[str, Any] | None = None
+
+    def _execution_decision(
+        self, allowed: bool, reason: str, destination: str, **extra: Any
+    ) -> dict[str, Any]:
+        """Return a machine-readable execution capability decision."""
+        result = self._decision(allowed, reason, destination)
+        result.update({"request": "execution", "route": "execution"})
+        result.update(extra)
+        return result
+
+    def _audit_sol_decision(self, reason: str, **extra: Any) -> dict[str, Any]:
+        result = self._decision(False, reason, "parent:sol")
+        result.update(extra)
+        return result
+
+    def _luna_event_evidence(self, event: Mapping[str, Any], stage: StageTelemetry) -> dict[str, Any]:
+        evidence = {
+            "PLAN_ID": str(_value(event, "PLAN_ID")),
+            "DISPATCH_ID": str(_value(event, "DISPATCH_ID")),
+            "REVISION": str(_value(event, "REVISION")),
+            "EVIDENCE_FINGERPRINT": str(_value(event, "EVIDENCE_FINGERPRINT")),
+            "PROGRESS_FINGERPRINT": str(_value(event, "PROGRESS_FINGERPRINT", "")),
+            "TELEMETRY": stage.public(),
+        }
+        for name in ("SCOPE_EVIDENCE", "REPLAY_EVIDENCE", "DEPENDENCIES"):
+            if _has(event, name):
+                evidence[name] = _value(event, name)
+        if _has(event, "PRODUCT_COUNT", "PRODUCTS_COUNT", "PRODUCTS", "PRODUCT", "LUNA_PRODUCT"):
+            evidence["PRODUCT_COUNT"] = _first(
+                event, "PRODUCT_COUNT", "PRODUCTS_COUNT", default=None
+            )
+            evidence["PRODUCT"] = _first(event, "PRODUCTS", "PRODUCT", "LUNA_PRODUCT", default=None)
+        return evidence
 
     def _key(self, event: Mapping[str, Any]) -> str:
         fields = (
@@ -476,6 +614,12 @@ class RuntimeGuard:
         if outcome == "pass":
             stage.termination_reason = "pass"
             self._latch(event, "pass")
+            if stage.role == WRITER_ROLE:
+                evidence = self._luna_event_evidence(event, stage)
+                evidence["product_present"] = _has(
+                    event, "PRODUCT_COUNT", "PRODUCTS_COUNT", "PRODUCTS", "PRODUCT", "LUNA_PRODUCT"
+                ) and _nonzero_product(event)
+                self.luna_pass = evidence
             return self._decision(True, "stage_complete", "parent:manifest_gate", stage)
         if outcome in {"blocked", "escalate"}:
             stage.termination_reason = outcome
@@ -487,6 +631,110 @@ class RuntimeGuard:
             if actual >= limit:
                 return self._trip(event, stage, reason)
         return self._decision(True, "continue", "parent:continue", stage)
+
+    def register_execution(self, packet: Mapping[str, Any]) -> dict[str, Any]:
+        """Register one initial Luna execution or an unchanged zero-product retry."""
+        errors = validate_execution(packet, self.dispatch)
+        if errors:
+            return self._audit_sol_decision("invalid_execution", errors=errors)
+        attempt = int(_first(packet, "EXECUTION_ATTEMPT", "ATTEMPT"))
+        if attempt != self.execution_attempts + 1:
+            return self._audit_sol_decision("non_sequential_execution_attempt")
+        if self.execution_attempts >= EXECUTION_ATTEMPT_LIMIT:
+            return self._audit_sol_decision("execution_attempt_limit")
+        if self.stages or self.luna_pass is not None:
+            return self._audit_sol_decision("execution_after_evidence")
+        if self.repair_cycles or self.repair_evidence:
+            return self._audit_sol_decision("execution_after_repair")
+        if self.audit_jobs or self.last_completed_audits:
+            return self._audit_sol_decision("execution_after_audit")
+        dispatch_fingerprint = _value(packet, "DISPATCH_FINGERPRINT")
+        if dispatch_fingerprint != fingerprint(self.dispatch):
+            return self._audit_sol_decision("execution_dispatch_changed")
+        if _value(packet, "REVISION") != _value(self.dispatch, "BASELINE"):
+            return self._audit_sol_decision("execution_revision_changed")
+        if not _zero_product(packet):
+            return self._audit_sol_decision("execution_product_present")
+        self.execution_attempts = attempt
+        self.execution_history.append(
+            {
+                "attempt": attempt,
+                "revision": str(_value(packet, "REVISION")),
+                "dispatch_fingerprint": str(dispatch_fingerprint),
+            }
+        )
+        return self._execution_decision(
+            True,
+            "execution_registered",
+            "parent:luna",
+            execution_attempt=attempt,
+        )
+
+    def _luna_prerequisite_errors(self, packet: Mapping[str, Any]) -> list[str]:
+        """Return fail-closed final-audit prerequisite errors."""
+        errors: list[str] = []
+        evidence = self.luna_pass
+        if evidence is None:
+            return ["matching Luna PASS is required"]
+        expected_dispatch = str(_value(self.dispatch, "DISPATCH_ID"))
+        if _first(packet, "LUNA_STATUS", "LUNA_OUTCOME") != "PASS":
+            errors.append("LUNA_STATUS must equal PASS")
+        if _first(packet, "LUNA_DISPATCH_ID", "LUNA_DISPATCH") != expected_dispatch:
+            errors.append("LUNA_DISPATCH_ID must match the original DISPATCH_ID")
+        baseline = _value(self.dispatch, "BASELINE")
+        luna_revision = _first(packet, "LUNA_REVISION", "REVISION")
+        if not _concrete_revision(luna_revision, baseline):
+            errors.append("Luna revision must be concrete")
+        if str(luna_revision) != str(evidence.get("REVISION")):
+            errors.append("Luna revision evidence does not match the recorded PASS")
+        luna_evidence = _first(
+            packet, "LUNA_EVIDENCE_FINGERPRINT", "LUNA_EVIDENCE", "EVIDENCE_FINGERPRINT"
+        )
+        if not _present(luna_evidence) or luna_evidence != evidence.get("EVIDENCE_FINGERPRINT"):
+            errors.append("Luna evidence does not match the recorded PASS")
+        scope = _first(packet, "SCOPE_EVIDENCE", "SCOPE_RESULT")
+        if not _present(scope):
+            errors.append("SCOPE_EVIDENCE is required")
+        replay = _first(packet, "REPLAY_EVIDENCE", "REPLAY")
+        if not _present(replay):
+            errors.append("REPLAY_EVIDENCE is required")
+        if not _has(packet, "DEPENDENCIES", "DEPENDENCY_DECLARATION"):
+            errors.append("explicit DEPENDENCIES are required")
+        else:
+            dependencies = _first(packet, "DEPENDENCIES", "DEPENDENCY_DECLARATION")
+            declared = _first(self.dispatch, "DEPENDENCIES", "DEPENDENCY_DECLARATION", default=[])
+            if dependencies != declared:
+                errors.append("DEPENDENCIES must match the dispatch declaration")
+        telemetry = _first(packet, "TELEMETRY", "LUNA_TELEMETRY")
+        if not isinstance(telemetry, Mapping) or not telemetry:
+            errors.append("TELEMETRY is required")
+        else:
+            expected = evidence.get("TELEMETRY", {})
+            for field_name in ("model_calls", "model_active_seconds", "wall_seconds"):
+                if field_name in expected and telemetry.get(field_name) != expected[field_name]:
+                    errors.append("TELEMETRY does not match the recorded PASS")
+                    break
+        for name in ("TASK_SUMMARY", "CONSTRAINTS", "ACCEPTANCE", "PATHS_ALLOW"):
+            if _has(packet, name) and _value(packet, name) != _value(self.dispatch, name):
+                errors.append(f"{name} must remain unchanged before audit")
+        if _has(packet, "DISPATCH_FINGERPRINT") and _value(packet, "DISPATCH_FINGERPRINT") != fingerprint(self.dispatch):
+            errors.append("DISPATCH_FINGERPRINT must match the unchanged DISPATCH")
+        return list(dict.fromkeys(errors))
+
+    def validate_audit_prerequisites(self, packet: Mapping[str, Any]) -> dict[str, Any]:
+        """Gate Terra until a complete, matching Luna PASS packet exists."""
+        if self.luna_pass is None:
+            return self._execution_decision(False, "execution_required", "parent:luna")
+        if _nonzero_product(self.luna_pass):
+            # A product is present only when the packet explicitly reports it;
+            # missing product is the execution capability route below.
+            pass
+        elif not self.luna_pass.get("product_present", False):
+            return self._execution_decision(False, "execution_required", "parent:luna")
+        errors = self._luna_prerequisite_errors(packet)
+        if errors:
+            return self._audit_sol_decision("audit_prerequisite_failed", errors=errors)
+        return self._decision(True, "audit_prerequisites_met", "parent:terra")
 
     def begin_audit(self, packet: Mapping[str, Any]) -> dict[str, Any]:
         """Register an audit job once per dispatch revision."""
@@ -500,6 +748,9 @@ class RuntimeGuard:
         auditor = str(_value(packet, "AUDITOR_INSTANCE_ID"))
         if auditor != str(_value(self.dispatch, "AUDITOR_INSTANCE_ID")):
             return self._decision(False, "invalid_auditor_identity", "parent:pause")
+        prerequisites = self.validate_audit_prerequisites(packet)
+        if not prerequisites["allowed"]:
+            return prerequisites
         job_key = ":".join(
             str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
         )
@@ -593,6 +844,15 @@ class RuntimeGuard:
         seen = self.repair_evidence.setdefault(key, [])
         if evidence in seen:
             return self._decision(False, "repeated_repair_without_new_evidence", "parent:sol")
+        if self.luna_pass is not None:
+            if str(_value(packet, "REVISION")) == str(self.luna_pass.get("REVISION")):
+                return self._decision(False, "repair_revision_not_new", "parent:sol")
+            if evidence == str(self.luna_pass.get("EVIDENCE_FINGERPRINT")):
+                return self._decision(False, "repair_evidence_not_new", "parent:sol")
+        if any(str(_value(packet, "REVISION")) == stage.revision for stage in self.stages.values()):
+            return self._decision(False, "repair_revision_not_new", "parent:sol")
+        if any(evidence == stage.evidence_fingerprint for stage in self.stages.values()):
+            return self._decision(False, "repair_evidence_not_new", "parent:sol")
         self.repair_cycles[key] = cycle
         seen.append(evidence)
         return self._decision(True, "repair_valid", "parent:luna")
@@ -635,6 +895,9 @@ class RuntimeGuard:
             "last_completed_audits": self.last_completed_audits,
             "repair_cycles": self.repair_cycles,
             "repair_evidence": self.repair_evidence,
+            "execution_attempts": self.execution_attempts,
+            "execution_history": self.execution_history,
+            "luna_pass": self.luna_pass,
         }
 
     @classmethod
@@ -669,6 +932,18 @@ class RuntimeGuard:
             if not isinstance(value, list):
                 raise ValueError("snapshot repair_evidence values must be arrays")
             guard.repair_evidence[str(key)] = list(value)
+        attempts = _value(data, "execution_attempts", 0)
+        if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 0:
+            raise ValueError("snapshot execution_attempts must be a non-negative integer")
+        guard.execution_attempts = attempts
+        history = _value(data, "execution_history", [])
+        if not isinstance(history, list) or any(not isinstance(item, Mapping) for item in history):
+            raise ValueError("snapshot execution_history must be an array of objects")
+        guard.execution_history = [dict(item) for item in history]
+        luna_pass = _value(data, "luna_pass", None)
+        if luna_pass is not None and not isinstance(luna_pass, Mapping):
+            raise ValueError("snapshot luna_pass must be an object")
+        guard.luna_pass = dict(luna_pass) if isinstance(luna_pass, Mapping) else None
         if any(not isinstance(value, Mapping) for value in guard.latches.values()):
             raise ValueError("snapshot latch must be an object")
         if any(not isinstance(value, str) for value in guard.role_leases.values()):
@@ -712,6 +987,8 @@ def main() -> int:
     start.add_argument("--state", type=Path, required=True)
     event = sub.add_parser("event", help="record one model-call event")
     event.add_argument("--state", type=Path, required=True)
+    execution = sub.add_parser("execution", help="register initial Luna execution or retry")
+    execution.add_argument("--state", type=Path, required=True)
     repair = sub.add_parser("repair", help="validate repair packet against dispatch")
     repair.add_argument("--state", type=Path, required=True)
     audit = sub.add_parser("audit", help="register one audit per revision")
@@ -727,8 +1004,11 @@ def main() -> int:
                 "budget_fields": BUDGET_FIELDS,
                 "default_budget": DEFAULT_BUDGET,
                 "event_fields": EVENT_FIELDS,
+                "execution_fields": EXECUTION_FIELDS,
+                "execution_attempt_limit": EXECUTION_ATTEMPT_LIMIT,
                 "repair_fields": REPAIR_FIELDS,
                 "audit_begin_fields": AUDIT_BEGIN_FIELDS,
+                "audit_prerequisite_fields": AUDIT_PREREQUISITE_FIELDS,
                 "audit_incremental_fields": AUDIT_INCREMENTAL_FIELDS,
                 "audit_complete_fields": AUDIT_COMPLETE_FIELDS,
                 "audit_abandon_fields": AUDIT_ABANDON_FIELDS,
@@ -755,6 +1035,10 @@ def main() -> int:
         elif args.command == "event":
             guard = _load(args.state)
             result = guard.observe(_stdin_json())
+            _save(args.state, guard)
+        elif args.command == "execution":
+            guard = _load(args.state)
+            result = guard.register_execution(_stdin_json())
             _save(args.state, guard)
         elif args.command == "repair":
             guard = _load(args.state)

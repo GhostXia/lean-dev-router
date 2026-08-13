@@ -66,10 +66,14 @@ HANDOFF_ROUTES = {
     ("terra_auditor", "ESCALATE", "planning_resolution"): "parent:sol",
     ("sol_planner", "PASS", "none"): "parent:manifest_gate",
     ("sol_planner", "BLOCKED", "none"): "parent:pause",
-    ("sol_planner", "BLOCKED", "implementation"): "parent:luna",
+    ("sol_planner", "BLOCKED", "execution"): "parent:luna",
     ("sol_planner", "BLOCKED", "human_authority"): "parent:user",
 }
 LEGAL_HANDOFFS = set(HANDOFF_ROUTES)
+REQUEST_VALUES = (
+    "none", "execution", "implementation", "technical_resolution",
+    "planning_resolution", "human_authority",
+)
 
 
 def error(message: str) -> None:
@@ -177,6 +181,10 @@ def validate_agents() -> None:
                 "ESCALATE/technical_resolution", "never BLOCKED/none",
                 "parent:pause as zero-execution", "npm ci", "clear the latch",
                 "resume Luna itself",
+                "REQUEST: execution", "unchanged DISPATCH", "zero product",
+                "matching Luna PASS", "scope evidence", "replay evidence",
+                "explicit unchanged dependencies", "matching telemetry",
+                "partial or contradictory evidence",
             ),
             "sol_planner": (
                 "AGENT: sol_planner",
@@ -191,7 +199,10 @@ def validate_agents() -> None:
                 "Undeclared, missing, or out-of-contract tools/dependencies",
                 "ESCALATE/technical_resolution", "never BLOCKED/none",
                 "parent:pause is zero-execution", "npm ci", "clear the latch",
-                "resume Luna itself",
+                "resume Luna itself", "REQUEST: execution",
+                "BLOCKED/execution", "BLOCKED/implementation", "no-product",
+                "matching Luna PASS", "scope/replay evidence", "explicit unchanged dependencies",
+                "without launching Terra",
             ),
             "terra_auditor": (
                 "Never edit, authorize a write, schedule peers, or request human authority.",
@@ -208,6 +219,8 @@ def validate_agents() -> None:
                 "never prepare dependencies", "BLOCKED/none only for a non-routing blocker",
                 "ESCALATE/implementation only for bounded unchanged-contract advice",
                 "contract or dependency declaration must change",
+                "REQUEST: execution", "repair-only", "matching Luna PASS",
+                "concrete revision", "scope PASS", "replay evidence",
             ),
         }
         for term in common + role_terms[name]:
@@ -366,7 +379,7 @@ def validate_protocol_schema(relative: str, skill: str) -> None:
                 "AGENT": "luna_worker | terra_auditor | sol_planner",
                 "STATUS": "PASS | BLOCKED | ESCALATE",
                 "FAILURE": "none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision",
-                "REQUEST": "none | implementation | technical_resolution | planning_resolution | human_authority",
+                "REQUEST": "none | execution | implementation | technical_resolution | planning_resolution | human_authority",
                 "EVIDENCE": None,
                 "NEXT": "parent",
                 "SUMMARY": None,
@@ -570,6 +583,21 @@ def validate_skill() -> None:
             "`npm ci`",
             "clear latch",
             "resume Luna",
+            "REQUEST: execution",
+            "initial execution",
+            "no-product retry",
+            "unchanged-DISPATCH",
+            "clean BASELINE",
+            "zero product",
+            "non-sequential",
+            "evidence-bearing",
+            "matching Luna `PASS`",
+            "concrete revision",
+            "scope and replay evidence",
+            "explicit unchanged dependencies",
+            "matching telemetry",
+            "without launching Terra",
+            "repair-only",
             "Terra never installs/runs tools or mutates environment.",
             "dependency changes return",
         ),
@@ -604,6 +632,17 @@ def validate_skill() -> None:
             "`npm ci`",
             "清除 latch",
             "自行恢复 Luna",
+            "REQUEST: execution",
+            "初始执行",
+            "无产物重试",
+            "顺序递增",
+            "干净 BASELINE",
+            "零产物",
+            "具体 revision",
+            "scope/replay 证据",
+            "显式未变依赖",
+            "telemetry",
+            "不启动 Terra",
             "Terra 绝不安装或运行工具，也绝不修改环境",
             "任何依赖声明或其他契约变化",
         ),
@@ -638,6 +677,19 @@ def validate_skill() -> None:
             "`npm ci`",
             "clear latch",
             "resume Luna",
+            "REQUEST: execution",
+            "initial/no-product",
+            "unchanged-DISPATCH",
+            "clean-BASELINE",
+            "zero-product",
+            "post-evidence",
+            "matching Luna `PASS`",
+            "concrete revision",
+            "scope/replay evidence",
+            "explicit dependencies",
+            "telemetry",
+            "without Terra",
+            "repair-only",
             "Terra never installs/runs tools or mutates environment.",
             "dependency changes return",
         ),
@@ -661,6 +713,18 @@ def validate_skill() -> None:
             "`npm ci`",
             "清除 latch",
             "恢复 Luna",
+            "REQUEST: execution",
+            "初次或无产物",
+            "顺序递增",
+            "干净 BASELINE",
+            "零产物",
+            "已有证据",
+            "具体 revision",
+            "scope/replay 证据",
+            "显式依赖",
+            "telemetry",
+            "不启动 Terra",
+            "修复路由独立",
             "Terra 绝不安装/运行工具或修改环境",
             "契约/依赖变化",
         ),
@@ -722,24 +786,31 @@ def validate_runtime_guard() -> None:
     }
     for term in (
         "validate_dispatch", "preflight_dispatch", "validate_revision",
-        "validate_repair", "abandon_audit",
+        "validate_repair", "validate_execution", "register_execution",
+        "validate_audit_prerequisites", "abandon_audit",
     ):
         if term not in definitions:
             error(f"{relative}: missing runtime gate {term!r}")
     for term in (
         "MODEL_CALL_LIMIT", "HYPOTHESIS_LIMIT", "MODEL_ACTIVE_SECONDS_LIMIT",
         "REPAIR_CYCLE_LIMIT", "STAGNANT_CALL_LIMIT", "EVIDENCE_FINGERPRINT",
-        "CONTRACT_VERSION",
+        "CONTRACT_VERSION", "EXECUTION_ATTEMPT", "PRODUCT_COUNT",
+        "LUNA_STATUS", "SCOPE_EVIDENCE", "REPLAY_EVIDENCE", "DEPENDENCIES",
+        "TELEMETRY",
     ):
         if term not in string_constants:
             error(f"{relative}: missing runtime gate {term!r}")
-    for term in ("preflight", "start", "event", "repair", "audit", "schema"):
+    for term in ("preflight", "start", "event", "execution", "repair", "audit", "schema"):
         if term not in subcommands:
             error(f"{relative}: missing runtime gate subcommand {term!r}")
     for term in (
         "repeated_failure_without_new_evidence", '"spinning"',
         "unauthorized_writer", "duplicate_audit_revision", "audit_abandoned",
-        "uncached_input_tokens", "total_tokens",
+        "uncached_input_tokens", "total_tokens", "execution_required",
+        "execution_attempt_limit", "non_sequential_execution_attempt",
+        "execution_after_evidence", "execution_after_repair", "execution_after_audit",
+        "audit_prerequisite_failed", "matching Luna PASS is required",
+        "initial execution requires the unchanged clean BASELINE revision",
     ):
         if term not in source:
             error(f"{relative}: missing runtime gate {term!r}")
