@@ -48,7 +48,25 @@ I currently use Codex, so this repository uses GPT model identifiers as concrete
 
 For further token savings, this router can be combined with projects such as [Caveman](https://github.com/juliusbrussee/caveman), which reduce unnecessary verbosity in engineering workflows. **Lean Dev Router** reduces unnecessary agent calls and handoff context; **Caveman** reduces unnecessary prose in agent responses. Together, they can help maximize token efficiency while preserving the technical content that matters. This project currently does not plan to duplicate response-compression features already provided by such projects.
 
-Because the subagents use explicitly selected models and bounded assignments, the main conversation can often use a lower-cost model. **Sol** owns exception planning and ordinary write authorization, while the parent conversation is the mechanical runtime scheduler and user-facing control surface. A Terra High parent may also issue one strictly bounded L1/L2 dispatch under the fast-path predicate below. Sol is called again at a declared expansion or exception gate.
+Because the subagents use explicitly selected models and bounded assignments, the parent does not need to be the most expensive planning model. **Sol** owns exception planning and ordinary write authorization, while the parent conversation is the scheduler and user-facing control surface. A qualifying Terra High parent may also issue one strictly bounded L1/L2 dispatch under the fast-path predicate below. Sol is called again at a declared expansion or exception gate.
+
+#### Recommended parent model
+
+For the bounded parent fast path, use a balanced mid-tier model such as `gpt-5.6-terra` with **high reasoning effort**. “Mid-tier model” and “high reasoning effort” describe different choices: the model family sets the general capability/cost tier, while reasoning effort controls how much inference that model spends on the current turn. The recommended compromise is therefore **Terra High**, not a weak model with a large prompt and not Sol acting as the always-on parent.
+
+This choice gives the parent enough semantic ability to normalize user intent, detect missing or contradictory evidence, avoid lossy restatement, select the correct declared route, and close an eligible low-risk task without first paying for a Sol planning call. It still keeps architecture, scope expansion, risk acceptance, compatibility decisions, multi-batch integration, and other exception work on Sol. Using Sol as the parent would usually spend Sol-priced tokens on waiting, queue management, telemetry handling, and routine forwarding; using a weaker parent for the fast path increases the chance of an incorrect eligibility decision or malformed dispatch.
+
+The recommended capability split is:
+
+| Parent configuration | Allowed responsibility | Bounded dispatch capability |
+|:---|:---|:---|
+| Weaker or lower-cost model | Relay an already fixed contract, wait, queue, display results, and apply deterministic destination rules | **Disabled**; it must route any task requiring interpretation to Sol |
+| `gpt-5.6-terra` with high reasoning effort | All mechanical scheduling plus semantic eligibility checks, faithful contract normalization, and one strict L1/L2 batch | **Enabled** only when every fast-path predicate and reduced budget passes |
+| `gpt-5.6-sol` as parent | Technically capable, but not the recommended steady-state configuration | Avoid as the default; invoke Sol as a child only at declared planning or exception gates |
+
+Terra High parent authority is deliberately narrow. It may choose among routes already defined by the protocol and may author the one bounded packet described below; it may not invent acceptance criteria, widen paths, resolve architecture or policy trade-offs, suppress a risk flag, reinterpret a failed predicate as “close enough,” write code, or perform its own final audit. If eligibility is uncertain, the correct outcome is `parent:sol`, not a best-effort Luna call.
+
+Model identity and reasoning effort are host configuration. The repository validator and runtime guard can verify the packet, budget, identity separation, and routing evidence, but they cannot prove which model the host actually assigned to the parent. Operators must configure Terra High outside the repository. When evaluating another model family, keep the same authority boundary and compare it with controlled A/B runs using wrong-route rate, malformed or rejected dispatches, unnecessary Sol calls, repair cycles, model-active time, and total uncached tokens—not token count alone.
 
 ### 🧭 Engineering Lifecycle Entry Points
 
