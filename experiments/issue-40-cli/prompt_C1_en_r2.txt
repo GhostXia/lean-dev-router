@@ -20,9 +20,9 @@ Scenarios:
 3. Direct read-only Terra audit requested by the user.
 4. Two unchanged identical failures trigger deterministic spinning and route to Terra.
 5. Dirty revision cannot use a clean baseline commit SHA.
-6. Bounded unchanged-contract repair routed to the original Luna.
+6. In-scope Class-A finding with a bounded unchanged-contract repair routed to the original Luna.
 7. Required repair outside PATHS_ALLOW routes to Sol.
 8. Abandoned audit does not advance the incremental baseline.
 
 Return strict JSON only, with no commentary, in exactly this shape:
-{"variant":"C1","cases":[{"id":1,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."}, ... one object per scenario ...],"quality_notes":["..."]}
+{"variant":"C1","cases":[{"id":1,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":2,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":3,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":4,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":5,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":6,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":7,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":8,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."}],"quality_notes":["..."]}

@@ -45,6 +45,49 @@ def dispatch() -> dict[str, object]:
     }
 
 
+def parent_dispatch(**overrides: object) -> dict[str, object]:
+    value = dispatch()
+    value.update(
+        {
+            "PLANNER_ROLE": "parent",
+            "PLANNER_CAPABILITY": "bounded_l1_l2_dispatch",
+            "LEVEL": "L1",
+            "OBJECTIVE_FIXED": True,
+            "SCOPE_ROOTS": ["src"],
+            "OPEN_MAJOR_DECISIONS": False,
+            "RISK_FLAGS": "none",
+            "EXTERNAL_ACTIONS": "none",
+            "MAX_DISPATCHES": 1,
+            "COMPONENT_COUNT": 1,
+            "DEPENDENCY_DEPTH": 0,
+            "REQUIRED_PATHS": [],
+            "WRITE_BATCH_COUNT": 1,
+            "INTEGRATION": False,
+            "CONFLICT": False,
+            "CONTRACT_EXPANDED": False,
+            "AMBIGUITY": False,
+            "CONTRACT_CHANGE": False,
+            "SCOPE_CHANGE": False,
+            "ACCEPTANCE_CHANGE": False,
+            "CONSTRAINT_CHANGE": False,
+            "ARCHITECTURE_CHANGE": False,
+            "SECURITY_CHANGE": False,
+            "COMPATIBILITY_CHANGE": False,
+            "BUDGET": dict(runtime_guard.PARENT_FAST_PATH_BUDGET),
+        }
+    )
+    value.update(overrides)
+    return value
+
+
+def trusted_parent_kwargs(value: dict[str, object]) -> dict[str, str]:
+    return {
+        "trusted_parent_instance_id": str(value["PLANNER_INSTANCE_ID"]),
+        "trusted_parent_model": "gpt-5.6-terra",
+        "trusted_parent_reasoning_effort": "high",
+    }
+
+
 def event(**overrides: object) -> dict[str, object]:
     value: dict[str, object] = {
         "PLAN_ID": "p-1",
@@ -80,6 +123,10 @@ class DispatchValidationTests(unittest.TestCase):
         schema = json.loads(result.stdout)
         self.assertIn("CACHED_INPUT_TOKENS", schema["event_fields"])
         self.assertEqual(schema["default_budget"]["MODEL_CALL_LIMIT"], 8)
+        for packet in ("audit_begin_fields", "audit_complete_fields", "audit_abandon_fields"):
+            self.assertIn("AUDITOR_ROLE", schema[packet])
+            self.assertIn("AUDITOR_INSTANCE_ID", schema[packet])
+            self.assertIn("AGENT_INSTANCE_ID", schema[packet])
 
     def test_rejects_incomplete_dispatch(self) -> None:
         value = dispatch()
@@ -259,8 +306,109 @@ class DispatchValidationTests(unittest.TestCase):
         errors = runtime_guard.validate_dispatch(value)
         self.assertTrue(any("PLANNER_ROLE" in error for error in errors))
 
+    def test_eligible_parent_fast_path_dispatch_is_accepted(self) -> None:
+        value = parent_dispatch(LEVEL="L2", RISK_FLAGS=[])
+        self.assertEqual(
+            runtime_guard.validate_dispatch(
+                value, **trusted_parent_kwargs(value)
+            ),
+            [],
+        )
+        denied = runtime_guard.preflight_dispatch(value)
+        self.assertFalse(denied["allowed"])
+        self.assertEqual(denied["destination"], "parent:sol")
+        self.assertIn("trusted parent instance identity", " ".join(denied["errors"]))
+        mismatch = runtime_guard.preflight_dispatch(
+            value, **dict(trusted_parent_kwargs(value), trusted_parent_instance_id="different-parent")
+        )
+        self.assertFalse(mismatch["allowed"])
+        wrong_model = runtime_guard.preflight_dispatch(
+            value, **dict(trusted_parent_kwargs(value), trusted_parent_model="gpt-5.6-luna")
+        )
+        self.assertFalse(wrong_model["allowed"])
+        accepted = runtime_guard.preflight_dispatch(value, **trusted_parent_kwargs(value))
+        self.assertTrue(accepted["allowed"])
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "parent-state.json"
+            denied_cli = subprocess.run(
+                [sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state)],
+                input=json.dumps(value), text=True, capture_output=True, check=False, timeout=30,
+            )
+            self.assertEqual(denied_cli.returncode, 2)
+            self.assertFalse(state.exists())
+            accepted_cli = subprocess.run(
+                [
+                    sys.executable, "-B", str(GUARD_PATH), "start", "--state", str(state),
+                    "--trusted-parent-instance-id", str(value["PLANNER_INSTANCE_ID"]),
+                    "--trusted-parent-model", "gpt-5.6-terra",
+                    "--trusted-parent-reasoning-effort", "high",
+                ],
+                input=json.dumps(value), text=True, capture_output=True, check=False, timeout=30,
+            )
+            self.assertEqual(accepted_cli.returncode, 0, accepted_cli.stderr)
+            self.assertTrue(state.exists())
+
+        for field in runtime_guard.PARENT_CHANGE_FIELDS:
+            for invalid in (None, "none", ["none"], True):
+                changed = dict(value, **{field: invalid})
+                self.assertTrue(runtime_guard.validate_dispatch(changed), (field, invalid))
+
+        non_change_none = dict(
+            value,
+            RISK_FLAGS=None,
+            EXTERNAL_ACTIONS=["none"],
+            INTEGRATION="none",
+            CONFLICT=None,
+            CONTRACT_EXPANDED=["none"],
+        )
+        self.assertEqual(
+            runtime_guard.validate_dispatch(
+                non_change_none,
+                **trusted_parent_kwargs(non_change_none),
+            ),
+            [],
+        )
+
+        for field, invalid in (
+            ("RISK_FLAGS", ["security"]),
+            ("PATHS_ALLOW", ["outside/file.py"]),
+            ("WRITE_BATCH_COUNT", 2),
+            ("PLANNER_CAPABILITY", "other"),
+            ("COMPONENT_COUNT", 2),
+        ):
+            changed = dict(value, **{field: invalid})
+            self.assertTrue(runtime_guard.validate_dispatch(changed), field)
+
+        missing = dict(value)
+        missing.pop("REQUIRED_PATHS")
+        self.assertTrue(runtime_guard.validate_dispatch(missing))
+
+    def test_parent_fast_path_budget_and_sol_exhaustion(self) -> None:
+        value = parent_dispatch()
+        guard = runtime_guard.RuntimeGuard(
+            value, **trusted_parent_kwargs(value)
+        )
+        result = guard.observe(event(PROGRESS_FINGERPRINT="p-1"))
+        self.assertTrue(result["allowed"])
+        result = guard.observe(event(PROGRESS_FINGERPRINT="p-1"))
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "spinning")
+        self.assertEqual(result["destination"], "parent:sol")
+
+    def test_parent_and_planner_identity_cannot_be_final_auditor(self) -> None:
+        value = parent_dispatch()
+        value["AUDITOR_INSTANCE_ID"] = value["PLANNER_INSTANCE_ID"]
+        self.assertTrue(runtime_guard.validate_dispatch(value))
+
 
 class RuntimeBudgetTests(unittest.TestCase):
+    def test_parent_self_audit_role_is_case_insensitive(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        result = guard.observe(event(ROLE=" PARENT ", ACTION="AuDiT"))
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "parent_cannot_self_audit")
+        self.assertEqual(result["destination"], "parent:sol")
+
     def test_counts_tokens_time_and_upstream_attempts(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
         result = guard.observe(event(PROGRESS_FINGERPRINT="progress-1"))
@@ -398,6 +546,7 @@ class RepairAndAuditTests(unittest.TestCase):
             "PLAN_ID": "p-1",
             "DISPATCH_ID": "d-1",
             "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "FINDING_CLASS": "A",
             "CONTRACT_EFFECT": "unchanged",
             "AFFECTED_PATHS": ["src/one.py"],
             "ACCEPTANCE": ["focused test passes"],
@@ -428,6 +577,28 @@ class RepairAndAuditTests(unittest.TestCase):
         exhausted = guard.register_repair(self.repair(REPAIR_CYCLE=3))
         self.assertEqual(exhausted["reason"], "invalid_repair")
 
+    def test_only_explicit_class_a_can_enter_luna_repair(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        for finding in ("B", "C", "D", "unknown", "a"):
+            result = guard.register_repair(self.repair(FINDING_CLASS=finding))
+            self.assertFalse(result["allowed"], finding)
+            self.assertEqual(result["reason"], "finding_requires_sol", finding)
+            self.assertEqual(result["destination"], "parent:sol", finding)
+            self.assertEqual(guard.repair_cycles, {}, finding)
+
+        missing = self.repair()
+        missing.pop("FINDING_CLASS")
+        result = guard.register_repair(missing)
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["reason"], "finding_requires_sol")
+        self.assertEqual(result["destination"], "parent:sol")
+        self.assertEqual(guard.repair_cycles, {})
+
+        accepted = guard.register_repair(self.repair())
+        self.assertTrue(accepted["allowed"])
+        self.assertEqual(accepted["destination"], "parent:luna")
+        self.assertEqual(guard.repair_cycles, {"p-1:d-1": 1})
+
     def test_same_revision_audit_is_registered_once(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
         packet = {
@@ -435,7 +606,9 @@ class RepairAndAuditTests(unittest.TestCase):
             "PLAN_ID": "p-1",
             "DISPATCH_ID": "d-1",
             "REVISION": "r-2",
+            "AUDITOR_ROLE": "terra_auditor",
             "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "AGENT_INSTANCE_ID": "terra-audit-1",
             "AUDIT_SCOPE": ["src/one.py", "callers"],
             "AUDIT_MODE": "full",
         }
@@ -452,7 +625,9 @@ class RepairAndAuditTests(unittest.TestCase):
             "PLAN_ID": "p-1",
             "DISPATCH_ID": "d-1",
             "REVISION": "r-2",
+            "AUDITOR_ROLE": "terra_auditor",
             "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "AGENT_INSTANCE_ID": "terra-audit-1",
             "TERMINATION_REASON": "pass",
             "VERIFIED": ["acceptance"],
             "UNVERIFIED": [],
@@ -471,14 +646,16 @@ class RepairAndAuditTests(unittest.TestCase):
         guard = runtime_guard.RuntimeGuard(dispatch())
         begin = {
             "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-            "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+            "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
             "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
         }
         guard.audit_job(begin)
         guard.audit_job(
             {
                 "ACTION": "complete", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-                "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+                "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+                "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
                 "TERMINATION_REASON": "pass", "VERIFIED": [], "UNVERIFIED": [],
             }
         )
@@ -490,14 +667,16 @@ class RepairAndAuditTests(unittest.TestCase):
         guard = runtime_guard.RuntimeGuard(dispatch())
         begin = {
             "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-            "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+            "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
             "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
         }
         self.assertTrue(guard.audit_job(begin)["allowed"])
         abandoned = guard.audit_job(
             {
                 "ACTION": "abandon", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-                "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "terra-audit-1",
+                "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+                "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
                 "TERMINATION_REASON": "model_call_limit",
             }
         )
@@ -512,12 +691,57 @@ class RepairAndAuditTests(unittest.TestCase):
         guard = runtime_guard.RuntimeGuard(dispatch())
         packet = {
             "ACTION": "abandon", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-            "REVISION": "r-2", "AUDITOR_INSTANCE_ID": "wrong-auditor",
+            "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+            "AUDITOR_INSTANCE_ID": "wrong-auditor", "AGENT_INSTANCE_ID": "wrong-auditor",
             "TERMINATION_REASON": "blocked",
         }
         self.assertEqual(guard.audit_job(packet)["reason"], "invalid_audit_abandon")
         packet["AUDITOR_INSTANCE_ID"] = "terra-audit-1"
+        packet["AGENT_INSTANCE_ID"] = "terra-audit-1"
         self.assertEqual(guard.audit_job(packet)["reason"], "audit_job_not_running")
+
+    def test_audit_packets_fail_closed_on_role_and_actor_identity(self) -> None:
+        begin = {
+            "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
+            "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+            "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "TERRA-AUDIT-1",
+            "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
+        }
+        for field in ("AUDITOR_ROLE", "AGENT_INSTANCE_ID"):
+            invalid = dict(begin)
+            invalid.pop(field)
+            self.assertFalse(runtime_guard.RuntimeGuard(dispatch()).audit_job(invalid)["allowed"], field)
+        for role in ("parent", "sol_planner"):
+            invalid = dict(begin, AUDITOR_ROLE=role)
+            self.assertFalse(runtime_guard.RuntimeGuard(dispatch()).audit_job(invalid)["allowed"], role)
+        mismatch = dict(begin, AGENT_INSTANCE_ID="different-terra")
+        self.assertFalse(runtime_guard.RuntimeGuard(dispatch()).audit_job(mismatch)["allowed"])
+
+        for action in ("complete", "abandon"):
+            guard = runtime_guard.RuntimeGuard(dispatch())
+            self.assertTrue(guard.audit_job(begin)["allowed"])
+            terminal = {
+                "ACTION": action, "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
+                "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+                "AUDITOR_INSTANCE_ID": "TERRA-AUDIT-1", "AGENT_INSTANCE_ID": "terra-audit-1",
+                "TERMINATION_REASON": "pass" if action == "complete" else "blocked",
+            }
+            if action == "complete":
+                terminal.update(VERIFIED=["acceptance"], UNVERIFIED=[])
+            for field in ("AUDITOR_ROLE", "AGENT_INSTANCE_ID"):
+                invalid = dict(terminal)
+                invalid.pop(field)
+                self.assertFalse(guard.audit_job(invalid)["allowed"], (action, field))
+            for role in ("parent", "sol_planner"):
+                self.assertFalse(guard.audit_job(dict(terminal, AUDITOR_ROLE=role))["allowed"], (action, role))
+            self.assertFalse(
+                guard.audit_job(dict(terminal, AGENT_INSTANCE_ID="different-terra"))["allowed"], action
+            )
+            guard.role_leases["terra-audit-1"] = "sol_planner"
+            self.assertFalse(guard.audit_job(terminal)["allowed"], (action, "role lease"))
+            guard.role_leases["terra-audit-1"] = "terra_auditor"
+            result = guard.audit_job(terminal)
+            self.assertEqual(result["reason"], "audit_completed" if action == "complete" else "audit_abandoned")
 
     def test_snapshot_round_trip_preserves_gates(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())

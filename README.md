@@ -42,17 +42,37 @@
 
 **Lean Dev Router** is a general theory for coordinating and escalating repository-bound software engineering lifecycle work. It assigns planning, implementation, diagnosis, and validation to agents with different responsibilities and cost levels, escalating only when necessary.
 
+The published runtime has exactly three child profiles: `luna_worker` (`gpt-5.6-luna`, max), `sol_planner` (`gpt-5.6-sol`, medium), and read-only `terra_auditor` (`gpt-5.6-terra`, high). The parent is the default scheduler and user-facing control surface; for the conditional fast path its host model must also be Terra High. The parent is not a fourth Agent/profile.
+
 I currently use Codex, so this repository uses GPT model identifiers as concrete examples. The routing theory is not tied to Codex or GPT and can be adapted to other agent runtimes and models.
 
 For further token savings, this router can be combined with projects such as [Caveman](https://github.com/juliusbrussee/caveman), which reduce unnecessary verbosity in engineering workflows. **Lean Dev Router** reduces unnecessary agent calls and handoff context; **Caveman** reduces unnecessary prose in agent responses. Together, they can help maximize token efficiency while preserving the technical content that matters. This project currently does not plan to duplicate response-compression features already provided by such projects.
 
-Because the subagents use explicitly selected models and bounded assignments, the main conversation can often use a lower-cost model. **Sol** owns engineering planning and authorization, while the parent conversation is the mechanical runtime scheduler and user-facing control surface. Sol is called again only at a declared expansion or exception gate.
+Because the subagents use explicitly selected models and bounded assignments, the parent does not need to be the most expensive planning model. **Sol** owns exception planning and ordinary write authorization, while the parent conversation is the scheduler and user-facing control surface. A qualifying Terra High parent may also issue one strictly bounded L1/L2 dispatch under the fast-path predicate below. Sol is called again at a declared expansion or exception gate.
+
+#### Recommended parent model
+
+For the bounded parent fast path, use a balanced mid-tier model such as `gpt-5.6-terra` with **high reasoning effort**. “Mid-tier model” and “high reasoning effort” describe different choices: the model family sets the general capability/cost tier, while reasoning effort controls how much inference that model spends on the current turn. The recommended compromise is therefore **Terra High**, not a weak model with a large prompt and not Sol acting as the always-on parent.
+
+This choice gives the parent enough semantic ability to normalize user intent, detect missing or contradictory evidence, avoid lossy restatement, select the correct declared route, and close an eligible low-risk task without first paying for a Sol planning call. It still keeps architecture, scope expansion, risk acceptance, compatibility decisions, multi-batch integration, and other exception work on Sol. Using Sol as the parent would usually spend Sol-priced tokens on waiting, queue management, telemetry handling, and routine forwarding; using a weaker parent for the fast path increases the chance of an incorrect eligibility decision or malformed dispatch.
+
+The recommended capability split is:
+
+| Parent configuration | Allowed responsibility | Bounded dispatch capability |
+|:---|:---|:---|
+| Weaker or lower-cost model | Relay an already fixed contract, wait, queue, display results, and apply deterministic destination rules | **Disabled**; it must route any task requiring interpretation to Sol |
+| `gpt-5.6-terra` with high reasoning effort | All mechanical scheduling plus semantic eligibility checks, faithful contract normalization, and one strict L1/L2 batch | **Enabled** only when every fast-path predicate and reduced budget passes |
+| `gpt-5.6-sol` as parent | Technically capable, but not the recommended steady-state configuration | Avoid as the default; invoke Sol as a child only at declared planning or exception gates |
+
+Terra High parent authority is deliberately narrow. It may choose among routes already defined by the protocol and may author the one bounded packet described below; it may not invent acceptance criteria, widen paths, resolve architecture or policy trade-offs, suppress a risk flag, reinterpret a failed predicate as “close enough,” write code, or perform its own final audit. If eligibility is uncertain, the correct outcome is `parent:sol`, not a best-effort Luna call.
+
+Model identity and reasoning effort are host configuration. The repository validator and runtime guard can verify the packet, budget, identity separation, and routing evidence, but they cannot prove which model the host actually assigned to the parent. Operators must configure Terra High outside the repository. When evaluating another model family, keep the same authority boundary and compare it with controlled A/B runs using wrong-route rate, malformed or rejected dispatches, unnecessary Sol calls, repair cycles, model-active time, and total uncached tokens—not token count alone.
 
 ### 🧭 Engineering Lifecycle Entry Points
 
 | Work Type | Default Route |
 |:---|:---|
-| 🔧 Bounded implementation, fixes, refactors, tests, docs, config | **Sol** issues a minimal single-step `DISPATCH` to **Luna**; harder work receives fuller planning and decomposition |
+| 🔧 Bounded implementation, fixes, refactors, tests, docs, config | A qualifying Terra High **parent** may issue one strict L1/L2 `DISPATCH`; otherwise **Sol** issues the dispatch and handles planning/decomposition |
 | 🔍 Audits, reviews, compliance checks, or release readiness | One or more **Terra** workers first; **Sol** partitions or consolidates when needed; **Luna** handles only authorized remediation |
 | 🐛 Investigations, incidents, performance analysis, debugging | **Terra** establishes evidence and likely causes; **Sol** resolves in-scope technical trade-offs or returns user-owned choices; **Luna** applies the authorized fix |
 | 🔄 Migrations, dependency upgrades, or platform upgrades | **Sol** plans within scope & defines order; **Terra** inventories compatibility & risk; isolated **Luna** worktrees implement; **Terra** verifies |
@@ -70,9 +90,10 @@ STATUS: DISPATCH
 TARGET: implementation
 DISPATCH_ID: stable unique component/write identifier
 PLAN_ID: stable plan identifier
-PLANNER_ROLE: sol_planner
-PLANNER_INSTANCE_ID: immutable planner instance identifier
-AUDITOR_INSTANCE_ID: independent auditor instance identifier
+PLANNER_ROLE: sol_planner | parent
+PLANNER_CAPABILITY: bounded_l1_l2_dispatch (parent fast path only)
+PLANNER_INSTANCE_ID: immutable planner or parent instance identifier
+AUDITOR_INSTANCE_ID: independent terra_auditor instance identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -90,7 +111,9 @@ BUDGET:
 NEXT: parent
 ```
 
-Only Sol authors or amends a `DISPATCH`; the parent may relay it unchanged. Missing fields, non-relative write paths, or open major product/architecture decisions make it invalid. Luna then performs no implementation work and returns `BLOCKED / missing_dispatch / NEXT parent` without naming a planning role. A minimal single-step `DISPATCH` preserves the L1 path without weakening the gate.
+Sol authors or amends ordinary `DISPATCH` packets. A Terra High parent may author exactly one packet only with `PLANNER_ROLE: parent`, `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`, and all fast-path evidence below; it cannot amend a Sol packet or relax the predicate. These packet fields are eligibility claims, not authorization proof: the host must also pass `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high` to runtime guard outside the packet. The identity must match `PLANNER_INSTANCE_ID`, and the trusted context must be Terra High. Missing fields, an absent or mismatched trusted binding, non-relative write paths, open major decisions, or other ineligible evidence make the packet invalid; the guard routes `parent:sol` before Luna is spawned. A defensively mis-invoked Luna performs no inspection or write and returns `BLOCKED/none` to `parent:pause`.
+
+`PLANNER_CAPABILITY` is conditional: omit it from ordinary Sol packets so existing v2 dispatches remain compatible. Parent packets additionally carry the explicit eligibility fields named under [Parent Fast Path](#-parent-fast-path); these narrow authorization and do not create a new protocol version.
 
 Inbound `DISPATCH` does not include `AGENT`. When an L1 task has no narrower constraint, use a concrete minimal entry such as `minimal change only` rather than leaving `CONSTRAINTS` empty. Workers request capabilities rather than naming peers; the parent performs a deterministic role-and-request lookup without interpreting the evidence.
 
@@ -120,6 +143,22 @@ SUMMARY: one concise sentence
 
 `PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. `PLAN_READY` is not an execution status.
 
+The closed handoff table is authoritative:
+
+| `AGENT` | `STATUS` | `REQUEST` | Mechanical destination |
+|:---|:---|:---|:---|
+| `luna_worker` | `PASS` | `none` | `parent:manifest_gate` |
+| `luna_worker` | `BLOCKED` | `none` | `parent:pause` |
+| `luna_worker` | `ESCALATE` | `technical_resolution` | `parent:terra` |
+| `terra_auditor` | `PASS` | `none` | `parent:manifest_gate` |
+| `terra_auditor` | `BLOCKED` | `none` | `parent:pause` |
+| `terra_auditor` | `ESCALATE` | `implementation` | `parent:repair_or_sol` |
+| `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
+| `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
+| `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
+| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
+
 `NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. The parent applies the authoritative state table mechanically; invalid combinations are rejected instead of inferred from prose. Sol owns engineering decisions but does not continuously schedule routine events.
 
 Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `REQUEST` and removes concrete agent names from `NEXT`. Coordinators must reject mixed-version handoffs instead of guessing missing fields or translating them implicitly.
@@ -129,7 +168,7 @@ Version 2 is intentionally incompatible with `lean-dev-router/v1`: v2 requires `
 1. Replace the Skill and all three Agent TOML files together; do not mix installed v1 and v2 runtime files.
 2. Replace stored `PROTOCOL: lean-dev-router/v1` templates with `PROTOCOL: lean-dev-router/v2`.
 3. Add `REQUEST` to every outbound result and select only a combination listed in the Skill's role-status-request table.
-4. Replace every named outbound `NEXT` value with `NEXT: parent`; keep inbound write authorization as a complete Sol-issued `DISPATCH`.
+4. Replace every named outbound `NEXT` value with `NEXT: parent`; keep inbound write authorization as a complete valid `DISPATCH`.
 5. Do not resume an in-flight v1 handoff chain as v2. Finish or stop it, then start a fresh v2 coordination session.
 6. Run `python scripts/validate_repo.py` and the repository tests after replacing local runtime files.
 
@@ -145,9 +184,21 @@ Terra's read-only guarantee depends on Codex enforcing its configured read-only 
 
 The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
 
-Before the first Luna call, the parent feeds the complete JSON dispatch once to the installed Skill's `scripts/runtime_guard.py start --state <external-scratch-state>`. `start` performs deterministic preflight and state initialization atomically; normal execution must not add a separate preflight call. The stateless `preflight` subcommand is for validating templates and installed runtimes. Repair and audit packets use their subcommands against the same state; restarting is rejected. Exit code 2 means no target child is spawned. The guard persists identity leases, finite budgets, latches, repair cycles, audit revision keys, and per-role/stage telemetry outside the target repository. Run `runtime_guard.py schema` for required fields and `snapshot --state ...` for accumulated telemetry.
+Before the first Luna call, the parent feeds the complete JSON dispatch once to the installed Skill's `scripts/runtime_guard.py start --state <external-scratch-state>`. For a parent fast-path packet, the host also passes the trusted instance/model/reasoning options above; ordinary Sol packets do not use them. `start` performs deterministic preflight and state initialization atomically; normal execution must not add a separate preflight call. The stateless `preflight` subcommand is for validating templates and installed runtimes and uses the same trusted-parent options when validating a parent packet. Repair and audit packets use their subcommands against the same state; restarting is rejected. Exit code 2 means no target child is spawned. The guard persists identity leases, finite budgets, latches, repair cycles, audit revision keys, and per-role/stage telemetry outside the target repository. Run `runtime_guard.py schema` for required fields and `snapshot --state ...` for accumulated telemetry.
 
-For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in Sol's dispatch defines what may change. The parent cannot create a direct Luna fast path.
+#### ⚡ Parent Fast Path
+
+This is a conditional capability of a **Terra High host-model parent**, not a fourth Agent/profile and not a second Sol. The host supplies `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high` separately to `preflight` or `start`; runtime guard binds the identity to the packet's `PLANNER_INSTANCE_ID` and fails closed if any context field is missing or different. This prevents packet-controlled capability fields from authorizing themselves. It is coordination-level identity binding, not cryptographic attestation. The guard accepts `PLANNER_ROLE: parent` with `PLANNER_CAPABILITY: bounded_l1_l2_dispatch` only when that binding and every item below pass:
+
+- `LEVEL` is `L1` or `L2`; `OBJECTIVE_FIXED` is true; `OPEN_MAJOR_DECISIONS` and every change flag are exact booleans.
+- `BASELINE`, repository-relative `SCOPE_ROOTS`, `PATHS_ALLOW`, `ACCEPTANCE`, and `CONSTRAINTS` are fixed and non-empty. `REQUIRED_PATHS` may be empty, but every allowed or required path stays inside `SCOPE_ROOTS`.
+- `RISK_FLAGS` and `EXTERNAL_ACTIONS` are none. Architecture, security, compatibility, contract, scope, acceptance, and constraint changes are all false.
+- `MAX_DISPATCHES`, `COMPONENT_COUNT`, and `WRITE_BATCH_COUNT` are each `1`; `DEPENDENCY_DEPTH` is `0`; `INTEGRATION`, `CONFLICT`, `CONTRACT_EXPANDED`, and `AMBIGUITY` are explicitly false/none.
+- `BUDGET` does not exceed **4 model calls / 2 hypotheses / 600 model-active seconds / 1 repair cycle / 1 stagnant call**.
+
+Missing or ineligible evidence fails closed during `start`, before Luna is spawned, and routes `parent:sol`. L3, risk, conflict or integration, multiple components/dispatches/write batches, ambiguity, contract expansion or other change flags, and budget exhaustion also route Sol. B and D are **post-audit finding classes**, not pre-Luna eligibility inputs: if independent Terra later reports either, the parent routes Sol and never sends B/D directly to Luna repair.
+
+For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in a valid dispatch defines what may change. The parent may create only the guarded fast path below; every other Luna dispatch comes from Sol.
 
 Before accepting Luna's `PASS`, Sol—or the parent mechanically relaying for Sol—independently checks tracked, standard untracked, and ignored untracked paths:
 
@@ -173,7 +224,7 @@ The parent schedules integration without modifying the tree or merging commits. 
 
 Before whole-task `PASS`, require a clean integration worktree and verify that every tracked path from `integration_baseline` to the combined commit plus every standard and ignored untracked path is covered by `integration_paths_allow`. Enumerate the two untracked classes with `git ls-files --others --exclude-standard` and `git ls-files --others --ignored --exclude-standard`. Record that result as `path: N/A (scope-check)`, then record the combined commit, integration order, and complete acceptance results as `path: N/A (integration-check)`.
 
-A final Terra audit of the combined state is mandatory when the user requested independent verification, two or more component batches received Terra verification, or integration crosses a material security, data, concurrency, compatibility, migration, or public-contract boundary. Separate component audits never substitute for a required integration audit.
+The integration gate requires a final audit. Its contract is preregistered by the issuing authority before Luna; after Luna `PASS` and the combined scope/revision gates, the parent runs runtime `audit begin` and launches an independent `terra_auditor`. The parent and planner identities cannot self-audit. That final Terra audit covers the integration result, and separate component audits never substitute for it.
 
 On failure, stop terminal success and locate the earliest failing merge or wave:
 
@@ -203,7 +254,7 @@ NEXT: parent
 
 ### 🔌 Codex Execution Mode
 
-Native Codex subagents are the default. Start every change-producing task with **Sol** planning. Sol emits a minimal single-step `DISPATCH` for bounded L1 work, or a compact `PLAN_MANIFEST` containing global invariants, the currently ready `DISPATCH_WAVE`, preregistered audits, and an `EXPANSION_GATE`. It does not pre-expand distant work.
+Native Codex subagents are the default. A Terra High parent first evaluates the strict fast-path predicate: if it passes, the parent may issue one bounded L1/L2 `DISPATCH`; if evidence is missing or any predicate fails, route to **Sol before Luna**. Sol emits an ordinary single-step `DISPATCH` or a compact `PLAN_MANIFEST` containing global invariants, the currently ready `DISPATCH_WAVE`, audit requirements and any preregistered audit contracts, and an `EXPANSION_GATE`. It does not pre-expand distant work.
 
 **Key Rules:**
 
@@ -217,7 +268,7 @@ Native Codex subagents are the default. Start every change-producing task with *
 3. Its first result follows `lean-dev-router/v2`
 
 If Sol cannot spawn nested workers, it returns `BLOCKED/dependency/REQUEST implementation/NEXT parent` with a `DISPATCH` manifest in `EVIDENCE`. Each worker entry contains:
-`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `PLAN_ID`, `PLANNER_ROLE`, `PLANNER_INSTANCE_ID`, `AUDITOR_INSTANCE_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, `BUDGET`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and whether final Terra review is required.
+`id`, `role`, `scope`, `worktree` (`N/A` for shared read-only work), and `depends_on`; every Luna write entry embeds the literal complete artifact `PROTOCOL: lean-dev-router/v2`, `STATUS: DISPATCH`, `TARGET: implementation`, `DISPATCH_ID`, `PLAN_ID`, `PLANNER_ROLE`, conditional `PLANNER_CAPABILITY`, `PLANNER_INSTANCE_ID`, `AUDITOR_INSTANCE_ID`, `TASK_SUMMARY`, `BASELINE`, `PATHS_ALLOW`, `ACCEPTANCE`, `CONSTRAINTS`, `BUDGET`, and `NEXT: parent`. Multi-batch deliverables additionally declare shared contracts, `integration_worktree`, `integration_owner`, `integration_order`, `integration_baseline`, `integration_paths_allow`, `integration_acceptance`, and the required final Terra review.
 
 The parent executes it mechanically. It calls Sol again only at an expansion gate, an undefined transition, a contract change, or a user-owned decision. If native spawning is entirely unavailable, use independent Codex sessions with the same manifest.
 
@@ -227,11 +278,11 @@ Independent components advance as soon as they are ready. The parent starts or q
 
 Component audits use a stable `<component>:<revision>:<stage>` job key. Register each through the runtime guard: the same revision is never audited twice. A changed revision gets an incremental audit of its delta, unresolved findings, and affected cone; the initial audit covers the full declared cone. If a batch spawn partially fails, retry only missing or failed keys. Sol remains an exception gate, not the routine event loop.
 
-Sol preregisters Terra's objective, change scope, broader causal impact cone, acceptance, dependencies, revision rule, and replay evidence. After Luna `PASS`, the parent verifies those gates and launches Terra directly. Terra reads causal neighbors beyond `PATHS_ALLOW` and classifies outside findings: A change-caused acceptance defect, B necessary omitted scope, C unrelated existing issue, or D severe security/data-loss/compatibility risk. A bounded unchanged-contract repair may return mechanically to the original Luna; scope, plan, acceptance, public-interface, architecture, security, data-format, resource-limit, ambiguity, or exhausted-budget changes return to Sol.
+Final audit is conditional, not a gate for every task. When the PLAN_MANIFEST, any risk flag, or the integration gate declares it, the dispatch authority preregisters Terra's objective, change scope, broader causal impact cone, acceptance, dependencies, revision rule, and replay evidence before Luna. After Luna `PASS`, the parent verifies those gates, runs runtime `audit begin`, and launches the independent Terra directly; a parent or planner identity cannot self-audit. Every audit begin/complete/abandon packet carries `AUDITOR_ROLE: terra_auditor`, the preregistered `AUDITOR_INSTANCE_ID`, and the matching executing `AGENT_INSTANCE_ID`; case-insensitive identity and role-lease mismatches fail closed. These fields are coordination constraints, not cryptographic authentication. Terra reads causal neighbors beyond `PATHS_ALLOW` and classifies findings after audit: A change-caused acceptance defect, B necessary omitted scope, C unrelated existing issue, or D severe security/data-loss/compatibility risk. Only a bounded A finding with unchanged contract, matching dispatch identity, in-scope affected paths, unchanged acceptance, and remaining repair budget may return mechanically to the original Luna. B, D, scope/plan/acceptance/public-interface/architecture/security/data-format/resource-limit changes, ambiguity, and exhaustion return to Sol.
 
 When every manifest-declared scope, revision, audit, repair, integration, and final gate is terminal and passing, the parent may summarize completion without another Sol round-trip.
 
-Every dispatch declares positive integer ceilings for model calls, distinct hypotheses, model-active seconds, repair cycles, and stagnant calls. Runtime maxima are 8, 4, 1200, 2, and 2; Sol may only tighten them. After each call the parent records wall/model-active seconds, upstream attempts, token families, hypothesis, command/error, and progress/evidence. Repeating the same failure without progress stops immediately; two stagnant calls are `spinning`. Exhaustion latches the stage until revision, contract version, or evidence changes. Luna exhaustion routes to Terra, Terra exhaustion to Sol; parent never writes a repair.
+Every dispatch declares positive integer ceilings for model calls, distinct hypotheses, model-active seconds, repair cycles, and stagnant calls. Ordinary Sol dispatch maxima are 8, 4, 1200, 2, and 2; the parent fast path uses the stricter 4, 2, 600, 1, and 1 maxima. The issuing authority may only tighten them. After each call the parent records wall/model-active seconds, upstream attempts, token families, hypothesis, command/error, and progress/evidence. Repeating the same failure without progress stops immediately; the applicable stagnant-call ceiling is `spinning`. Exhaustion latches the stage until revision, contract version, or evidence changes and routes to Sol; parent never writes a repair.
 
 When the host exposes timestamps, record component-ready and next-stage times. Start the next stage within 60 seconds when capacity exists; otherwise mark it queued with the reason and start it at the first eligible slot release. Report external compile, CI, and network waits separately from controllable handoff delay, and keep completion-event consumption responsive during long parent commands. Terra assignments are ordinary read-only task instructions: `STATUS: DISPATCH` remains reserved for Luna write authorization and must not be reused as an outbound-style Terra envelope.
 
@@ -241,7 +292,7 @@ The native Codex background-agent UI is part of the native subagent workflow. Un
 
 ### ⚙️ Parent Scheduling and Single-Sol Planning
 
-Use **one Sol planner** for each routed task by default. Sol chooses the worker pool and declares bounded waves; the parent manages ordering, concurrency, waits, scope/revision gates, and manifest-defined transitions without making engineering decisions.
+Use **one Sol planner** for every task that fails the bounded parent predicate and for every exception. Sol chooses the worker pool and declares bounded waves; the parent manages ordering, concurrency, waits, scope/revision gates, and manifest-defined transitions without making engineering decisions. A qualifying one-batch parent fast path does not register an additional planner profile.
 
 > 🚨 **Luna and Terra never create additional agents or expand their own assignments.** Use multiple Sol coordinators only when the user explicitly requests them: the parent creates them with **non-overlapping orchestration scopes**, and no Sol may spawn a peer Sol.
 
@@ -260,11 +311,11 @@ The cap covers Luna and Terra workers combined and is a routing heuristic, not a
 ```mermaid
 flowchart LR
     U[user] --> P[parent state machine]
-    P --> S[sol_planner<br/>plan / authorize / decide]
+    P -->|exceptions / failed predicate| S[sol_planner<br/>plan / authorize / decide]
     S --> P
-    P --> L[luna_worker × N<br/>isolated writes]
+    P -->|valid Sol or bounded parent dispatch| L[luna_worker × N<br/>isolated writes]
     L --> P
-    P --> T[terra_auditor × N<br/>causal audit]
+    P --> T[terra_auditor × N<br/>independent causal audit]
     T --> P
     P --> U
 
@@ -325,7 +376,7 @@ python $guard schema
 Get-Content dispatch.json -Raw | python $guard preflight
 ```
 
-`preflight` exits 0 with `allowed: true` for a complete contract and exits 2 with stable JSON errors otherwise. Production scheduling still invokes only `start --state ...`, which performs the same validation and initializes state in one call.
+For a parent fast-path packet, append `--trusted-parent-instance-id <host-parent-id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high` to `preflight` and `start`. `preflight` exits 0 with `allowed: true` for a complete contract and trusted Terra High binding, and exits 2 with stable JSON errors otherwise. Production scheduling still invokes only `start --state ...`, which performs the same validation and initializes state in one call.
 The command validates protocol fields, IDs, repository-relative allow paths, budget ceilings, baseline hashes, and optional concrete revision syntax. It does not inspect a target worktree, replace the independent scope enumeration, or enforce an OS sandbox.
 
 The optimized E1/C1 files are controlled experiment variants, not release defaults. Replace the installed root Skill with one of them only for a fresh benchmark task, then restore `skill-variants/en/SKILL.md`.
@@ -351,7 +402,7 @@ Adapt the file format and model identifiers when using another runtime.
 
 | Role | Badge | Responsibility |
 |:---|:---:|:---|
-| **sol_planner** | 👑 | Sole `DISPATCH` author for writes and single planner/orchestrator for complex tasks. Scales, directs, and consolidates Luna/Terra workers; returns user-owned decisions to the parent. |
+| **sol_planner** | 👑 | Ordinary `DISPATCH` author and sole planner/orchestrator for exceptions and complex tasks. Scales, directs, and consolidates Luna/Terra workers; returns user-owned decisions to the parent. |
 | **luna_worker** | ⚡ | Bounded code, test, documentation, and configuration edits. Multiple instances may run in parallel on isolated assignments. |
 | **terra_auditor** | 🔍 | Code audit, technical diagnosis, and validation. Escalate only when it cannot resolve the issue or a major decision is required. |
 
@@ -361,7 +412,7 @@ Use `$lean-dev-router` when a task benefits from this routing policy. The Skill 
 
 The v2 routes above are the defaults. For one named task or batch, the user may explicitly require an external auditor, a Draft PR, or a repository-specific merge gate in the parent prompt. These are task-level instructions, not Skill modes or protocol fields, and they are never remembered as future defaults.
 
-Before dispatching work, the parent restates the effective route, audit target, fallback, merge gate, and the task or batch to which the override applies. Luna still returns changed paths, a concise diff summary, command results, scope evidence, risks, and unverified items. An external audit does not authorize writes, replace Sol's `DISPATCH`, weaken acceptance or scope checks, or permit an automatic merge.
+Before dispatching work, the parent restates the effective route, audit target, fallback, merge gate, and the task or batch to which the override applies. Luna still returns changed paths, a concise diff summary, command results, scope evidence, risks, and unverified items. An external audit does not authorize writes, replace a valid `DISPATCH`, weaken acceptance or scope checks, or permit an automatic merge.
 
 If the named auditor is unavailable, produces no inspectable evidence, or reaches no clear conclusion, keep the PR in Draft and fall back to Terra. For security, privacy, licensing, migration, compatibility, public-interface, or data-semantics changes, the parent asks the user whether the external audit is sufficient; without explicit confirmation, retain the default Terra requirement.
 

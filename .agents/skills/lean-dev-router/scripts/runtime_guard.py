@@ -25,6 +25,7 @@ DISPATCH_FIELDS = (
     "DISPATCH_ID",
     "PLAN_ID",
     "PLANNER_ROLE",
+    "PLANNER_CAPABILITY",
     "PLANNER_INSTANCE_ID",
     "AUDITOR_INSTANCE_ID",
     "TASK_SUMMARY",
@@ -46,6 +47,7 @@ REPAIR_FIELDS = (
     "PLAN_ID",
     "DISPATCH_ID",
     "AUDITOR_INSTANCE_ID",
+    "FINDING_CLASS",
     "CONTRACT_EFFECT",
     "AFFECTED_PATHS",
     "ACCEPTANCE",
@@ -73,18 +75,43 @@ DEFAULT_BUDGET = {
     "REPAIR_CYCLE_LIMIT": 2,
     "STAGNANT_CALL_LIMIT": 2,
 }
+PARENT_FAST_PATH_CAPABILITY = "bounded_l1_l2_dispatch"
+TRUSTED_PARENT_MODEL = "gpt-5.6-terra"
+TRUSTED_PARENT_REASONING_EFFORT = "high"
+PARENT_FAST_PATH_BUDGET = {
+    "MODEL_CALL_LIMIT": 4,
+    "HYPOTHESIS_LIMIT": 2,
+    "MODEL_ACTIVE_SECONDS_LIMIT": 600,
+    "REPAIR_CYCLE_LIMIT": 1,
+    "STAGNANT_CALL_LIMIT": 1,
+}
+PARENT_ELIGIBILITY_FIELDS = (
+    "LEVEL", "OBJECTIVE_FIXED", "SCOPE_ROOTS", "ACCEPTANCE", "CONSTRAINTS",
+    "OPEN_MAJOR_DECISIONS", "RISK_FLAGS", "EXTERNAL_ACTIONS", "MAX_DISPATCHES",
+    "COMPONENT_COUNT", "DEPENDENCY_DEPTH", "REQUIRED_PATHS", "PATHS_ALLOW",
+    "WRITE_BATCH_COUNT", "INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED",
+    "AMBIGUITY", "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE",
+    "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
+    "COMPATIBILITY_CHANGE",
+)
+PARENT_CHANGE_FIELDS = (
+    "CONTRACT_CHANGE", "SCOPE_CHANGE", "ACCEPTANCE_CHANGE",
+    "CONSTRAINT_CHANGE", "ARCHITECTURE_CHANGE", "SECURITY_CHANGE",
+    "COMPATIBILITY_CHANGE",
+)
 AUDIT_BEGIN_FIELDS = (
-    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
-    "AUDIT_SCOPE", "AUDIT_MODE",
+    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_ROLE",
+    "AUDITOR_INSTANCE_ID", "AGENT_INSTANCE_ID", "AUDIT_SCOPE", "AUDIT_MODE",
 )
 AUDIT_INCREMENTAL_FIELDS = ("PREVIOUS_REVISION", "UNRESOLVED_FINDINGS")
 AUDIT_COMPLETE_FIELDS = (
-    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
-    "TERMINATION_REASON", "VERIFIED", "UNVERIFIED",
+    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_ROLE",
+    "AUDITOR_INSTANCE_ID", "AGENT_INSTANCE_ID", "TERMINATION_REASON", "VERIFIED",
+    "UNVERIFIED",
 )
 AUDIT_ABANDON_FIELDS = (
-    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID",
-    "TERMINATION_REASON",
+    "ACTION", "PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_ROLE",
+    "AUDITOR_INSTANCE_ID", "AGENT_INSTANCE_ID", "TERMINATION_REASON",
 )
 WRITER_ROLE = "luna_worker"
 ROLES = {"sol_planner", "luna_worker", "terra_auditor", "parent"}
@@ -133,6 +160,11 @@ def _present(value: Any) -> bool:
     if isinstance(value, (list, tuple, dict, set)):
         return bool(value)
     return True
+
+
+def _identity(value: Any) -> str:
+    """Normalize coordinator-provided instance identifiers for comparison."""
+    return str(value or "").strip().casefold()
 
 
 def _positive_int(value: Any) -> int | None:
@@ -191,6 +223,14 @@ def _paths(value: Any, *, allow_empty: bool = False) -> list[str] | None:
     return result
 
 
+def _none_items(value: Any) -> bool:
+    if value is None or value == [] or value == "none":
+        return True
+    return isinstance(value, list) and all(
+        isinstance(item, str) and item.strip().casefold() == "none" for item in value
+    )
+
+
 def _inside(path: str, roots: list[str]) -> bool:
     return any(
         root == "." or path == root or path.startswith(root.rstrip("/") + "/")
@@ -198,12 +238,72 @@ def _inside(path: str, roots: list[str]) -> bool:
     )
 
 
+def _false_or_none(value: Any) -> bool:
+    if value is False or value is None or value == "none":
+        return True
+    return isinstance(value, list) and all(
+        isinstance(item, str) and item.strip().casefold() == "none" for item in value
+    )
+
+
+def validate_parent_dispatch(packet: Mapping[str, Any]) -> list[str]:
+    """Validate the strict Terra High parent bounded L1/L2 capability."""
+    errors: list[str] = []
+    if _value(packet, "PLANNER_CAPABILITY") != PARENT_FAST_PATH_CAPABILITY:
+        errors.append("PLANNER_CAPABILITY must equal bounded_l1_l2_dispatch")
+    for name in PARENT_ELIGIBILITY_FIELDS:
+        if not any(str(key).casefold() == name.casefold() for key in packet):
+            errors.append(f"{name} must be explicit for parent fast path")
+    if str(_value(packet, "LEVEL", "")).upper() not in {"L1", "L2"}:
+        errors.append("LEVEL must be L1 or L2")
+    for name in ("OBJECTIVE_FIXED", "OPEN_MAJOR_DECISIONS"):
+        expected = True if name == "OBJECTIVE_FIXED" else False
+        if _value(packet, name) is not expected:
+            errors.append(f"{name} must be {str(expected).lower()}")
+    for name in ("BASELINE", "SCOPE_ROOTS", "ACCEPTANCE", "CONSTRAINTS"):
+        if not _present(_value(packet, name)):
+            errors.append(f"{name} must be non-empty")
+    for name in ("RISK_FLAGS", "EXTERNAL_ACTIONS"):
+        if not _none_items(_value(packet, name)):
+            errors.append(f"{name} must be none")
+    exact = {
+        "MAX_DISPATCHES": 1,
+        "COMPONENT_COUNT": 1,
+        "DEPENDENCY_DEPTH": 0,
+        "WRITE_BATCH_COUNT": 1,
+    }
+    for name, expected in exact.items():
+        value = _value(packet, name)
+        if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+            errors.append(f"{name} must equal {expected}")
+    for name in PARENT_CHANGE_FIELDS:
+        if _value(packet, name) is not False:
+            errors.append(f"{name} must be false")
+    for name in ("INTEGRATION", "CONFLICT", "CONTRACT_EXPANDED", "AMBIGUITY"):
+        if not _false_or_none(_value(packet, name)):
+            errors.append(f"{name} must be false/none")
+    roots = _paths(_value(packet, "SCOPE_ROOTS"))
+    required = _paths(_value(packet, "REQUIRED_PATHS"), allow_empty=True)
+    allowed = _paths(_value(packet, "PATHS_ALLOW"))
+    if roots is None:
+        errors.append("SCOPE_ROOTS must be non-empty repository-relative paths")
+    if required is None:
+        errors.append("REQUIRED_PATHS must be repository-relative paths")
+    if allowed is None:
+        errors.append("PATHS_ALLOW must be non-empty repository-relative paths")
+    if roots is not None:
+        for label, paths in (("PATHS_ALLOW", allowed), ("REQUIRED_PATHS", required)):
+            if paths is not None and any(not _inside(path, roots) for path in paths):
+                errors.append(f"{label} must stay inside SCOPE_ROOTS")
+    return list(dict.fromkeys(errors))
+
+
 def fingerprint(value: Any) -> str:
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def validate_budget(value: Any) -> list[str]:
+def validate_budget(value: Any, *, ceiling: Mapping[str, int] | None = None) -> list[str]:
     if not isinstance(value, Mapping):
         return ["BUDGET must be an object"]
     errors: list[str] = []
@@ -211,14 +311,28 @@ def validate_budget(value: Any) -> list[str]:
         actual = _positive_int(_value(value, field_name))
         if actual is None:
             errors.append(f"BUDGET.{field_name} must be a positive integer")
-        elif actual > DEFAULT_BUDGET[field_name]:
+        limit = (ceiling or DEFAULT_BUDGET)[field_name]
+        if actual is not None and actual > limit:
             errors.append(f"BUDGET.{field_name} exceeds the runtime ceiling")
     return errors
 
 
-def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
+def validate_dispatch(
+    packet: Mapping[str, Any], *, trusted_parent_instance_id: str | None = None,
+    trusted_parent_model: str | None = None,
+    trusted_parent_reasoning_effort: str | None = None,
+) -> list[str]:
     """Validate a complete packet before parent spawns Luna."""
-    errors = [f"{name} must be non-empty" for name in DISPATCH_FIELDS if not _present(_value(packet, name))]
+    planner_role = _value(packet, "PLANNER_ROLE")
+    required_fields = tuple(
+        name for name in DISPATCH_FIELDS
+        if name != "PLANNER_CAPABILITY" or planner_role == "parent"
+    )
+    errors = [
+        f"{name} must be non-empty"
+        for name in required_fields
+        if not _present(_value(packet, name))
+    ]
     expected = {
         "PROTOCOL": "lean-dev-router/v2",
         "STATUS": "DISPATCH",
@@ -228,23 +342,62 @@ def validate_dispatch(packet: Mapping[str, Any]) -> list[str]:
     for name, value in expected.items():
         if _value(packet, name) != value:
             errors.append(f"{name} must equal {value}")
-    if _value(packet, "PLANNER_ROLE") != "sol_planner":
-        errors.append("PLANNER_ROLE must equal sol_planner")
+    if planner_role not in {"sol_planner", "parent"}:
+        errors.append("PLANNER_ROLE must identify an authorized planner")
+    elif planner_role == "parent":
+        errors.extend(validate_parent_dispatch(packet))
+    elif _present(_value(packet, "PLANNER_CAPABILITY")):
+        errors.append("PLANNER_CAPABILITY is only valid for parent fast path")
     if _value(packet, "PLANNER_INSTANCE_ID") == _value(packet, "AUDITOR_INSTANCE_ID"):
         errors.append("AUDITOR_INSTANCE_ID must differ from PLANNER_INSTANCE_ID")
+    auditor_instance = _identity(_value(packet, "AUDITOR_INSTANCE_ID"))
+    planner_instance = _identity(_value(packet, "PLANNER_INSTANCE_ID"))
+    parent_instance = _identity(_value(packet, "PARENT_INSTANCE_ID"))
+    if auditor_instance in {"parent", "parent-agent", "parent_instance", planner_instance}:
+        errors.append("AUDITOR_INSTANCE_ID must identify an independent terra_auditor")
+    if parent_instance and auditor_instance == parent_instance:
+        errors.append("AUDITOR_INSTANCE_ID must differ from PARENT_INSTANCE_ID")
+    auditor_role = _value(packet, "AUDITOR_ROLE")
+    if auditor_role is not None and auditor_role != "terra_auditor":
+        errors.append("AUDITOR_ROLE must be terra_auditor")
     baseline = _value(packet, "BASELINE")
     if not _lower_hex(baseline, (40, 64)):
         errors.append("BASELINE must be a 40 or 64 character lowercase Git hex")
     if _paths(_value(packet, "PATHS_ALLOW")) is None:
         errors.append("PATHS_ALLOW must be non-empty repository-relative paths")
     errors.extend(validate_revision(_value(packet, "REVISION"), baseline))
-    errors.extend(validate_budget(_value(packet, "BUDGET")))
+    ceiling = PARENT_FAST_PATH_BUDGET if planner_role == "parent" else DEFAULT_BUDGET
+    errors.extend(validate_budget(_value(packet, "BUDGET"), ceiling=ceiling))
+    if planner_role == "parent":
+        trusted_parent = _identity(trusted_parent_instance_id)
+        if not trusted_parent:
+            errors.append("trusted parent instance identity is required outside the packet")
+        elif trusted_parent != planner_instance:
+            errors.append("PLANNER_INSTANCE_ID must match the trusted parent instance identity")
+        if str(trusted_parent_model or "").strip().casefold() != TRUSTED_PARENT_MODEL:
+            errors.append(f"trusted parent model must equal {TRUSTED_PARENT_MODEL}")
+        if (
+            str(trusted_parent_reasoning_effort or "").strip().casefold()
+            != TRUSTED_PARENT_REASONING_EFFORT
+        ):
+            errors.append(
+                f"trusted parent reasoning effort must equal {TRUSTED_PARENT_REASONING_EFFORT}"
+            )
     return list(dict.fromkeys(errors))
 
 
-def preflight_dispatch(packet: Mapping[str, Any]) -> dict[str, Any]:
+def preflight_dispatch(
+    packet: Mapping[str, Any], *, trusted_parent_instance_id: str | None = None,
+    trusted_parent_model: str | None = None,
+    trusted_parent_reasoning_effort: str | None = None,
+) -> dict[str, Any]:
     """Return the stable spawn decision shared by preflight and start."""
-    errors = validate_dispatch(packet)
+    errors = validate_dispatch(
+        packet,
+        trusted_parent_instance_id=trusted_parent_instance_id,
+        trusted_parent_model=trusted_parent_model,
+        trusted_parent_reasoning_effort=trusted_parent_reasoning_effort,
+    )
     result: dict[str, Any] = {
         "allowed": not errors,
         "reason": "dispatch_valid" if not errors else "invalid_dispatch",
@@ -320,16 +473,30 @@ class StageTelemetry:
 class RuntimeGuard:
     """Deterministic parent state for one dispatch lifecycle."""
 
-    def __init__(self, dispatch: Mapping[str, Any]) -> None:
-        errors = validate_dispatch(dispatch)
+    def __init__(
+        self, dispatch: Mapping[str, Any], *, trusted_parent_instance_id: str | None = None,
+        trusted_parent_model: str | None = None,
+        trusted_parent_reasoning_effort: str | None = None,
+    ) -> None:
+        errors = validate_dispatch(
+            dispatch,
+            trusted_parent_instance_id=trusted_parent_instance_id,
+            trusted_parent_model=trusted_parent_model,
+            trusted_parent_reasoning_effort=trusted_parent_reasoning_effort,
+        )
         if errors:
             raise ValueError("; ".join(errors))
         self.dispatch = dict(dispatch)
+        self.trusted_parent_instance_id = _identity(trusted_parent_instance_id)
+        self.trusted_parent_model = str(trusted_parent_model or "").strip().casefold()
+        self.trusted_parent_reasoning_effort = str(
+            trusted_parent_reasoning_effort or ""
+        ).strip().casefold()
         self.stages: dict[str, StageTelemetry] = {}
         self.latches: dict[str, dict[str, str]] = {}
         self.role_leases: dict[str, str] = {
-            str(_value(dispatch, "PLANNER_INSTANCE_ID")): str(_value(dispatch, "PLANNER_ROLE")),
-            str(_value(dispatch, "AUDITOR_INSTANCE_ID")): "terra_auditor",
+            _identity(_value(dispatch, "PLANNER_INSTANCE_ID")): str(_value(dispatch, "PLANNER_ROLE")),
+            _identity(_value(dispatch, "AUDITOR_INSTANCE_ID")): "terra_auditor",
         }
         self.audit_jobs: dict[str, dict[str, str]] = {}
         self.last_completed_audits: dict[str, str] = {}
@@ -350,7 +517,7 @@ class RuntimeGuard:
 
     def _lease_role(self, event: Mapping[str, Any], *, record: bool) -> None:
         role = str(_value(event, "ROLE", "")).strip()
-        instance = str(_value(event, "AGENT_INSTANCE_ID", "")).strip()
+        instance = _identity(_value(event, "AGENT_INSTANCE_ID"))
         if role not in ROLES or not instance:
             raise ValueError("event role and agent identity must be valid")
         leased = self.role_leases.get(instance)
@@ -376,6 +543,11 @@ class RuntimeGuard:
         """Record one completed model call and return a mechanical route decision."""
         if _value(event, "ACTION") == "write" and _value(event, "ROLE") != WRITER_ROLE:
             return self._decision(False, "unauthorized_writer", "parent:pause")
+        if str(_value(event, "ROLE", "")).strip().casefold() == "parent" and (
+            str(_value(event, "STAGE", "")).casefold() == "audit"
+            or str(_value(event, "ACTION", "")).casefold() == "audit"
+        ):
+            return self._decision(False, "parent_cannot_self_audit", "parent:sol")
         telemetry_fields = EVENT_FIELDS[8:]
         event_keys = {str(name).casefold() for name in event}
         if any(name.casefold() not in event_keys for name in EVENT_FIELDS) or any(
@@ -497,11 +669,12 @@ class RuntimeGuard:
             packet, "DISPATCH_ID"
         ) != _value(self.dispatch, "DISPATCH_ID"):
             return self._decision(False, "invalid_audit_job", "parent:pause")
-        auditor = str(_value(packet, "AUDITOR_INSTANCE_ID"))
-        if auditor != str(_value(self.dispatch, "AUDITOR_INSTANCE_ID")):
-            return self._decision(False, "invalid_auditor_identity", "parent:pause")
+        actor_error = self._audit_actor_error(packet)
+        if actor_error:
+            return self._decision(False, actor_error, "parent:sol")
         job_key = ":".join(
-            str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
+            [str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION")]
+            + [_identity(_value(packet, "AUDITOR_INSTANCE_ID"))]
         )
         if job_key in self.audit_jobs:
             return self._decision(False, "duplicate_audit_revision", "parent:manifest_gate")
@@ -534,11 +707,13 @@ class RuntimeGuard:
         if (
             _value(packet, "PLAN_ID") != _value(self.dispatch, "PLAN_ID")
             or _value(packet, "DISPATCH_ID") != _value(self.dispatch, "DISPATCH_ID")
-            or _value(packet, "AUDITOR_INSTANCE_ID") != _value(self.dispatch, "AUDITOR_INSTANCE_ID")
         ):
             return self._decision(False, "invalid_audit_completion", "parent:pause")
+        if self._audit_actor_error(packet):
+            return self._decision(False, "invalid_audit_completion", "parent:pause")
         job_key = ":".join(
-            str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
+            [str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION")]
+            + [_identity(_value(packet, "AUDITOR_INSTANCE_ID"))]
         )
         job = self.audit_jobs.get(job_key)
         if not job or job.get("status") != "running":
@@ -557,11 +732,13 @@ class RuntimeGuard:
         if (
             _value(packet, "PLAN_ID") != _value(self.dispatch, "PLAN_ID")
             or _value(packet, "DISPATCH_ID") != _value(self.dispatch, "DISPATCH_ID")
-            or _value(packet, "AUDITOR_INSTANCE_ID") != _value(self.dispatch, "AUDITOR_INSTANCE_ID")
         ):
             return self._decision(False, "invalid_audit_abandon", "parent:pause")
+        if self._audit_actor_error(packet):
+            return self._decision(False, "invalid_audit_abandon", "parent:pause")
         job_key = ":".join(
-            str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION", "AUDITOR_INSTANCE_ID")
+            [str(_value(packet, name)) for name in ("PLAN_ID", "DISPATCH_ID", "REVISION")]
+            + [_identity(_value(packet, "AUDITOR_INSTANCE_ID"))]
         )
         job = self.audit_jobs.get(job_key)
         if not job or job.get("status") != "running":
@@ -580,7 +757,22 @@ class RuntimeGuard:
             return self.abandon_audit(packet)
         return self._decision(False, "invalid_audit_action", "parent:pause")
 
+    def _audit_actor_error(self, packet: Mapping[str, Any]) -> str:
+        """Enforce coordinator identity claims; this is not cryptographic authentication."""
+        if _value(packet, "AUDITOR_ROLE") != "terra_auditor":
+            return "invalid_auditor_role"
+        registered = _identity(_value(self.dispatch, "AUDITOR_INSTANCE_ID"))
+        declared = _identity(_value(packet, "AUDITOR_INSTANCE_ID"))
+        actor = _identity(_value(packet, "AGENT_INSTANCE_ID"))
+        if not declared or not actor or declared != registered or actor != registered:
+            return "invalid_auditor_identity"
+        if self.role_leases.get(actor) != "terra_auditor":
+            return "invalid_auditor_identity"
+        return ""
+
     def register_repair(self, packet: Mapping[str, Any]) -> dict[str, Any]:
+        if _value(packet, "FINDING_CLASS") != "A":
+            return self._decision(False, "finding_requires_sol", "parent:sol")
         errors = validate_repair(packet, self.dispatch)
         if errors:
             return {"allowed": False, "reason": "invalid_repair", "destination": "parent:sol", "errors": errors}
@@ -599,8 +791,10 @@ class RuntimeGuard:
 
     def _destination(self, role: str) -> str:
         if role == "luna_worker":
-            return "parent:terra"
+            return "parent:sol" if _value(self.dispatch, "PLANNER_ROLE") == "parent" else "parent:terra"
         if role == "terra_auditor":
+            return "parent:sol"
+        if role == "parent":
             return "parent:sol"
         return "parent:pause"
 
@@ -628,6 +822,9 @@ class RuntimeGuard:
     def snapshot(self) -> dict[str, Any]:
         return {
             "dispatch": self.dispatch,
+            "trusted_parent_instance_id": self.trusted_parent_instance_id,
+            "trusted_parent_model": self.trusted_parent_model,
+            "trusted_parent_reasoning_effort": self.trusted_parent_reasoning_effort,
             "stages": {key: value.public() for key, value in self.stages.items()},
             "latches": self.latches,
             "role_leases": self.role_leases,
@@ -643,7 +840,14 @@ class RuntimeGuard:
         dispatch = _value(data, "dispatch", {})
         if not isinstance(dispatch, Mapping):
             raise ValueError("snapshot dispatch must be an object")
-        guard = cls(dispatch)
+        guard = cls(
+            dispatch,
+            trusted_parent_instance_id=str(_value(data, "trusted_parent_instance_id", "")),
+            trusted_parent_model=str(_value(data, "trusted_parent_model", "")),
+            trusted_parent_reasoning_effort=str(
+                _value(data, "trusted_parent_reasoning_effort", "")
+            ),
+        )
         stages = _value(data, "stages", {})
         if not isinstance(stages, Mapping):
             raise ValueError("snapshot stages must be an object")
@@ -658,7 +862,10 @@ class RuntimeGuard:
             if not isinstance(_value(data, name, {}), Mapping):
                 raise ValueError(f"snapshot {name} must be an object")
         guard.latches = dict(_value(data, "latches", {}))
-        guard.role_leases = dict(_value(data, "role_leases", guard.role_leases))
+        guard.role_leases = {
+            _identity(key): str(value)
+            for key, value in _value(data, "role_leases", guard.role_leases).items()
+        }
         guard.audit_jobs = dict(_value(data, "audit_jobs", {}))
         guard.last_completed_audits = dict(_value(data, "last_completed_audits", {}))
         guard.repair_cycles = {
@@ -707,9 +914,15 @@ def _save(path: Path, guard: RuntimeGuard) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("preflight", help="validate dispatch without creating state")
+    preflight = sub.add_parser("preflight", help="validate dispatch without creating state")
+    preflight.add_argument("--trusted-parent-instance-id")
+    preflight.add_argument("--trusted-parent-model")
+    preflight.add_argument("--trusted-parent-reasoning-effort")
     start = sub.add_parser("start", help="validate dispatch and initialize state")
     start.add_argument("--state", type=Path, required=True)
+    start.add_argument("--trusted-parent-instance-id")
+    start.add_argument("--trusted-parent-model")
+    start.add_argument("--trusted-parent-reasoning-effort")
     event = sub.add_parser("event", help="record one model-call event")
     event.add_argument("--state", type=Path, required=True)
     repair = sub.add_parser("repair", help="validate repair packet against dispatch")
@@ -726,6 +939,10 @@ def main() -> int:
                 "dispatch_fields": DISPATCH_FIELDS,
                 "budget_fields": BUDGET_FIELDS,
                 "default_budget": DEFAULT_BUDGET,
+                "trusted_parent_binding": (
+                    "--trusted-parent-instance-id, --trusted-parent-model=gpt-5.6-terra, "
+                    "--trusted-parent-reasoning-effort=high (required for parent fast path)"
+                ),
                 "event_fields": EVENT_FIELDS,
                 "repair_fields": REPAIR_FIELDS,
                 "audit_begin_fields": AUDIT_BEGIN_FIELDS,
@@ -735,7 +952,12 @@ def main() -> int:
             }
         elif args.command == "preflight":
             packet = _stdin_json()
-            result = preflight_dispatch(packet)
+            result = preflight_dispatch(
+                packet,
+                trusted_parent_instance_id=args.trusted_parent_instance_id,
+                trusted_parent_model=args.trusted_parent_model,
+                trusted_parent_reasoning_effort=args.trusted_parent_reasoning_effort,
+            )
         elif args.command == "start":
             if args.state.exists():
                 result = {
@@ -746,11 +968,21 @@ def main() -> int:
                 print(json.dumps(result, ensure_ascii=False, sort_keys=True))
                 return 2
             packet = _stdin_json()
-            result = preflight_dispatch(packet)
+            result = preflight_dispatch(
+                packet,
+                trusted_parent_instance_id=args.trusted_parent_instance_id,
+                trusted_parent_model=args.trusted_parent_model,
+                trusted_parent_reasoning_effort=args.trusted_parent_reasoning_effort,
+            )
             if not result["allowed"]:
                 print(json.dumps(result, ensure_ascii=False, sort_keys=True))
                 return 2
-            guard = RuntimeGuard(packet)
+            guard = RuntimeGuard(
+                packet,
+                trusted_parent_instance_id=args.trusted_parent_instance_id,
+                trusted_parent_model=args.trusted_parent_model,
+                trusted_parent_reasoning_effort=args.trusted_parent_reasoning_effort,
+            )
             _save(args.state, guard)
         elif args.command == "event":
             guard = _load(args.state)
