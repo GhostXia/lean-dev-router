@@ -75,6 +75,7 @@ SUMMARY: concise result
 - Final audit is conditional. A PLAN_MANIFEST declaration, any risk flag, or the integration gate requires the issuer to preregister its contract before Luna. After Luna PASS, runtime `audit begin` starts an independent terra_auditor; parent/planner cannot self-audit.
 - Audit begin/complete/abandon requires `AUDITOR_ROLE: terra_auditor`, preregistered `AUDITOR_INSTANCE_ID`, and matching executing `AGENT_INSTANCE_ID` under case-insensitive normalization and the Terra role lease. Missing/mismatched fields fail closed; this is coordination, not cryptographic authentication.
 - Dependency preparation is Luna-only and must be declared by DISPATCH. Missing/out-of-contract dependencies use ESCALATE/technical_resolution to read-only Terra; parent:pause permits no install, environment mutation, latch clearing, or Luna resume. Initial execution and one authoritative zero-product retry use REQUEST: execution. Audit requires registered execution, explicit product status, matching Luna PASS, and complete matching telemetry.
+- Optional `routing_memory.py decide` records an advisory action after deterministic ELIGIBLE_ACTIONS are fixed; only verified host feedback updates policy-versioned external memory. It never expands authority and changes the default only after both choices have sufficient similar evidence.
 
 ## Integration
 

@@ -125,6 +125,10 @@ A final audit is conditional: it is required when the PLAN_MANIFEST, any risk fl
 
 Declared dependency preparation is Luna-only. Missing/out-of-contract dependencies use `ESCALATE`/`technical_resolution`, never hidden `BLOCKED`/`none` prose. `parent:pause` permits no install, mutation, latch clearing, or resume. Read-only Terra returns unchanged-contract `implementation` advice or sends changes to Sol. Initial execution and one zero-product retry use `REQUEST: execution`; audit requires registered execution, product status, Luna PASS, and matching telemetry.
 
+## Adaptive routing memory
+
+After gates fix `ELIGIBLE_ACTIONS`, `routing_memory.py decide` records an action from bounded similar history and changes the default only when both choices have enough verified evidence. Host `feedback` supplies execution score, outcome, cost, tokens, time, and evidence; unverified/duplicate feedback is rejected. Memory is advisory, policy-versioned, repository-external, and never expands eligibility or overrides authority.
+
 ## Integration
 
 Two or more write batches require shared `integration_owner`, `integration_baseline`, `integration_paths_allow`, and `integration_acceptance`, plus dependency order, a clean integration worktree, and a final combined-state Terra audit. Component PASS is not whole-task PASS. The integration owner combines accepted commits; conflicts or compatibility edits require a new Sol-authorized write batch. Final combined scope uses `N/A (integration-check)` and `N/A (scope-check)` evidence.
@@ -132,16 +136,6 @@ Two or more write batches require shared `integration_owner`, `integration_basel
 ## Execution and human gate
 
 Parallel Luna writers use isolated worktrees; read-only Terra may share a checkout. Sol is recalled only at the EXPANSION_GATE, an exception, a failed predicate, or a user-owned decision. Material objective, product, policy, architecture, security, compatibility, licensing, migration, cost, or irreversible choices return `human_authority` through the parent.
-
-## Contents
-
-| Path | Description |
-|:---|:---|
-| `.agents/skills/lean-dev-router/` | Routing Skill and deterministic runtime guard |
-| `skill-variants/` | Canonical English, Chinese, and optimized variants |
-| `agents/` | Three child profiles: `luna_worker`, `sol_planner`, `terra_auditor` |
-| `scripts/validate_repo.py` | Dependency-free repository consistency checks |
-| `lean-dev-router-self-test-guide.md` | Controlled routing and scope-evidence guide |
 
 ## Roles
 

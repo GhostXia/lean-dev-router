@@ -75,6 +75,7 @@ SUMMARY: concise result
 - 最终审计是条件式能力。PLAN_MANIFEST 声明、任一风险标记或 integration gate 要求审计时，签发方必须在 Luna 前预注册合同；Luna PASS 后 runtime `audit begin` 才启动独立 terra_auditor，parent/planner 不得自审。
 - Audit begin/complete/abandon 必须携带 `AUDITOR_ROLE: terra_auditor`、预注册的 `AUDITOR_INSTANCE_ID` 和匹配的实际执行 `AGENT_INSTANCE_ID`，按大小写无关规则规范化并核对 Terra 角色租约。字段缺失或不匹配即 fail-closed；这是协调约束，不是密码学认证。
 - 依赖准备仅限 DISPATCH 明确声明后由 Luna 执行。缺失或契约外依赖以 ESCALATE/technical_resolution 交给只读 Terra；parent:pause 不允许安装、修改环境、清除 latch 或恢复 Luna。初始执行和一次有权威零产物记录的重试使用 REQUEST: execution。最终审计要求已登记执行、明确产物状态、匹配的 Luna PASS 和完整匹配 telemetry。
+- 可选的 `routing_memory.py decide` 在确定性门禁固定 ELIGIBLE_ACTIONS 后记录建议 action；只有宿主验证的 feedback 才更新按策略版本隔离的仓库外 memory。它不扩大权限，且只有两个选择都积累足够相似证据后才改变默认值。
 
 ## 集成
 

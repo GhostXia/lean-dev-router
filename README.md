@@ -202,6 +202,33 @@ This is a conditional capability of a **Terra High host-model parent**, not a fo
 
 Missing or ineligible evidence fails closed during `start`, before Luna is spawned, and routes `parent:sol`. L3, risk, conflict or integration, multiple components/dispatches/write batches, ambiguity, contract expansion or other change flags, and budget exhaustion also route Sol. B and D are **post-audit finding classes**, not pre-Luna eligibility inputs: if independent Terra later reports either, the parent routes Sol and never sends B/D directly to Luna repair.
 
+#### 🧠 Execution-grounded routing memory
+
+The optional routing memory adapts the paper [Agent-as-a-Router](https://arxiv.org/abs/2606.22902v3) to LDR's stricter authority model. The paper's central finding is that routing is often limited by information deficit rather than router reasoning: verified per-dimension performance statistics improved its vanilla router by 15.3%. Its Context → Action → Feedback → Context loop becomes:
+
+| Paper concept | LDR implementation |
+|:---|:---|
+| Context | Task dimension, language, level, tags, policy version, and guard-approved actions |
+| Action | The advisory route selected by `routing_memory.py decide`, persisted as pending before execution |
+| Feedback | Host-verified outcome, score, monetary cost, tokens, active time, and evidence fingerprint |
+| Updated context | A bounded FIFO memory queried by weighted similarity on later tasks |
+
+This layer is deliberately conservative. The existing deterministic policy first fixes `ELIGIBLE_ACTIONS` and `DEFAULT_ACTION`; memory cannot add an action, make an ineligible parent fast path legal, weaken Sol/risk/audit gates, authorize a write, or substitute the configured Luna/Terra/Sol models. Cold start keeps the declared default. A different action is selected only when both it and the default have at least three similar, verified samples; otherwise the output explains the evidence gap. Failed, blocked, and escalated attempts contribute zero effective performance even if their supplied score is nonzero.
+
+The standard-library CLI lives beside the runtime guard:
+
+```powershell
+$memoryTool = "$env:USERPROFILE/.codex/skills/lean-dev-router/scripts/routing_memory.py"
+$routeMemory = Join-Path $env:TEMP "ldr-routing-memory.json"
+python $memoryTool schema
+Get-Content routing-context.json -Raw | python $memoryTool decide --memory $routeMemory
+Get-Content verified-feedback.json -Raw | python $memoryTool feedback --memory $routeMemory
+```
+
+`decide` uses up to 20 similar completed decisions per action, combines performance and normalized USD cost using caller-supplied weights (`COST_USD` divided by `COST_SCALE_USD`), records the chosen action atomically, and returns a stable decision ID plus per-action statistics. `feedback` accepts only the matching recorded action with `VERIFIED: true`, a score in `[0,1]`, non-negative USD cost/token/time telemetry, and non-empty evidence. Duplicate or unknown decisions fail closed. Entries are isolated by `POLICY_VERSION`, capped at 2,000 by default, and evict only completed records; pending actions are never discarded to make room.
+
+Keep this mutable file outside the repository and serialize writes through one parent. Atomic replacement prevents torn files but is not a multi-writer database. The memory stores explicit task metadata and tags, not raw prompts or source code. Repository tests prove the selector and persistence rules with synthetic feedback; they do not establish real host lifecycle integration. LDR reports observed reward and route outcomes, not the paper's cumulative regret, because regret requires a counterfactual outcome matrix for every eligible model/action.
+
 For every **Luna write task**, distinguish read context from write authorization: `relevant paths` may be inspected, while `BASELINE` plus repository-relative `PATHS_ALLOW` in a valid dispatch defines what may change. The parent may create only the guarded fast path below; every other Luna dispatch comes from Sol.
 
 Before accepting Luna's `PASS`, Sol—or the parent mechanically relaying for Sol—independently checks tracked, standard untracked, and ignored untracked paths:
@@ -335,6 +362,7 @@ flowchart LR
 | Path | Description |
 |:---|:---|
 | `.agents/skills/lean-dev-router/` | Routing Skill plus its standard-library runtime guard |
+| `.agents/skills/lean-dev-router/scripts/routing_memory.py` | Optional C-A-F advisory routing memory with verified feedback |
 | `skill-variants/en/SKILL.md` | Exact copy of the default English root Skill |
 | `skill-variants/zhcn/SKILL.md` | Chinese test variant for replacing the installed root Skill |
 | `skill-variants/en-optimized/SKILL.md` | Structurally deduplicated English E1 experiment |
