@@ -113,7 +113,25 @@ def event(**overrides: object) -> dict[str, object]:
     return value
 
 
+def retry_packet(**overrides: object) -> dict[str, object]:
+    value: dict[str, object] = {
+        "ACTION": "retry",
+        "PLAN_ID": "p-1",
+        "DISPATCH_ID": "d-1",
+        "EXECUTION_ATTEMPT": 2,
+        "REVISION": "a" * 40,
+        "DISPATCH_FINGERPRINT": runtime_guard.fingerprint(dispatch()),
+        "PRODUCT_COUNT": 0,
+    }
+    value.update(overrides)
+    return value
+
+
 class DispatchValidationTests(unittest.TestCase):
+    def test_clean_revision_accepts_any_concrete_git_sha(self) -> None:
+        self.assertEqual(runtime_guard.validate_revision("b" * 40, "a" * 40), [])
+        self.assertEqual(runtime_guard.validate_revision("c" * 64, "a" * 40), [])
+
     def test_schema_cli_exposes_required_usage_fields(self) -> None:
         result = subprocess.run(
             [sys.executable, "-B", str(GUARD_PATH), "schema"],
@@ -122,6 +140,7 @@ class DispatchValidationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         schema = json.loads(result.stdout)
         self.assertIn("CACHED_INPUT_TOKENS", schema["event_fields"])
+        self.assertEqual(schema["terminal_event_fields"], ["PRODUCT_COUNT"])
         self.assertEqual(schema["default_budget"]["MODEL_CALL_LIMIT"], 8)
         for packet in ("audit_begin_fields", "audit_complete_fields", "audit_abandon_fields"):
             self.assertIn("AUDITOR_ROLE", schema[packet])
@@ -211,7 +230,6 @@ class DispatchValidationTests(unittest.TestCase):
             "<luna-revision>",
             "worktree-sha256:" + "B" * 64,
             "worktree-sha256:" + "b" * 63,
-            "c" * 40,
         ):
             value = dispatch()
             value["REVISION"] = revision
@@ -291,14 +309,55 @@ class DispatchValidationTests(unittest.TestCase):
             self.assertEqual(json.loads(duplicate_start.stdout)["reason"], "state_already_exists")
             observed = subprocess.run(
                 [sys.executable, "-B", str(GUARD_PATH), "event", "--state", str(state)],
-                input=json.dumps(event(PROGRESS_FINGERPRINT="p", OUTCOME="pass")),
+                input=json.dumps(event(PROGRESS_FINGERPRINT="p", OUTCOME="pass", PRODUCT_COUNT=1)),
                 text=True, capture_output=True, check=False,
                 timeout=30,
             )
             self.assertEqual(observed.returncode, 0, observed.stderr)
             self.assertFalse(state.with_name(state.name + ".tmp").exists())
             snapshot = json.loads(state.read_text(encoding="utf-8"))
+            self.assertEqual(snapshot["execution_attempts"], 1)
+            self.assertEqual(snapshot["execution_history"][0]["status"], "completed")
             self.assertEqual(next(iter(snapshot["stages"].values()))["termination_reason"], "pass")
+
+    def test_execution_retry_requires_authoritative_zero_product_completion(self) -> None:
+        never_started = runtime_guard.RuntimeGuard(dispatch())
+        required = never_started.validate_audit_prerequisites({})
+        self.assertEqual(required["reason"], "execution_required")
+        self.assertEqual(required["destination"], "parent:luna")
+
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        self.assertTrue(guard.register_initial_execution()["allowed"])
+        missing = guard.observe(
+            event(REVISION="a" * 40, OUTCOME="blocked", PROGRESS_FINGERPRINT="blocked")
+        )
+        self.assertEqual(missing["reason"], "product_telemetry_missing")
+        uncertain = guard.validate_audit_prerequisites({})
+        self.assertEqual(uncertain["reason"], "execution_telemetry_missing")
+        self.assertEqual(uncertain["destination"], "parent:pause")
+
+        completed = guard.observe(
+            event(
+                REVISION="a" * 40, OUTCOME="blocked",
+                PROGRESS_FINGERPRINT="blocked", PRODUCT_COUNT=0,
+            )
+        )
+        self.assertEqual(completed["reason"], "blocked")
+        retry_required = guard.validate_audit_prerequisites({})
+        self.assertEqual(retry_required["reason"], "execution_retry_required")
+        retry = guard.register_execution(retry_packet())
+        self.assertTrue(retry["allowed"])
+        self.assertEqual(retry["execution_attempt"], 2)
+
+        missing_product = retry_packet(EXECUTION_ATTEMPT=3)
+        missing_product.pop("PRODUCT_COUNT")
+        invalid = guard.register_execution(missing_product)
+        self.assertEqual(invalid["reason"], "invalid_execution")
+        self.assertTrue(any("zero product" in error for error in invalid["errors"]))
+
+        changed_revision = retry_packet(REVISION="b" * 40)
+        changed = runtime_guard.validate_execution(changed_revision, dispatch())
+        self.assertTrue(any("unchanged clean BASELINE" in error for error in changed))
 
     def test_non_sol_dispatch_authority_is_rejected(self) -> None:
         value = dispatch()
@@ -471,10 +530,10 @@ class RuntimeBudgetTests(unittest.TestCase):
         guard = runtime_guard.RuntimeGuard(dispatch())
         guard.observe(event(PROGRESS_FINGERPRINT="p-1"))
         guard.observe(event(PROGRESS_FINGERPRINT="p-2"))
-        result = guard.observe(event(PROGRESS_FINGERPRINT="p-3", OUTCOME="pass"))
+        result = guard.observe(event(PROGRESS_FINGERPRINT="p-3", OUTCOME="pass", PRODUCT_COUNT=1))
         self.assertTrue(result["allowed"])
         self.assertEqual(result["reason"], "stage_complete")
-        duplicate = guard.observe(event(PROGRESS_FINGERPRINT="p-3", OUTCOME="pass"))
+        duplicate = guard.observe(event(PROGRESS_FINGERPRINT="p-3", OUTCOME="pass", PRODUCT_COUNT=1))
         self.assertFalse(duplicate["allowed"])
         self.assertEqual(duplicate["reason"], "duplicate_terminal_stage")
 
@@ -518,7 +577,10 @@ class RuntimeBudgetTests(unittest.TestCase):
         blocked = guard.observe(event())
         self.assertEqual(blocked["reason"], "escalation_latch")
         resumed = guard.observe(
-            event(EVIDENCE_FINGERPRINT="e-2", PROGRESS_FINGERPRINT="new", OUTCOME="pass")
+            event(
+                EVIDENCE_FINGERPRINT="e-2", PROGRESS_FINGERPRINT="new",
+                OUTCOME="pass", PRODUCT_COUNT=1,
+            )
         )
         self.assertTrue(resumed["allowed"])
         self.assertEqual(resumed["telemetry"]["model_calls"], 3)
@@ -541,6 +603,67 @@ class RuntimeBudgetTests(unittest.TestCase):
 
 
 class RepairAndAuditTests(unittest.TestCase):
+    def luna_pass(
+        self, guard: runtime_guard.RuntimeGuard, **overrides: object
+    ) -> dict[str, object]:
+        if not guard.execution_history:
+            self.assertTrue(guard.register_initial_execution()["allowed"])
+        values: dict[str, object] = {
+            "REVISION": "a" * 40,
+            "OUTCOME": "pass",
+            "PROGRESS_FINGERPRINT": "luna-pass",
+            "PRODUCT_COUNT": 1,
+            "SCOPE_EVIDENCE": "scope-pass",
+            "REPLAY_EVIDENCE": "replay-pass",
+            "DEPENDENCIES": [],
+        }
+        values.update(overrides)
+        result = guard.observe(
+            event(**values)
+        )
+        self.assertTrue(result["allowed"])
+        assert guard.luna_pass is not None
+        return guard.luna_pass
+
+    def test_audit_rejects_unregistered_execution_even_with_synthetic_pass(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        result = guard.observe(
+            event(
+                REVISION="a" * 40,
+                OUTCOME="pass",
+                PROGRESS_FINGERPRINT="synthetic-pass",
+                PRODUCT_COUNT=1,
+            )
+        )
+        self.assertTrue(result["allowed"])
+        rejected = guard.validate_audit_prerequisites(self.audit_packet(guard))
+        self.assertEqual(rejected["reason"], "execution_registration_missing")
+        self.assertEqual(rejected["destination"], "parent:sol")
+
+    def audit_packet(self, guard: runtime_guard.RuntimeGuard, **overrides: object) -> dict[str, object]:
+        evidence = guard.luna_pass or {}
+        packet: dict[str, object] = {
+            "ACTION": "begin",
+            "PLAN_ID": "p-1",
+            "DISPATCH_ID": "d-1",
+            "REVISION": "a" * 40,
+            "AUDITOR_ROLE": "terra_auditor",
+            "AUDITOR_INSTANCE_ID": "terra-audit-1",
+            "AGENT_INSTANCE_ID": "terra-audit-1",
+            "AUDIT_SCOPE": ["src/one.py"],
+            "AUDIT_MODE": "full",
+            "LUNA_STATUS": "PASS",
+            "LUNA_DISPATCH_ID": "d-1",
+            "LUNA_REVISION": evidence.get("REVISION", ""),
+            "LUNA_EVIDENCE_FINGERPRINT": evidence.get("EVIDENCE_FINGERPRINT", ""),
+            "SCOPE_EVIDENCE": "scope-pass",
+            "REPLAY_EVIDENCE": "replay-pass",
+            "DEPENDENCIES": [],
+            "TELEMETRY": evidence.get("TELEMETRY", {}),
+        }
+        packet.update(overrides)
+        return packet
+
     def repair(self, **overrides: object) -> dict[str, object]:
         value: dict[str, object] = {
             "PLAN_ID": "p-1",
@@ -601,22 +724,15 @@ class RepairAndAuditTests(unittest.TestCase):
 
     def test_same_revision_audit_is_registered_once(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
-        packet = {
-            "ACTION": "begin",
-            "PLAN_ID": "p-1",
-            "DISPATCH_ID": "d-1",
-            "REVISION": "r-2",
-            "AUDITOR_ROLE": "terra_auditor",
-            "AUDITOR_INSTANCE_ID": "terra-audit-1",
-            "AGENT_INSTANCE_ID": "terra-audit-1",
-            "AUDIT_SCOPE": ["src/one.py", "callers"],
-            "AUDIT_MODE": "full",
-        }
+        self.luna_pass(guard)
+        packet = self.audit_packet(guard, AUDIT_SCOPE=["src/one.py", "callers"])
         self.assertTrue(guard.begin_audit(packet)["allowed"])
         duplicate = guard.begin_audit(packet)
         self.assertFalse(duplicate["allowed"])
         self.assertEqual(duplicate["reason"], "duplicate_audit_revision")
-        concurrent = guard.begin_audit(dict(packet, REVISION="r-3"))
+        concurrent = guard.begin_audit(
+            dict(packet, REVISION="b" * 40, LUNA_REVISION="b" * 40)
+        )
         self.assertFalse(concurrent["allowed"])
         self.assertEqual(concurrent["reason"], "audit_already_running")
 
@@ -624,7 +740,7 @@ class RepairAndAuditTests(unittest.TestCase):
             "ACTION": "complete",
             "PLAN_ID": "p-1",
             "DISPATCH_ID": "d-1",
-            "REVISION": "r-2",
+            "REVISION": "a" * 40,
             "AUDITOR_ROLE": "terra_auditor",
             "AUDITOR_INSTANCE_ID": "terra-audit-1",
             "AGENT_INSTANCE_ID": "terra-audit-1",
@@ -633,49 +749,79 @@ class RepairAndAuditTests(unittest.TestCase):
             "UNVERIFIED": [],
         }
         self.assertTrue(guard.audit_job(complete)["allowed"])
-        incremental = dict(
-            packet,
-            REVISION="r-3",
+        next_revision = "b" * 40
+        self.luna_pass(
+            guard,
+            REVISION=next_revision,
+            EVIDENCE_FINGERPRINT="e-2",
+            PROGRESS_FINGERPRINT="luna-pass-2",
+        )
+        incremental = self.audit_packet(
+            guard,
+            REVISION=next_revision,
             AUDIT_MODE="incremental",
-            PREVIOUS_REVISION="r-2",
+            PREVIOUS_REVISION="a" * 40,
             UNRESOLVED_FINDINGS=[],
         )
         self.assertTrue(guard.audit_job(incremental)["allowed"])
 
+    def test_audit_requires_matching_luna_pass_and_prerequisites(self) -> None:
+        guard = runtime_guard.RuntimeGuard(dispatch())
+        packet = self.audit_packet(guard)
+        missing = guard.begin_audit(packet)
+        self.assertEqual(missing["request"], "execution")
+        self.luna_pass(guard)
+        incomplete = guard.begin_audit(dict(packet, SCOPE_EVIDENCE=""))
+        self.assertEqual(incomplete["destination"], "parent:sol")
+        mismatched = guard.begin_audit(
+            dict(self.audit_packet(guard), LUNA_EVIDENCE_FINGERPRINT="wrong")
+        )
+        self.assertEqual(mismatched["destination"], "parent:sol")
+        telemetry = dict(self.audit_packet(guard)["TELEMETRY"])
+        telemetry["input_tokens"] = int(telemetry["input_tokens"]) + 1
+        mismatched_telemetry = guard.begin_audit(
+            dict(self.audit_packet(guard), TELEMETRY=telemetry)
+        )
+        self.assertEqual(mismatched_telemetry["reason"], "audit_prerequisite_failed")
+        self.assertTrue(
+            any("complete recorded PASS telemetry" in error for error in mismatched_telemetry["errors"])
+        )
+
     def test_changed_revision_rejects_full_reaudit(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
-        begin = {
-            "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-            "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
-            "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
-            "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
-        }
+        self.luna_pass(guard)
+        begin = self.audit_packet(guard)
         guard.audit_job(begin)
         guard.audit_job(
             {
                 "ACTION": "complete", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-                "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+                "REVISION": "a" * 40, "AUDITOR_ROLE": "terra_auditor",
                 "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
                 "TERMINATION_REASON": "pass", "VERIFIED": [], "UNVERIFIED": [],
             }
         )
-        result = guard.audit_job(dict(begin, REVISION="r-3"))
+        next_revision = "b" * 40
+        self.luna_pass(
+            guard,
+            REVISION=next_revision,
+            EVIDENCE_FINGERPRINT="e-2",
+            PROGRESS_FINGERPRINT="luna-pass-2",
+        )
+        result = guard.audit_job(
+            self.audit_packet(guard, REVISION=next_revision, AUDIT_MODE="full")
+        )
         self.assertFalse(result["allowed"])
         self.assertEqual(result["reason"], "invalid_incremental_audit")
 
     def test_abandoned_audit_releases_slot_without_incremental_baseline(self) -> None:
         guard = runtime_guard.RuntimeGuard(dispatch())
-        begin = {
-            "ACTION": "begin", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-            "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
-            "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
-            "AUDIT_SCOPE": ["src/one.py"], "AUDIT_MODE": "full",
-        }
+        self.luna_pass(guard)
+        begin = self.audit_packet(guard)
         self.assertTrue(guard.audit_job(begin)["allowed"])
         abandoned = guard.audit_job(
             {
                 "ACTION": "abandon", "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-                "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+                "REVISION": "a" * 40, "AUDITOR_ROLE": "terra_auditor",
                 "AUDITOR_INSTANCE_ID": "terra-audit-1", "AGENT_INSTANCE_ID": "terra-audit-1",
                 "TERMINATION_REASON": "model_call_limit",
             }
@@ -684,7 +830,16 @@ class RepairAndAuditTests(unittest.TestCase):
         self.assertEqual(abandoned["reason"], "audit_abandoned")
         self.assertEqual(abandoned["destination"], "parent:sol")
         self.assertEqual(guard.last_completed_audits, {})
-        next_audit = guard.audit_job(dict(begin, REVISION="r-3"))
+        next_revision = "b" * 40
+        self.luna_pass(
+            guard,
+            REVISION=next_revision,
+            EVIDENCE_FINGERPRINT="e-2",
+            PROGRESS_FINGERPRINT="luna-pass-2",
+        )
+        next_audit = guard.audit_job(
+            self.audit_packet(guard, REVISION=next_revision, AUDIT_MODE="full")
+        )
         self.assertTrue(next_audit["allowed"])
 
     def test_abandon_rejects_wrong_identity_and_non_running_job(self) -> None:
@@ -719,10 +874,12 @@ class RepairAndAuditTests(unittest.TestCase):
 
         for action in ("complete", "abandon"):
             guard = runtime_guard.RuntimeGuard(dispatch())
-            self.assertTrue(guard.audit_job(begin)["allowed"])
+            self.luna_pass(guard)
+            valid_begin = self.audit_packet(guard)
+            self.assertTrue(guard.audit_job(valid_begin)["allowed"])
             terminal = {
                 "ACTION": action, "PLAN_ID": "p-1", "DISPATCH_ID": "d-1",
-                "REVISION": "r-2", "AUDITOR_ROLE": "terra_auditor",
+                "REVISION": "a" * 40, "AUDITOR_ROLE": "terra_auditor",
                 "AUDITOR_INSTANCE_ID": "TERRA-AUDIT-1", "AGENT_INSTANCE_ID": "terra-audit-1",
                 "TERMINATION_REASON": "pass" if action == "complete" else "blocked",
             }

@@ -43,7 +43,7 @@ PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
-REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
+REQUEST: none | execution | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path
   proof: command -> PASS/FAIL
@@ -62,7 +62,7 @@ SUMMARY: concise result
 | `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
 | `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
 | `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
-| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `execution` | `parent:luna` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
 
 ## 快速路径资格
@@ -74,6 +74,7 @@ SUMMARY: concise result
 - L3、B/D、耗尽或契约/范围变化路由 parent:sol；B 不得进入 Luna 修复。
 - 最终审计是条件式能力。PLAN_MANIFEST 声明、任一风险标记或 integration gate 要求审计时，签发方必须在 Luna 前预注册合同；Luna PASS 后 runtime `audit begin` 才启动独立 terra_auditor，parent/planner 不得自审。
 - Audit begin/complete/abandon 必须携带 `AUDITOR_ROLE: terra_auditor`、预注册的 `AUDITOR_INSTANCE_ID` 和匹配的实际执行 `AGENT_INSTANCE_ID`，按大小写无关规则规范化并核对 Terra 角色租约。字段缺失或不匹配即 fail-closed；这是协调约束，不是密码学认证。
+- 依赖准备仅限 DISPATCH 明确声明后由 Luna 执行。缺失或契约外依赖以 ESCALATE/technical_resolution 交给只读 Terra；parent:pause 不允许安装、修改环境、清除 latch 或恢复 Luna。初始执行和一次有权威零产物记录的重试使用 REQUEST: execution。最终审计要求已登记执行、明确产物状态、匹配的 Luna PASS 和完整匹配 telemetry。
 
 ## 集成
 
@@ -81,4 +82,4 @@ SUMMARY: concise result
 
 ## 最终门禁
 
-Luna 前运行 runtime_guard.py start；parent 快速路径还传入上述宿主持有的 instance/model/reasoning 参数。非法 packet 在 Luna 前路由 parent:sol；若 Luna 被错误调用，则不得检查或写入，并返回 BLOCKED/none 到 parent:pause。仅在声明审计时，于 Luna PASS 后运行 runtime `audit begin`。随后运行 `python scripts/validate_repo.py` 和 unittest。范围证据使用 `python scripts/check_scope.py`；脏 revision 使用 `worktree-sha256:<64 lowercase hex>`。Terra A 修复必须有 CONTRACT_EFFECT: unchanged。
+Luna 前运行 runtime_guard.py start，由它原子登记第 1 次执行。宿主必须通过 runtime `event` 提交终态 PRODUCT_COUNT 以及精确的调用/时间/token telemetry；仓库单元测试只证明 guard 逻辑，不证明宿主集成。parent 快速路径还传入上述宿主持有的 instance/model/reasoning 参数。非法 packet 在 Luna 前路由 parent:sol；若 Luna 被错误调用，则不得检查或写入，并返回 BLOCKED/none 到 parent:pause。仅在声明审计时，于 Luna PASS 后运行 runtime `audit begin`。随后运行 `python scripts/validate_repo.py` 和 unittest。范围证据使用 `python scripts/check_scope.py`；脏 revision 使用 `worktree-sha256:<64 lowercase hex>`。Terra A 修复必须有 CONTRACT_EFFECT: unchanged。

@@ -86,7 +86,7 @@ PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
-REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
+REQUEST: none | execution | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or `command` -> PASS/FAIL
@@ -115,7 +115,7 @@ Agent 返回的出站交接包含状态、失败类型、能力请求、证据�
 | `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
 | `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
 | `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
-| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `execution` | `parent:luna` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
 
 升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验范围、稳定 revision、依赖与 replay；若签发方已预注册审计，则直接启动独立 Terra。只有满足同一 dispatch、契约/验收不变、路径在范围内且修复预算尚存的 A finding 可交回原 Luna；B/D、范围、方案、验收、公共接口、架构、安全边界、数据格式、资源限制、歧义或耗尽都回 Sol。只有 Sol 可以请求用户决策。
@@ -184,7 +184,11 @@ git ls-files --others --ignored --exclude-standard
 
 Terra 的读取范围必须宽于改动范围：沿调用关系、数据/错误/资源流、配置、平台兼容、并发、安全、性能与测试调查。审计发现分为 A（改动导致的验收缺陷）、B（完成目标所需但遗漏的路径）、C（无关既存问题，通常仅跟进）、D（严重安全/数据丢失/兼容风险）。只有 dispatch 身份相同、契约/验收不变、affected paths 在范围内且仍有修复预算的 A 可返原 Luna；B、D 与任何契约变化都回 Sol。最终审计是条件式门禁，不要求每个任务都执行：PLAN_MANIFEST、任一风险标记或 integration gate 声明需要时，签发方必须在 Luna 前预注册审计合同；Luna `PASS` 且机械门禁通过后，parent 才运行 runtime `audit begin` 并启动身份独立的 `terra_auditor`。每个 audit begin/complete/abandon 包都携带 `AUDITOR_ROLE: terra_auditor`、预注册的 `AUDITOR_INSTANCE_ID` 和匹配的实际执行 `AGENT_INSTANCE_ID`；大小写无关身份或角色租约不一致均 fail-closed。这些字段是协调约束，不是密码学认证。已声明的最终审计不得由 parent 或 planner 自审。
 
-父会话在首次 Luna 调用前只执行一次 Skill 内置的 `scripts/runtime_guard.py start`；`start` 原子完成确定性预检与状态初始化，正常执行不得再增加一次独立 preflight。无状态 `preflight` 子命令只用于验证模板与已安装运行时。后续返工和审计在同一状态文件上使用相应子命令，不能重建状态。普通 Sol dispatch 的上限依次为 8 次模型调用、4 个不同假设、1200 秒模型主动时间、2 轮返工和 2 次停滞调用；parent 快速路径为更严格的 4/2/600/1/1，签发方只能收紧。每次调用记录角色/阶段、wall/主动时间、上游尝试、各类 token、假设、命令/错误及进展/证据。同一失败没有进展立即停止；达到适用的停滞上限触发 `spinning`。只有 revision、契约版本或证据改变才能解锁；任何耗尽都回 Sol，父会话不得代写。
+父会话在首次 Luna 调用前只执行一次 Skill 内置的 `scripts/runtime_guard.py start`；`start` 原子完成确定性预检、状态初始化并登记第 1 次执行，正常执行不得再增加一次独立 preflight。无状态 `preflight` 子命令只用于验证模板与已安装运行时。后续零产物重试、返工和审计在同一状态文件上使用相应子命令，不能重建状态。普通 Sol dispatch 的上限依次为 8 次模型调用、4 个不同假设、1200 秒模型主动时间、2 轮返工和 2 次停滞调用；parent 快速路径为更严格的 4/2/600/1/1，签发方只能收紧。每次调用记录角色/阶段、wall/主动时间、上游尝试、各类 token、假设、命令/错误及进展/证据。同一失败没有进展立即停止；达到适用的停滞上限触发 `spinning`。只有 revision、契约版本或证据改变才能解锁；任何耗尽都回 Sol，父会话不得代写。
+
+每次 Luna 终止后，宿主必须提交一条来自宿主的 runtime `event`，其中显式包含 `PRODUCT_COUNT` 和精确的调用次数、模型主动/墙钟时间、上游尝试及全部 token/cache telemetry。缺少产物字段表示未知，绝不能当作零；缺少完成 telemetry 时暂停，不能静默重试。最终审计必须核对已登记执行、有产物且匹配的 Luna PASS、具体 revision、scope/replay/依赖证据，以及完整 telemetry 的精确一致性。仓库单元测试使用合成事件，只证明 guard 逻辑，不证明 Codex 宿主或其他 harness 已安装这些生命周期 hook。
+
+依赖准备只能由 Luna 执行，而且必须由 DISPATCH 明确声明。缺失或契约外依赖由 Luna 以 `ESCALATE/technical_resolution` 交给只读 Terra；`parent:pause` 不授权安装、修改环境、清除 latch 或恢复 Luna。Terra 可以返回契约不变的有界建议；依赖声明或其他契约变化必须回 Sol。初始执行和一次同 DISPATCH 的零产物重试使用结构化 `execution` 能力，不能用返工黑话代替。
 
 宿主能提供时间戳时，记录组件就绪与下一阶段启动时间。有空闲容量时应在 60 秒内启动；否则记录排队状态与原因，并在第一个符合条件的槽位释放时启动。把编译、CI、网络等外部等待与可控 handoff 延迟分开报告，parent 执行长命令时仍应及时消费完成事件。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
 

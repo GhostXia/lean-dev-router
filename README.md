@@ -124,7 +124,7 @@ PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
-REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
+REQUEST: none | execution | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or `command` -> PASS/FAIL
@@ -156,7 +156,7 @@ The closed handoff table is authoritative:
 | `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
 | `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
 | `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
-| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `execution` | `parent:luna` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
 
 `NEXT` always returns the result to the parent. `REQUEST` carries only the capability needed next and never authorizes a write. The parent applies the authoritative state table mechanically; invalid combinations are rejected instead of inferred from prose. Sol owns engineering decisions but does not continuously schedule routine events.
@@ -184,7 +184,11 @@ Terra's read-only guarantee depends on Codex enforcing its configured read-only 
 
 The hard entry gate is the valid inbound `DISPATCH`. The primary scope control is **Sol's Todo/DISPATCH decomposition plus precise Luna instructions**. Each write batch should be independently verifiable, path-bounded, dependency-aware, and independently retryable—without splitting work merely for ceremony. This matters even more when CI is absent. The path check below is a **low-frequency secondary fuse**, not the main scheduler.
 
-Before the first Luna call, the parent feeds the complete JSON dispatch once to the installed Skill's `scripts/runtime_guard.py start --state <external-scratch-state>`. For a parent fast-path packet, the host also passes the trusted instance/model/reasoning options above; ordinary Sol packets do not use them. `start` performs deterministic preflight and state initialization atomically; normal execution must not add a separate preflight call. The stateless `preflight` subcommand is for validating templates and installed runtimes and uses the same trusted-parent options when validating a parent packet. Repair and audit packets use their subcommands against the same state; restarting is rejected. Exit code 2 means no target child is spawned. The guard persists identity leases, finite budgets, latches, repair cycles, audit revision keys, and per-role/stage telemetry outside the target repository. Run `runtime_guard.py schema` for required fields and `snapshot --state ...` for accumulated telemetry.
+Before the first Luna call, the parent feeds the complete JSON dispatch once to the installed Skill's `scripts/runtime_guard.py start --state <external-scratch-state>`. For a parent fast-path packet, the host also passes the trusted instance/model/reasoning options above; ordinary Sol packets do not use them. `start` performs deterministic preflight, atomically initializes state, and registers execution attempt 1; normal execution must not add a separate preflight call. The stateless `preflight` subcommand is for validating templates and installed runtimes and uses the same trusted-parent options when validating a parent packet. Repair, bounded zero-product retry, and audit packets use their subcommands against the same state; restarting is rejected. Exit code 2 means no target child is spawned. The guard persists identity leases, finite budgets, latches, execution history, repair cycles, audit revision keys, and per-role/stage telemetry outside the target repository. Run `runtime_guard.py schema` for required fields and `snapshot --state ...` for accumulated telemetry.
+
+Every terminal Luna invocation must be followed by a host-originated `event` containing an explicit `PRODUCT_COUNT` plus exact call, active/wall-time, upstream-attempt, and token/cache telemetry. Missing product evidence is unknown, never zero; missing completion telemetry pauses instead of silently retrying. Final audit requires the registered attempt, a product-bearing matching Luna PASS, concrete revision, scope/replay/dependency evidence, and an exact match to the complete recorded telemetry. The repository unit tests use synthetic events and prove guard behavior only; they are not evidence that a Codex host or another harness has installed these lifecycle hooks.
+
+Dependency preparation is Luna-only and must be declared by the DISPATCH. A missing or out-of-contract dependency routes through Luna `ESCALATE/technical_resolution` to read-only Terra. `parent:pause` authorizes no installation, environment mutation, latch clearing, or Luna resume. Terra may return bounded unchanged-contract advice; a dependency declaration or other contract change returns to Sol. Initial execution and the single unchanged-dispatch zero-product retry use the structured `execution` capability, never repair prose.
 
 #### ⚡ Parent Fast Path
 

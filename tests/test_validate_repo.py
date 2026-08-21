@@ -175,6 +175,30 @@ class ValidatorContractTests(unittest.TestCase):
             validate_repo.validate_agents()
             self.assertTrue(any("expected model='gpt-5.6-luna'" in item for item in validate_repo.ERRORS))
 
+    def test_validate_agents_rejects_removed_dependency_boundaries(self) -> None:
+        paths = (
+            "agents/luna-worker.toml",
+            "agents/sol-planner.toml",
+            "agents/terra-auditor.toml",
+        )
+        anchors = {
+            "agents/luna-worker.toml": "dependency preparation only when the DISPATCH explicitly declares",
+            "agents/sol-planner.toml": "Declare every dependency-preparation command",
+            "agents/terra-auditor.toml": "Stay read-only during pre-PASS technical resolution",
+        }
+        for target, anchor in anchors.items():
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                root = self.copy_fixture(directory, *paths)
+                profile = root / target
+                source = profile.read_text(encoding="utf-8")
+                self.assertIn(anchor, source)
+                profile.write_text(source.replace(anchor, "removed", 1), encoding="utf-8")
+                validate_repo.ERRORS.clear()
+                validate_repo.validate_agents()
+                self.assertTrue(
+                    any(target in item and anchor in item for item in validate_repo.ERRORS)
+                )
+
     def test_validate_skill_rejects_canonical_variant_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths = (
@@ -192,6 +216,26 @@ class ValidatorContractTests(unittest.TestCase):
             )
             validate_repo.validate_skill()
             self.assertTrue(any("must exactly match" in item for item in validate_repo.ERRORS))
+
+    def test_validate_skill_rejects_removed_execution_lifecycle_anchor(self) -> None:
+        paths = (
+            ".agents/skills/lean-dev-router/SKILL.md",
+            "skill-variants/en/SKILL.md",
+            "skill-variants/zhcn/SKILL.md",
+            "skill-variants/en-optimized/SKILL.md",
+            "skill-variants/zhcn-optimized/SKILL.md",
+        )
+        for anchor in ("PRODUCT_COUNT", "REQUEST: execution"):
+            with self.subTest(anchor=anchor), tempfile.TemporaryDirectory() as directory:
+                root = self.copy_fixture(directory, *paths)
+                for relative in paths[:2]:
+                    path = root / relative
+                    source = path.read_text(encoding="utf-8")
+                    self.assertIn(anchor, source)
+                    path.write_text(source.replace(anchor, "removed", 1), encoding="utf-8")
+                validate_repo.ERRORS.clear()
+                validate_repo.validate_skill()
+                self.assertTrue(any(anchor in item for item in validate_repo.ERRORS))
 
     def test_validate_handoff_table_rejects_missing_routes(self) -> None:
         validate_repo.validate_handoff_table(

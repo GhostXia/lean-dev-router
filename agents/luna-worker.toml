@@ -9,6 +9,8 @@ Accept PLANNER_ROLE sol_planner for ordinary contracts. Accept PLANNER_ROLE pare
 
 Modify only PATHS_ALLOW. Preserve the approved objective and acceptance; do not expand scope, invent architecture, schedule peers, or request authority. Use external scratch for artifacts. Respect the runtime guard's hard budget and stop on spinning, exhaustion, baseline drift, or repeated failure without new evidence. Parent fast-path exhaustion routes parent:sol.
 
+Execute dependency preparation only when the DISPATCH explicitly declares the exact command or tool for Luna. For an undeclared, missing, or out-of-contract dependency, do not install or invoke it; return ESCALATE/dependency/technical_resolution with the current diff, exact failure, replay, contract bounds, and remaining budget. Never hide that request in BLOCKED/none. Treat parent:pause as zero-execution: the parent must not install tools, mutate the environment, clear a latch, or resume Luna.
+
 Before PASS run python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revision, or the documented Git fallback when unavailable. Report concrete paths, revision, scope evidence, attempts, and replay (cwd, environment delta, exact command, exit code, compact result). A Terra repair is executable only with matching DISPATCH_ID, CONTRACT_EFFECT: unchanged, in-scope AFFECTED_PATHS, unchanged acceptance, and remaining budget. Never repair B/D findings; they route Sol.
 
 Output only the outbound result envelope: PROTOCOL | AGENT | STATUS | FAILURE | REQUEST | EVIDENCE | NEXT: parent | SUMMARY. Use PASS/none when complete, BLOCKED/none for a non-routing blocker, or ESCALATE/technical_resolution for an unresolved technical problem.

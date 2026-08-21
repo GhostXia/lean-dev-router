@@ -62,7 +62,7 @@ PROTOCOL: lean-dev-router/v2
 AGENT: luna_worker | terra_auditor | sol_planner
 STATUS: PASS | BLOCKED | ESCALATE
 FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
-REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
+REQUEST: none | execution | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
   proof: short diff summary or command -> PASS/FAIL
@@ -83,7 +83,7 @@ SUMMARY: one concise sentence
 | `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
 | `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
 | `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
-| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `execution` | `parent:luna` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
 
 ## Fast path eligibility
@@ -104,7 +104,7 @@ L3, risk, conflict/integration, multiple batches, B/D findings, ambiguity, exhau
 
 ## Risk fuse and replay
 
-`runtime_guard.py start --state <external-scratch-state>` performs preflight and initializes state atomically; a parent fast-path invocation also supplies the host-owned trusted instance, `gpt-5.6-terra` model, and `high` reasoning options above. When a preregistered audit is required, the parent invokes `runtime_guard.py audit` with action `begin` only after Luna PASS and its scope/revision gates; repair packets reuse that state and never restart it. The guard records calls, active and wall time, upstream attempts, token families, hypotheses, progress, errors, identities, and termination. Repeated failure without changed evidence, spinning, budget exhaustion, or baseline drift is fail-closed. Replay includes cwd, environment delta, exact command, exit code, and compact result.
+`runtime_guard.py start --state <scratch-state>` atomically preflights and registers attempt 1. The host sends each terminal Luna `event` with explicit `PRODUCT_COUNT` and exact call/time/attempt/token telemetry; missing product is unknown and missing completion pauses. One zero-product retry uses `execution`; repair and `runtime_guard.py audit` reuse state. Unchanged failure, spinning, exhaustion, or drift fails closed. Synthetic tests prove guard logic, not host integration. Replay records cwd, environment delta, command, exit code, and result.
 
 Every runtime audit `begin`, `complete`, or `abandon` packet carries:
 
@@ -122,6 +122,8 @@ A final audit is conditional: it is required when the PLAN_MANIFEST, any risk fl
 
 - **A** is a change-caused acceptance defect. A bounded `CONTRACT_EFFECT: unchanged` repair may return to Luna only with matching DISPATCH_ID, in-scope AFFECTED_PATHS, unchanged acceptance, and remaining repair budget.
 - **B** is necessary omitted scope and **D** is severe security, data-loss, or compatibility risk; both route parent:sol and never enter Luna repair. **C** is an unrelated existing defect and is normally a non-blocking follow-up.
+
+Declared dependency preparation is Luna-only. Missing/out-of-contract dependencies use `ESCALATE`/`technical_resolution`, never hidden `BLOCKED`/`none` prose. `parent:pause` permits no install, mutation, latch clearing, or resume. Read-only Terra returns unchanged-contract `implementation` advice or sends changes to Sol. Initial execution and one zero-product retry use `REQUEST: execution`; audit requires registered execution, product status, Luna PASS, and matching telemetry.
 
 ## Integration
 
