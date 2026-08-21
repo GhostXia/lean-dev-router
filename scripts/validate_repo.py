@@ -425,13 +425,22 @@ def validate_agents() -> None:
             required = (
                 "valid inbound DISPATCH", "BLOCKED/none", "parent:pause",
                 "PATHS_ALLOW", "runtime guard", "check_scope.py",
+                "dependency preparation only when the DISPATCH explicitly declares",
+                "must not install tools", "ESCALATE/dependency/technical_resolution",
             )
         elif name == "sol_planner":
-            required = ("PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE", "PLANNER_CAPABILITY", "bounded_l1_l2_dispatch", "human_authority")
+            required = (
+                "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
+                "PLANNER_CAPABILITY", "bounded_l1_l2_dispatch", "human_authority",
+                "Declare every dependency-preparation command", "BLOCKED/execution",
+                "parent must not install tools",
+            )
         else:
             required = (
                 "read-only", "AUDIT_SCOPE/IMPACT_CONE", "A =", "B =", "C =", "D =",
                 "independent", *AUDIT_IDENTITY_FIELDS,
+                "Stay read-only during pre-PASS technical resolution",
+                "never install", "ESCALATE/planning_resolution",
             )
         for term in required:
             if term not in instructions:
@@ -558,14 +567,21 @@ def validate_skill() -> None:
         "N/A (batch coverage)", "integration_owner", "integration_baseline", "integration_paths_allow",
         "integration_acceptance", "python scripts/check_scope.py", "worktree-sha256:<64 lowercase hex>",
         "runtime_guard.py start", "runtime_guard.py audit", "CONTRACT_EFFECT: unchanged",
+        "PRODUCT_COUNT", "parent:pause", "REQUEST: execution", "technical_resolution",
     )
     titles = {"Lean Dev Router", "Authority and entry", "Protocol", "Fast path eligibility", "Scope, artifacts, and revision", "Risk fuse and replay", "Terra causal audit and repair", "Integration", "Execution and human gate"}
     for relative in (root, english):
         validate_skill_document(relative, common, titles)
     chinese_titles = {"Lean Dev Router", "权限与入口", "协议", "快速路径资格", "范围、产物与版本", "风险熔断与复现", "Terra 因果审计与修复", "集成", "执行与用户门禁"}
     validate_skill_document(chinese, common, chinese_titles)
+    optimized_common = (
+        "name: lean-dev-router", "PROTOCOL: lean-dev-router/v2",
+        PARENT_FAST_PATH_CAPABILITY, "PLAN_MANIFEST", "DISPATCH_WAVE",
+        "EXPANSION_GATE", "PRODUCT_COUNT", "parent:pause",
+        "REQUEST: execution", "technical_resolution", "runtime_guard.py start",
+    )
     for relative in (optimized_english, optimized_chinese):
-        validate_skill_document(relative, ("name: lean-dev-router", "PROTOCOL: lean-dev-router/v2", PARENT_FAST_PATH_CAPABILITY, "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE"), {"Lean Dev Router", "Protocol", "Fast path eligibility", "Integration"} if "en-optimized" in relative else {"Lean Dev Router", "协议", "快速路径资格", "集成"})
+        validate_skill_document(relative, optimized_common, {"Lean Dev Router", "Protocol", "Fast path eligibility", "Integration"} if "en-optimized" in relative else {"Lean Dev Router", "协议", "快速路径资格", "集成"})
     if len(english_text) > 12000 or len(re.findall(r"\b[\w-]+\b", english_text)) > 1500:
         error(f"{english}: exceeds context budget")
     if len(read(chinese)) > 12000 or len(re.findall(r"\b[\w-]+\b", read(chinese))) > 1500:
@@ -597,7 +613,11 @@ def validate_runtime_guard() -> None:
             continue
         for name in names - allowed:
             error(f"{relative}: non-standard or undeclared import {name!r}")
-    for term in ("validate_dispatch", "validate_parent_dispatch", "preflight_dispatch", "validate_revision", "validate_repair", "abandon_audit"):
+    for term in (
+        "validate_dispatch", "validate_parent_dispatch", "preflight_dispatch",
+        "validate_revision", "validate_execution", "register_initial_execution",
+        "validate_audit_prerequisites", "validate_repair", "abandon_audit",
+    ):
         if term not in source:
             error(f"{relative}: missing runtime gate {term!r}")
     for term in (
@@ -606,6 +626,8 @@ def validate_runtime_guard() -> None:
         "finding_requires_sol", "parent_cannot_self_audit",
         "--trusted-parent-instance-id", "--trusted-parent-model",
         "--trusted-parent-reasoning-effort", "TRUSTED_PARENT_MODEL",
+        "product_telemetry_missing", "execution_telemetry_missing",
+        "execution_registration_missing", "terminal_event_fields",
     ):
         if term not in source:
             error(f"{relative}: missing runtime gate {term!r}")

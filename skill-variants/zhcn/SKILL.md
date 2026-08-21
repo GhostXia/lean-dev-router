@@ -104,7 +104,7 @@ L3、风险、冲突/集成、多批次、B/D 发现、歧义、耗尽，或契�
 
 ## 风险熔断与复现
 
-`runtime_guard.py start --state <external-scratch-state>` 原子执行预检并初始化状态；parent 快速路径还必须传入上述宿主持有的 instance、`gpt-5.6-terra` model 与 `high` reasoning 参数。需要已预注册的审计时，parent 只能在 Luna PASS 且范围/revision 门禁通过后调用 `runtime_guard.py audit` 的 `begin` action；修复包复用同一状态且不得重启。Guard 记录调用、主动/墙钟时间、上游尝试、token、假设、进展、错误和身份。无新证据的重复失败、spinning、预算耗尽或 baseline 漂移都会 fail-closed。复现证据包含 cwd、环境差异、完整命令、退出码和紧凑结果。
+`runtime_guard.py start --state <external-scratch-state>` 原子执行预检、初始化状态并登记第 1 次执行；parent 快速路径还必须传入上述宿主持有的 instance、`gpt-5.6-terra` model 与 `high` reasoning 参数。宿主通过 `event` 为每次 Luna 终态记录显式 `PRODUCT_COUNT` 和精确的调用、主动/墙钟时间、上游尝试及 token/cache telemetry；缺少产物证据表示未知而非零，缺少完成 telemetry 时暂停。一次顺序零产物重试通过同一状态的 `execution` 执行。需要已预注册的审计时，parent 只能在 Luna PASS 且范围/revision 门禁通过后调用 `runtime_guard.py audit` 的 `begin` action；修复包复用同一状态且不得重启。Guard 记录调用、主动/墙钟时间、上游尝试、token、假设、进展、错误和身份。无新证据的重复失败、spinning、预算耗尽或 baseline 漂移都会 fail-closed。仓库单元测试使用合成事件，只证明 guard 逻辑而不证明宿主集成。复现证据包含 cwd、环境差异、完整命令、退出码和紧凑结果。
 
 每个 runtime audit `begin`、`complete` 或 `abandon` 包都携带：
 
@@ -123,7 +123,7 @@ AGENT_INSTANCE_ID: 实际执行的 terra_auditor 身份
 - **A** 是改动造成的验收缺陷；只有 `CONTRACT_EFFECT: unchanged`、匹配 DISPATCH_ID、范围内 AFFECTED_PATHS、验收不变且预算剩余时才可返回 Luna。
 - **B** 是完成目标所需但遗漏的范围，**D** 是严重安全/数据丢失/兼容风险；二者均路由 parent:sol，不得进入 Luna 修复。**C** 是无关既有问题，通常仅跟进。
 
-Terra 绝不安装或运行工具，也绝不修改环境。在 technical-resolution 路由中，只有契约不变且带 `CONTRACT_EFFECT: unchanged` 的有界修复才返回 `ESCALATE`/`implementation`；初始执行/无产物重试使用 `REQUEST: execution`，任何依赖声明或其他契约变化都返回带 `ESCALATE`/`planning_resolution` 的 `parent:sol`。
+依赖准备只能由 Luna 执行，且 DISPATCH 必须精确声明命令或工具。未声明、缺失或契约外依赖必须返回 `ESCALATE`/`technical_resolution`，不得把执行请求藏在 `BLOCKED`/`none` 中。`parent:pause` 是零执行状态：parent 不得安装工具、修改环境、清除 latch 或自行恢复 Luna。Terra 只读诊断；只有契约不变的有界建议才返回 `ESCALATE`/`implementation`，依赖声明或其他契约变化返回 `ESCALATE`/`planning_resolution` 给 Sol。初始执行和有界的零产物重试使用 `REQUEST: execution`；缺少已登记执行、权威产物状态、匹配的 Luna PASS 或完整匹配 telemetry 时不得启动最终审计。
 
 ## 集成
 

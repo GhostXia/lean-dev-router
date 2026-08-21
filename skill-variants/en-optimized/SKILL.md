@@ -74,6 +74,7 @@ SUMMARY: concise result
 - L3, B/D findings, exhaustion, or contract/scope changes route parent:sol; B never enters Luna repair.
 - Final audit is conditional. A PLAN_MANIFEST declaration, any risk flag, or the integration gate requires the issuer to preregister its contract before Luna. After Luna PASS, runtime `audit begin` starts an independent terra_auditor; parent/planner cannot self-audit.
 - Audit begin/complete/abandon requires `AUDITOR_ROLE: terra_auditor`, preregistered `AUDITOR_INSTANCE_ID`, and matching executing `AGENT_INSTANCE_ID` under case-insensitive normalization and the Terra role lease. Missing/mismatched fields fail closed; this is coordination, not cryptographic authentication.
+- Dependency preparation is Luna-only and must be declared by DISPATCH. Missing/out-of-contract dependencies use ESCALATE/technical_resolution to read-only Terra; parent:pause permits no install, environment mutation, latch clearing, or Luna resume. Initial execution and one authoritative zero-product retry use REQUEST: execution. Audit requires registered execution, explicit product status, matching Luna PASS, and complete matching telemetry.
 
 ## Integration
 
@@ -81,4 +82,4 @@ Use PLAN_MANIFEST, DISPATCH_WAVE, and EXPANSION_GATE. Two batches require integr
 
 ## Final gates
 
-Run runtime_guard.py start before Luna; parent fast path also passes the host-owned trusted instance/model/reasoning options above. Invalid packets route parent:sol before Luna; a defensively mis-invoked Luna returns BLOCKED/none to parent:pause without inspection or writes. Only when audit is declared, run runtime `audit begin` after Luna PASS. Then run `python scripts/validate_repo.py` and the unittest suite. Scope evidence uses `python scripts/check_scope.py`; dirty revisions use `worktree-sha256:<64 lowercase hex>`. A Terra A repair requires CONTRACT_EFFECT: unchanged.
+Run runtime_guard.py start before Luna; it atomically registers attempt 1. The host must send exact terminal PRODUCT_COUNT and full call/time/token telemetry through runtime `event`; repository unit tests prove guard logic only, not host integration. Parent fast path also passes the host-owned trusted instance/model/reasoning options above. Invalid packets route parent:sol before Luna; a defensively mis-invoked Luna returns BLOCKED/none to parent:pause without inspection or writes. Only when audit is declared, run runtime `audit begin` after Luna PASS. Then run `python scripts/validate_repo.py` and the unittest suite. Scope evidence uses `python scripts/check_scope.py`; dirty revisions use `worktree-sha256:<64 lowercase hex>`. A Terra A repair requires CONTRACT_EFFECT: unchanged.
