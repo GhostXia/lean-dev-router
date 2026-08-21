@@ -1,46 +1,30 @@
 ---
 name: lean-dev-router
-description: Route repository-bound engineering through Sol planning, parent scheduling, Luna implementation, and Terra causal audit with compact auditable handoffs.
+description: Route repository engineering through Sol exceptions, a bounded Terra High parent fast path, Luna implementation, and independent Terra audit.
 ---
 
 # Lean Dev Router
 
-Use the smallest pool. Sol plans; parent schedules; Luna writes; Terra audits.
+Use the smallest pool. Sol owns exceptions; the parent schedules; Luna writes; Terra audits.
 
 ## Language
 
-Follow the task's primary/dominant language; absent a signal, use English. Keep
-code, commands, paths, model IDs, and agent names unchanged.
+Follow the parent task's primary language; when unspecified, use its dominant language. Keep code, commands, paths, model IDs, and agent names unchanged.
 
 ## Authority and entry
 
-- Changes start with `sol_planner`, which fixes objective, scope, acceptance,
-  dependencies, budgets, contracts, audits, and routes. Only Sol authors/amends
-  `DISPATCH` or requests human authority.
-- Sol does not continuously schedule, wait on workers, or consolidate routine
-  events. The parent executes the declared state machine without engineering
-  judgment. Undefined, incomplete, or contract-changing states return to Sol.
-- Sol fixes measurable bounds, retryable states, and public/data/security
-  invariants; Luna retains equivalent local implementation choices.
-- `luna_worker` implements only a valid contract and makes only local choices
-  that preserve it. `terra_auditor` is read-only and supplies causal evidence,
-  audit findings, and bounded repair advice; it never authorizes a write.
-- Audits/diagnosis may start with Terra; planning or authorization returns Sol.
-- Deployment, destructive action, external commitment, and product policy are
-  outside this routing authority unless the user explicitly authorizes them.
-- Contract-declared dependency prep is Luna-only; parent/Terra never run
-  undeclared, missing, or out-of-contract tools/dependencies: zero-execution ->
-  Luna `ESCALATE`/`technical_resolution` -> `parent:terra`, never `BLOCKED/none`.
+- Sol fixes objective, scope, acceptance, dependencies, budgets, contracts, audits, and routes. Only Sol authors or amends a Sol DISPATCH or requests human authority.
+- The parent is a mechanical scheduler and may use only the conditional Terra High host-model capability described below. It cannot invent architecture, scope, acceptance, constraints, risk decisions, or product policy.
+- Luna is the sole writer under a complete inbound DISPATCH. Terra is independent and read-only; when a final audit is required, only the preregistered terra_auditor performs it.
+- Deployment, destructive action, external commitment, and user-owned policy remain outside this routing authority.
 
 ## Bounded planning waves
 
-Sol emits `PLAN_MANIFEST` invariants plus ready `DISPATCH_WAVE`; entries declare
-worktree, dependencies, revision, replay, audit, routes, and `EXPANSION_GATE`.
-Parent requests Sol only at that gate or exception; do not pre-expand work.
+Sol emits PLAN_MANIFEST invariants plus the ready DISPATCH_WAVE; each entry declares worktree, dependencies, revision, replay, whether an audit is required, routes, and EXPANSION_GATE. The parent does not pre-expand distant work and returns undefined or contract-changing states to Sol.
 
 ## Protocol
 
-Luna may write only after receiving this complete inbound contract:
+Luna may write only after the parent relays this complete inbound contract unchanged. `PLANNER_CAPABILITY` is conditional: Sol packets remain compatible without it; a fast-path packet uses `PLANNER_ROLE: parent` and the exact capability below.
 
 ```text
 PROTOCOL: lean-dev-router/v2
@@ -48,9 +32,10 @@ STATUS: DISPATCH
 TARGET: implementation
 DISPATCH_ID: stable unique component/write identifier
 PLAN_ID: stable plan identifier
-PLANNER_ROLE: sol_planner
-PLANNER_INSTANCE_ID: immutable planner instance identifier
-AUDITOR_INSTANCE_ID: independent auditor instance identifier
+PLANNER_ROLE: sol_planner | parent
+PLANNER_CAPABILITY: bounded_l1_l2_dispatch (parent fast path only)
+PLANNER_INSTANCE_ID: immutable planner or parent instance identifier
+AUDITOR_INSTANCE_ID: independent terra_auditor instance identifier
 TASK_SUMMARY: one bounded objective
 BASELINE: commit hash
 PATHS_ALLOW:
@@ -68,11 +53,9 @@ BUDGET:
 NEXT: parent
 ```
 
-The parent relays it unchanged. Fields are non-empty, IDs stable, paths relative,
-and no major decision remains. Terra assignments are read-only instructions, not an outbound result envelope or `STATUS: DISPATCH`; missing authorization returns
-`FAILURE: missing_dispatch` with no implementation.
+Every field required by the selected role is non-empty, IDs are stable, planner and auditor identities differ, and paths are repository-relative. The parent guard rejects an invalid packet and routes `parent:sol` before Luna is spawned. If Luna is nevertheless invoked defensively without valid authorization, it performs no inspection or write and returns `BLOCKED/none` to `parent:pause`. A Terra assignment is an ordinary read-only instruction, not an outbound result envelope and never `STATUS: DISPATCH`.
 
-Roles return one result schema:
+Roles return one compact envelope:
 
 ```text
 PROTOCOL: lean-dev-router/v2
@@ -82,17 +65,12 @@ FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity
 REQUEST: none | execution | implementation | technical_resolution | planning_resolution | human_authority
 EVIDENCE:
 - path: relative/path/to/file
-  proof: short diff summary or `command` -> PASS/FAIL
+  proof: short diff summary or command -> PASS/FAIL
 NEXT: parent
 SUMMARY: one concise sentence
 ```
 
-`PASS`, `BLOCKED`, and `ESCALATE` never authorize writes. Evidence may use
-`N/A (planning-only)`, `N/A (batch coverage)`, `N/A (scope-check)`, or
-`N/A (integration-check)`. If required fields or evidence are missing, the
-originating role corrects its result with `FAILURE: verification`.
-
-The parent applies these mechanical actions; prose cannot override them:
+`PASS`, `BLOCKED`, and `ESCALATE` are results, never write authorization. Evidence may use `N/A (planning-only)`, `N/A (batch coverage)`, `N/A (scope-check)`, or `N/A (integration-check)`. The closed handoff table is authoritative:
 
 | AGENT | STATUS | REQUEST | Mechanical destination |
 |:---|:---|:---|:---|
@@ -108,102 +86,42 @@ The parent applies these mechanical actions; prose cannot override them:
 | `sol_planner` | `BLOCKED` | `execution` | `parent:luna` |
 | `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
 
+## Fast path eligibility
+
+The parent capability is a Terra High host-model prerequisite, not a fourth child profile and not a second Sol. Packet fields are eligibility claims, not proof of authority. For `preflight` or `start`, the host must pass `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high` outside the packet; runtime guard binds that context to `PLANNER_INSTANCE_ID` and rejects a missing, mismatched, or non-Terra-High binding before Luna. This is a host coordination boundary, not cryptographic attestation. Runtime guard then accepts the packet only when all evidence is explicit and fixed:
+
+- `PLANNER_ROLE: parent` and `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`; `LEVEL` is L1 or L2; `OBJECTIVE_FIXED`, `OPEN_MAJOR_DECISIONS`, and all change flags are exact booleans.
+- `BASELINE`, `SCOPE_ROOTS`, `ACCEPTANCE`, and `CONSTRAINTS` are non-empty; `RISK_FLAGS` and `EXTERNAL_ACTIONS` are none; no architecture, security, compatibility, contract, scope, acceptance, or constraint change is allowed.
+- `MAX_DISPATCHES` is 1, `COMPONENT_COUNT` is 1, `WRITE_BATCH_COUNT` is 1, and `DEPENDENCY_DEPTH` is 0. `INTEGRATION`, `CONFLICT`, `CONTRACT_EXPANDED`, and `AMBIGUITY` are explicitly false/none.
+- `PATHS_ALLOW` is non-empty and `REQUIRED_PATHS` may be empty, but every allowed or required path must stay inside the fixed repository-relative `SCOPE_ROOTS`.
+- The parent budget ceiling is 4 model calls, 2 hypotheses, 600 active seconds, 1 repair, and 1 stagnant call. Missing or ineligible evidence fails before Luna and routes `parent:sol`.
+
+L3, risk, conflict/integration, multiple batches, B/D findings, ambiguity, exhaustion, or any contract/scope/acceptance/constraints/architecture/security/compatibility change routes parent:sol. B findings never enter Luna repair. Sol remains fully compatible with ordinary v2 DISPATCH and uses its 8/4/1200/2/2 ceilings.
+
 ## Scope, artifacts, and revision
 
-`PATHS_ALLOW` authorizes persistent writes only. Build output uses external
-scratch. A predeclared disposable root must be absent/clean at preflight and
-removed before scope; retained/undeclared paths fail and artifacts never enter
-revision identity.
-
-Verify every allow entry together with:
-
-```text
-python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revision
-```
-
-Repeat `--allow <paths_allow_entry>` per entry; the helper checks tracked,
-standard-untracked, and ignored-untracked paths. If unavailable, run the three
-Git enumerations; missing/failed scope evidence rejects `PASS`.
-
-After scope, clean state uses its exact commit SHA; dirty state uses
-`worktree-sha256:<64 lowercase hex>` over baseline, authorized tracked binary
-diffs, and framed authorized untracked paths/content. Equal state reproduces
-equal revision; repairs change it. Reject placeholders and baseline-only keys.
+`PATHS_ALLOW` authorizes persistent writes only; relevant paths may be read context. Build output goes to external scratch or a declared disposable artifact root that is removed before scope passes. Before accepting PASS, run `python scripts/check_scope.py --baseline <baseline> --allow <entry> ... --revision`, or record the three Git fallback enumerations. A clean state uses its exact commit SHA; an authorized dirty state uses `worktree-sha256:<64 lowercase hex>` over the baseline, tracked diff, and allowed untracked content.
 
 ## Risk fuse and replay
 
-Before first Luna, parent passes the DISPATCH once to
-`<skill-dir>/scripts/runtime_guard.py start --state <external-scratch-state>`.
-Use `execution` for the initial Luna call or a bounded no-product retry, then use
-`repair`/`audit` against that state; never restart it. Exit 2 means zero target calls.
-`BUDGET` is a hard budget per role/stage with ceilings of 8 calls,
-4 hypotheses, 1200 active seconds, 2 repairs, and 2 stagnant calls; Sol may only
-tighten them. Tool/external waits are excluded, but commands keep timeouts.
+`runtime_guard.py start --state <external-scratch-state>` performs preflight and initializes state atomically; a parent fast-path invocation also supplies the host-owned trusted instance, `gpt-5.6-terra` model, and `high` reasoning options above. When a preregistered audit is required, the parent invokes `runtime_guard.py audit` with action `begin` only after Luna PASS and its scope/revision gates; repair packets reuse that state and never restart it. The guard records calls, active and wall time, upstream attempts, token families, hypotheses, progress, errors, identities, and termination. Repeated failure without changed evidence, spinning, budget exhaustion, or baseline drift is fail-closed. Replay includes cwd, environment delta, exact command, exit code, and compact result.
 
-Each `event` records identity, revision/stage, calls, timing, attempts,
-token/cache families, hypothesis, command/error, progress/evidence, and termination;
-guard derives uncached/total tokens. Unchanged failure stops; two stagnant calls
-are deterministic `spinning`. A stop latches until revision, contract, or evidence changes.
-Luna exhaustion routes Terra; Terra exhaustion routes Sol; Parent never repairs/writes.
+Every runtime audit `begin`, `complete`, or `abandon` packet carries:
 
-Within the limit, never rerun unchanged commands: technical uncertainty requests
-`technical_resolution`, missing tools use dependency handling, unauthorized writes
-are scope failures, and baseline drift stops writes. Replay includes cwd, exact
-command, exit code, and compact result; pre-PASS diagnosis carries `DISPATCH_ID`,
-diff/paths, attempts, contract bounds, and remaining budget.
+```text
+AUDITOR_ROLE: terra_auditor
+AUDITOR_INSTANCE_ID: preregistered terra_auditor identity
+AGENT_INSTANCE_ID: executing terra_auditor identity
+```
 
-`parent:pause` is zero-execution: parent must not run `npm ci`, install tools,
-mutate environment, clear latch, or resume Luna.
-
-Initial execution is the only `sol_planner/BLOCKED/execution` route: it uses an
-unchanged-DISPATCH and matching telemetry. The guard allows two sequential attempts
-only when the clean BASELINE and fingerprint are unchanged and the prior attempt
-produced zero product; non-sequential, exhausted, dirty/changed, evidence-bearing,
-repaired, audited, or dependency-changing retries return to Sol.
-
-## Streaming and preregistered audit
-
-Process independent results as they arrive; only combined integration uses an
-all-component barrier. Stable `<component>:<revision>:<stage>` keys are
-`queued`/`running`/`complete`/`failed`; retry missing/failed keys. `token-first`
-may reuse one uninvolved Terra without sibling wait. With capacity, start within
-60 seconds; otherwise record queue and start at first eligible slot release.
-Consume events during long commands and report external waits separately.
-
-Sol preregisters each audit with `DISPATCH_ID`, component/dependencies, revision/job
-rule, objective, scope, impact cone, acceptance, replay, and policy. Terra starts
-only after matching Luna `PASS`, dispatch identity, concrete revision, scope and replay evidence, explicit unchanged dependencies, and telemetry. Missing execution/product returns
-`REQUEST: execution` to `parent:luna`; partial/contradictory evidence or contract/
-contract/dependency updates return Sol without launching Terra.
-Register via `runtime_guard.py audit`; the same revision is never repeated.
-First audit is full; later revisions cover delta and findings.
-On early termination, parent records `ACTION: abandon` and reason, routes to
-Sol, and never updates the incremental-audit baseline.
+The identities must match after case-insensitive normalization and retain the `terra_auditor` role lease. Missing fields, parent/Sol roles, mismatches, or another role lease fail closed. These are coordination constraints, not cryptographic authentication.
 
 ## Terra causal audit and repair
 
-Terra reads beyond `PATHS_ALLOW` through the causal impact cone: callers and
-callees, data/error/resource flow, configuration, platforms, compatibility,
-concurrency, security, performance, and tests. This is broader read scope, not
-write authority or unbounded repository scanning. Outside findings include
-path, evidence, causality, severity, blocking decision, and ownership:
+A final audit is conditional: it is required when the PLAN_MANIFEST, any risk flag, or the integration gate declares it. In those cases the issuing authority preregisters the audit contract before Luna; after Luna PASS and the mechanical gates, the parent runs runtime `audit begin` and launches an independent `terra_auditor`. The parent and planner never self-audit a declared final audit. Terra reads the diff plus causal callers/callees, data/error/resource flow, configuration, platforms, compatibility, concurrency, security, performance, and tests. Findings include path, evidence, causality, severity, blocking decision, and owner:
 
-- **A**: change-caused acceptance defect; block and repair.
-- **B**: necessary path omitted from scope; return to Sol.
-- **C**: unrelated existing defect; normally non-blocking follow-up.
-- **D**: severe security, data-loss, or compatibility risk; block/escalate.
-
-For a contract-preserving A-class repair Terra returns `REQUEST: implementation`
-only after the final-audit prerequisites pass, with
-the original `DISPATCH_ID`, preregistered `AUDITOR_INSTANCE_ID`,
-`CONTRACT_EFFECT: unchanged`, `AFFECTED_PATHS`
-inside `PATHS_ALLOW`, violated acceptance, and bounded repair evidence. Parent
-matches the ID to Luna evidence and the preregistered audit, checks those facts
-and the default two-cycle repair budget, then mechanically
-returns the original Luna. The new state gets a new revision and re-audit.
-Any change to scope, plan, acceptance, constraints, public interface,
-architecture, security boundary, data format, resource limit, or an ambiguous
-or exhausted repair returns to Sol. Terra never writes the repair itself.
+- **A** is a change-caused acceptance defect. A bounded `CONTRACT_EFFECT: unchanged` repair may return to Luna only with matching DISPATCH_ID, in-scope AFFECTED_PATHS, unchanged acceptance, and remaining repair budget.
+- **B** is necessary omitted scope and **D** is severe security, data-loss, or compatibility risk; both route parent:sol and never enter Luna repair. **C** is an unrelated existing defect and is normally a non-blocking follow-up.
 
 Terra never installs/runs tools or mutates environment. dependency changes return to Sol. `ESCALATE`/`implementation`
 is repair-only; initial execution and no-product retry use `REQUEST: execution`.
@@ -213,26 +131,31 @@ unchanged; contract/dependency changes and ambiguous evidence return
 
 ## Integration
 
-Two or more write batches require shared contracts, dependency order,
-`integration_worktree`, `integration_owner`, `integration_baseline`,
-`integration_paths_allow`, and `integration_acceptance`; conflicts need new Luna
-authorization. Whole-task `PASS` requires clean combined state, final scope,
-acceptance, and final audit.
+Two or more write batches require shared `integration_owner`, `integration_baseline`, `integration_paths_allow`, and `integration_acceptance`, plus dependency order, a clean integration worktree, and a final combined-state Terra audit. Component PASS is not whole-task PASS. The integration owner combines accepted commits; conflicts or compatibility edits require a new Sol-authorized write batch. Final combined scope uses `N/A (integration-check)` and `N/A (scope-check)` evidence.
 
 ## Execution and human gate
 
-Parallel Luna writers use isolated worktrees; read-only Terra may share a
-checkout. Pool caps are token-first 3, balanced 6, latency-first 10. If Sol
-cannot spawn nested workers, it returns
-`BLOCKED/dependency/REQUEST execution` with the literal manifest; parent relays.
+Parallel Luna writers use isolated worktrees; read-only Terra may share a checkout. Sol is recalled only at the EXPANSION_GATE, an exception, a failed predicate, or a user-owned decision. Material objective, product, policy, architecture, security, compatibility, licensing, migration, cost, or irreversible choices return `human_authority` through the parent.
 
-Sol decides only reversible technical trade-offs within the fixed contract.
-Objective, scope, acceptance, policy, material compatibility/security/privacy/
-license/migration/cost, or product commitments require
-`BLOCKED/major-decision/REQUEST human_authority`. Sol supplies at most three
-options, one recommendation, and one question; the parent presents it without
-translating the user's answer into a contract.
+## Contents
 
-Stop when manifest, scope, revision, audit, repair, integration, and final gates
-are terminal; parent may summarize without another Sol call. Do not repeat stages
-without changed evidence or let Luna/Terra orchestrate peers.
+| Path | Description |
+|:---|:---|
+| `.agents/skills/lean-dev-router/` | Routing Skill and deterministic runtime guard |
+| `skill-variants/` | Canonical English, Chinese, and optimized variants |
+| `agents/` | Three child profiles: `luna_worker`, `sol_planner`, `terra_auditor` |
+| `scripts/validate_repo.py` | Dependency-free repository consistency checks |
+| `lean-dev-router-self-test-guide.md` | Controlled routing and scope-evidence guide |
+
+## Roles
+
+| Role | Responsibility |
+|:---|:---|
+| **parent** | Mechanical scheduler; bounded Terra High host-model fast path only |
+| **sol_planner** | Exception planning, DISPATCH authority, and human decision gate |
+| **luna_worker** | Sole bounded writer in PATHS_ALLOW |
+| **terra_auditor** | Independent read-only causal audit and repair advice |
+
+## Final gates
+
+Run `python scripts/validate_repo.py` and `python -m unittest discover -s tests -v`. Confirm canonical Skill equality, aligned size-bounded variants, exactly three child profiles, closed routes, strict parent predicate, conditional independent final auditing, clean integration scope, and concrete revision evidence before reporting completion.

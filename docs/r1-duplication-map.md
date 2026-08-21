@@ -2,7 +2,7 @@
 
 每个契约概念在各文件中的出现次数（粗略 grep 计数，用于定位重复承载点，不等同于 token 成本）。
 
-| 概念 | Skill E0 (root) | Skill E1 | sol.toml | luna.toml | terra.toml | runtime_guard.py | validate_repo.py |
+| 概念 | Skill E0 (`.agents/.../SKILL.md` + `skill-variants/en/SKILL.md`) | Skill E1 | `agents/sol-planner.toml` | `agents/luna-worker.toml` | `agents/terra-auditor.toml` | runtime_guard.py | validate_repo.py |
 |---|---|---|---|---|---|---|---|
 | DISPATCH_ID | 4 | 4 | 2 | 4 | 4 | 25 | 4 |
 | PLAN_ID | 1 | 2 | 1 | 1 | 1 | 26 | 3 |
@@ -45,11 +45,11 @@
 
 | 文件 | 字符数 | 行数 |
 |---|---:|---:|
-| Skill E0 (root) | 11,907 | 240 |
+| Skill E0 (`.agents/.../SKILL.md` and byte-identical `skill-variants/en/SKILL.md`) | 11,907 | 240 |
 | Skill E1 | 10,713 | 128 |
-| sol.toml | 5,315 | 25 |
-| luna.toml | 4,247 | 23 |
-| terra.toml | 4,383 | 25 |
+| `agents/sol-planner.toml` | 5,315 | 25 |
+| `agents/luna-worker.toml` | 4,247 | 23 |
+| `agents/terra-auditor.toml` | 4,383 | 25 |
 | runtime_guard.py | 34,247 | 778 |
 | validate_repo.py | 30,144 | 789 |
 

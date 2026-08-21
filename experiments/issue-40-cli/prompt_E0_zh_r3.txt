@@ -20,9 +20,9 @@ D:\lean-dev-router-wt\issue-40-contract-dedup\skill-variants\en\SKILL.md
 3. 用户要求的直接只读 Terra 审计。
 4. 两次未变化的相同失败触发确定性 spinning，并路由到 Terra。
 5. 脏修订不能使用干净基线 commit SHA。
-6. 受边界限制的契约不变修复，路由回原 Luna。
+6. 范围内 Class-A finding 的受边界限制、契约不变修复，路由回原 Luna。
 7. PATHS_ALLOW 之外的必需修复路径，路由到 Sol。
 8. 被放弃的审计不推进增量审计基线。
 
 只返回严格 JSON，不要任何说明，格式如下：
-{"variant":"E0","cases":[{"id":1,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."}, ... 每个场景一个对象 ...],"quality_notes":["..."]}
+{"variant":"E0","cases":[{"id":1,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":2,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":3,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":4,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":5,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":6,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":7,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."},{"id":8,"entry_role":"...","write_authority":"...","audit_route":"...","exception_route":"...","reason":"..."}],"quality_notes":["..."]}

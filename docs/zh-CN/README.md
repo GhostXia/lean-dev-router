@@ -8,17 +8,91 @@
 
 Lean Dev Router 用三个职责不同的角色处理仓库内的软件工程任务：
 
-- `sol_planner`：工程方案与授权者，负责拆分、契约、预注册审计和例外决策，但不持续调度运行时事件。
-- `luna_worker`：仅在收到完整的标准 `DISPATCH` 后，按其中的任务摘要、基线、允许写入路径、验收和约束实施改动。
-- `terra_auditor`：沿因果影响面进行只读审计、诊断和验证，并给出不带写授权的最小修复建议。
+- `sol_planner`（`gpt-5.6-sol`，medium）：例外与复杂任务的工程方案、普通 DISPATCH 授权、契约和用户决策门。
+- `luna_worker`（`gpt-5.6-luna`，max）：唯一写入者；仅在收到完整标准 `DISPATCH` 后实施与验证改动。
+- `terra_auditor`（`gpt-5.6-terra`，high，只读）：独立因果审计、诊断和不带写授权的最小修复建议。
 
-父会话是机械状态机：按 Sol 已声明的 manifest 启动、排队和转交，不在没有用户指令时自行作工程决策。Sol 的规划采用有界波次：每次只输出全局不变量、当前可执行的 `DISPATCH_WAVE` 与下一次 `EXPANSION_GATE`；父会话只在该门或例外发生时再次请求 Sol，避免一次性计划过长带来的偏差。
+Terra High 父会话默认负责调度、排队、转交和面向用户的控制，不自行扩大工程决策。它不是第四个 Agent/profile；只有满足下述严格条件时，才拥有一次有界 L1/L2 dispatch 能力。Sol 的规划采用有界波次：每次只输出全局不变量、当前可执行的 `DISPATCH_WAVE` 与下一次 `EXPANSION_GATE`。
 
-目标不是每次都调用全部角色，而是用满足任务需要的最小组合完成工作。所有写入任务先由 Sol 签发开工契约：边界清楚的 L1 改动只需最小单步 `DISPATCH`，模糊、跨模块或需要分批集成的任务则由 Sol 完整规划；审计和诊断仍可从 Terra 开始。
+目标不是每次都调用全部角色，而是用满足任务需要的最小组合完成工作。严格单批 L1/L2 可走 parent 快速路径；证据缺失、条件不合格、模糊、跨模块、风险或需要分批集成的任务，在 Luna 前回 Sol。
+
+## parent 模型建议
+
+启用有界 parent 快速路径时，建议使用性能和成本居中的模型，例如 `gpt-5.6-terra`，并将推理强度设置为 **high**。这里的“中档模型”和“high 推理强度”是两个不同维度：模型家族决定总体能力与计费档位，reasoning effort 决定该模型在当前调用上投入多少推断。推荐的折中配置因此是 **Terra High**，而不是依靠超长提示词补偿弱模型，也不是让 Sol 作为常驻 parent。
+
+Terra High 的意义在于让 parent 有足够能力理解和规范化用户意图、发现证据缺失或互相矛盾、避免错误转述、选择已经定义好的正确路径，并让合格的低风险任务无需先支付一次 Sol 规划调用就能闭环。架构、范围扩张、风险接受、兼容性、多批集成和其他例外仍由 Sol 处理。如果直接让 Sol 充当 parent，等待、排队、telemetry 记录和普通转发也会持续消耗 Sol 档位 token；如果让能力更弱的模型启用快速路径，则更容易误判 eligibility 或生成不合格 DISPATCH。
+
+建议按以下边界配置：
+
+| parent 配置 | 可以承担的职责 | 有界 DISPATCH 权限 |
+|:---|:---|:---|
+| 更弱或更低成本模型 | 原样转发已固定契约、等待、排队、展示结果、执行确定性 destination 表 | **关闭**；凡是需要语义判断的任务都回 Sol |
+| `gpt-5.6-terra` + high reasoning | 机械调度，加上语义资格判断、忠实整理既定契约，以及一个严格 L1/L2 批次 | 只有全部快速路径谓词和缩减预算通过时才**开启** |
+| `gpt-5.6-sol` 作为 parent | 能力足够，但不推荐作为常驻配置 | 默认避免；仅在声明的规划门或例外门把 Sol 作为子代理调用 |
+
+Terra High parent 的自主权仍然很窄：它可以在协议已经定义的路径之间做判断，也可以签发下文规定的一个有界 packet；但不能凭空制定验收、扩大路径、决定架构或政策取舍、忽略风险标志、把失败条件解释成“差不多可以”、亲自写代码，或承担自己的最终审计。只要资格事实存在不确定性，正确结果就是 `parent:sol`，不能尝试性调用 Luna。
+
+模型身份和 reasoning effort 属于宿主配置。仓库 validator 和 runtime guard 能检查 packet、预算、身份隔离和路由证据，却无法证明宿主实际上给 parent 分配了哪个模型；使用者必须在仓库外把 parent 配置为 Terra High。若替换成其他模型家族，应保持相同权限边界，并用受控 A/B 测试比较错误路由率、不合格或被拒绝的 dispatch、非必要 Sol 调用、修复轮次、模型主动时间和未缓存总 token，而不能只看 token 数量。
+
+## parent 快速路径
+
+快速路径必须同时使用 `PLANNER_ROLE: parent` 与 `PLANNER_CAPABILITY: bounded_l1_l2_dispatch`；宿主调用 `preflight` 或 `start` 时还必须在 packet 外传入 `--trusted-parent-instance-id <id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high`，runtime guard 将身份与 `PLANNER_INSTANCE_ID` 及 Terra High 配置绑定。缺失或不匹配会 fail-closed；这是协调层身份绑定，不是密码学证明。之后所有资格证据还必须显式且固定：
+
+- `LEVEL` 只能是 L1/L2；`OBJECTIVE_FIXED` 为 true；`OPEN_MAJOR_DECISIONS` 与全部 change flag 都是精确布尔值。
+- `BASELINE`、仓库相对的 `SCOPE_ROOTS`、`PATHS_ALLOW`、`ACCEPTANCE`、`CONSTRAINTS` 非空且固定；`REQUIRED_PATHS` 可为空，但 allowed/required 路径必须都在 `SCOPE_ROOTS` 内。
+- `RISK_FLAGS` 与 `EXTERNAL_ACTIONS` 为 none；架构、安全、兼容、契约、范围、验收和约束变化全部为 false。
+- `MAX_DISPATCHES`、`COMPONENT_COUNT`、`WRITE_BATCH_COUNT` 都是 1，`DEPENDENCY_DEPTH` 是 0；`INTEGRATION`、`CONFLICT`、`CONTRACT_EXPANDED`、`AMBIGUITY` 显式为 false/none。
+- 硬上限依次为 **4 次模型调用、2 个假设、600 秒模型主动时间、1 轮修复、1 次停滞调用**。
+
+runtime guard 在启动 Luna 前拒绝缺失或不合格证据，并路由 `parent:sol`。L3、风险、冲突/集成、多组件、多 dispatch、多写批、歧义、契约扩张或其他 change flag，以及预算耗尽都回 Sol。B/D 是 **Terra 审计后的 finding 分类**，不是 Luna 前的 eligibility 输入；审计发现 B 或 D 时回 Sol，绝不能直接进入 Luna 修复。
 
 ## 交接协议怎么读
 
-协议把“入站执行授权”和“出站结果”分开。Luna 写入前必须收到 `lean-dev-router/v2` 的完整 `DISPATCH`，包括稳定的 dispatch/plan/planner/auditor 身份、任务、基线、允许路径、验收、约束和 `BUDGET`。预算给出模型调用、不同假设、模型主动秒数、返工轮次与停滞调用的正整数上限。只有 Sol 可以签发或修改；缺失或非法时不生成 Luna 调用。
+协议把“入站执行授权”和“出站结果”分开。Luna 写入前必须收到父会话原样转发的完整契约：
+
+```text
+PROTOCOL: lean-dev-router/v2
+STATUS: DISPATCH
+TARGET: implementation
+DISPATCH_ID: stable unique component/write identifier
+PLAN_ID: stable plan identifier
+PLANNER_ROLE: sol_planner | parent
+PLANNER_CAPABILITY: bounded_l1_l2_dispatch (parent fast path only)
+PLANNER_INSTANCE_ID: immutable planner or parent instance identifier
+AUDITOR_INSTANCE_ID: independent terra_auditor instance identifier
+TASK_SUMMARY: one bounded objective
+BASELINE: commit hash
+PATHS_ALLOW:
+- relative/path/or/subtree
+ACCEPTANCE:
+- objective check and expected result
+CONSTRAINTS:
+- fixed implementation or compatibility bound
+BUDGET:
+  MODEL_CALL_LIMIT: positive integer
+  HYPOTHESIS_LIMIT: positive integer
+  MODEL_ACTIVE_SECONDS_LIMIT: positive integer
+  REPAIR_CYCLE_LIMIT: positive integer
+  STAGNANT_CALL_LIMIT: positive integer
+NEXT: parent
+```
+
+普通 Sol packet 不含 `PLANNER_CAPABILITY`，继续兼容 v2。parent packet 还必须携带上一节的 eligibility 字段；这些字段只表达资格，不能自行证明授权。宿主还必须在 packet 外向 runtime guard 传入上述 trusted instance/model/reasoning 上下文，并与 `PLANNER_INSTANCE_ID` 和 Terra High 匹配。字段缺失、绑定缺失或不匹配、以及其他非法情况都会在 Luna 启动前路由 `parent:sol`。若 Luna 在防御场景下仍被误调用，它不得检查或写入，并返回 `BLOCKED/none` 到 `parent:pause`。
+
+三个角色统一返回独立的出站结果契约：
+
+```text
+PROTOCOL: lean-dev-router/v2
+AGENT: luna_worker | terra_auditor | sol_planner
+STATUS: PASS | BLOCKED | ESCALATE
+FAILURE: none | missing_dispatch | scope | verification | dependency | ambiguity | major-decision
+REQUEST: none | implementation | technical_resolution | planning_resolution | human_authority
+EVIDENCE:
+- path: relative/path/to/file
+  proof: short diff summary or `command` -> PASS/FAIL
+NEXT: parent
+SUMMARY: one concise sentence
+```
 
 Agent 返回的出站交接包含状态、失败类型、能力请求、证据、固定的 `NEXT: parent` 和一句摘要。重点检查三件事：
 
@@ -28,12 +102,23 @@ Agent 返回的出站交接包含状态、失败类型、能力请求、证据�
 
 `PASS`、`BLOCKED`、`ESCALATE` 都只是结果，不能作为写入授权；`PLAN_READY` 也不是执行状态。
 
-`REQUEST: execution` 只表示初次 Luna 执行或无产物重试能力，机械目的地为
-`parent:luna`；它要求原始 `DISPATCH`、干净 `BASELINE` 和零产物，guard 只允许
-两次顺序递增尝试。`REQUEST: implementation` 只表示 Terra 在最终审计后提出的
-A 类契约不变修复，不能与初始执行混用；所有出站结果继续使用 `NEXT: parent`。
+封闭 handoff 表是唯一合法路由：
 
-升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验匹配的 dispatch 身份、具体 revision、scope/replay 证据、显式依赖和 telemetry；缺少 Luna 执行或产物时返回机器可读的 `REQUEST: execution` 给 `parent:luna`，不启动 Terra。只有全部审计前置条件满足且 Sol 已预注册审计，才直接启动 Terra。Terra 发现不改变原契约且仍在 `PATHS_ALLOW` 内的 A 类缺陷时，父会话可在返工预算内直接交回原 Luna；部分/矛盾证据以及范围、方案、验收、依赖、公共接口、架构、安全边界、数据格式、资源限制或歧义变化时回 Sol。只有 Sol 可以请求用户决策。
+| `AGENT` | `STATUS` | `REQUEST` | 机械目的地 |
+|:---|:---|:---|:---|
+| `luna_worker` | `PASS` | `none` | `parent:manifest_gate` |
+| `luna_worker` | `BLOCKED` | `none` | `parent:pause` |
+| `luna_worker` | `ESCALATE` | `technical_resolution` | `parent:terra` |
+| `terra_auditor` | `PASS` | `none` | `parent:manifest_gate` |
+| `terra_auditor` | `BLOCKED` | `none` | `parent:pause` |
+| `terra_auditor` | `ESCALATE` | `implementation` | `parent:repair_or_sol` |
+| `terra_auditor` | `ESCALATE` | `planning_resolution` | `parent:sol` |
+| `sol_planner` | `PASS` | `none` | `parent:manifest_gate` |
+| `sol_planner` | `BLOCKED` | `none` | `parent:pause` |
+| `sol_planner` | `BLOCKED` | `implementation` | `parent:luna` |
+| `sol_planner` | `BLOCKED` | `human_authority` | `parent:user` |
+
+升档仍由固定状态机执行，但不再让所有结果先绕回 Sol。Luna `PASS` 后，父会话机械核验范围、稳定 revision、依赖与 replay；若签发方已预注册审计，则直接启动独立 Terra。只有满足同一 dispatch、契约/验收不变、路径在范围内且修复预算尚存的 A finding 可交回原 Luna；B/D、范围、方案、验收、公共接口、架构、安全边界、数据格式、资源限制、歧义或耗尽都回 Sol。只有 Sol 可以请求用户决策。
 
 `lean-dev-router/v2` 与 v1 不兼容：v2 强制要求 `REQUEST`，并禁止在 `NEXT` 中点名具体 Agent。协调者必须拒绝混用版本的交接，不能自动猜测或静默转换。
 
@@ -97,11 +182,30 @@ git ls-files --others --ignored --exclude-standard
 
 组件审计使用稳定的 `<component>:<revision>:<stage>` 任务键；相同 revision 只能注册一次。revision 改变后只增量审计差异、未关闭发现与受影响因果面，首次审计覆盖完整声明范围。批量创建部分失败时只重试缺失或失败项。Sol 保留为方案与例外决策端，不作为常驻协调者。
 
-Terra 的读取范围必须宽于改动范围：沿调用关系、数据/错误/资源流、配置、平台兼容、并发、安全、性能与测试调查。范围外发现分为 A（改动导致的验收缺陷）、B（完成目标所需但遗漏的路径）、C（无关既存问题，通常仅跟进）、D（严重安全/数据丢失/兼容风险）。A 可在原契约内返 Luna；B 与契约变化回 Sol；D 阻断或升级。
+Terra 的读取范围必须宽于改动范围：沿调用关系、数据/错误/资源流、配置、平台兼容、并发、安全、性能与测试调查。审计发现分为 A（改动导致的验收缺陷）、B（完成目标所需但遗漏的路径）、C（无关既存问题，通常仅跟进）、D（严重安全/数据丢失/兼容风险）。只有 dispatch 身份相同、契约/验收不变、affected paths 在范围内且仍有修复预算的 A 可返原 Luna；B、D 与任何契约变化都回 Sol。最终审计是条件式门禁，不要求每个任务都执行：PLAN_MANIFEST、任一风险标记或 integration gate 声明需要时，签发方必须在 Luna 前预注册审计合同；Luna `PASS` 且机械门禁通过后，parent 才运行 runtime `audit begin` 并启动身份独立的 `terra_auditor`。每个 audit begin/complete/abandon 包都携带 `AUDITOR_ROLE: terra_auditor`、预注册的 `AUDITOR_INSTANCE_ID` 和匹配的实际执行 `AGENT_INSTANCE_ID`；大小写无关身份或角色租约不一致均 fail-closed。这些字段是协调约束，不是密码学认证。已声明的最终审计不得由 parent 或 planner 自审。
 
-父会话在首次 Luna 调用前只执行一次 Skill 内置的 `scripts/runtime_guard.py start`；`start` 原子完成确定性预检与状态初始化，正常执行不得再增加一次独立 preflight。无状态 `preflight` 子命令只用于验证模板与已安装运行时。初始 `execution`、返工和审计在同一状态文件上使用相应子命令，不能重建状态。运行时最大值依次为 8 次模型调用、4 个不同假设、1200 秒模型主动时间、2 轮返工和 2 次停滞调用，Sol 只能收紧。guard 还持久化初始执行次数，拒绝非顺序、耗尽、脏/改变、已有证据、返工或审计后的重试。每次调用记录角色/阶段、wall/主动时间、上游尝试、各类 token、假设、命令/错误及进展/证据。同一失败没有进展立即停止；停滞触发 `spinning`。只有 revision、契约版本或证据改变才能解锁。Luna 耗尽交 Terra，Terra 耗尽回 Sol；父会话不得代写。
+父会话在首次 Luna 调用前只执行一次 Skill 内置的 `scripts/runtime_guard.py start`；`start` 原子完成确定性预检与状态初始化，正常执行不得再增加一次独立 preflight。无状态 `preflight` 子命令只用于验证模板与已安装运行时。后续返工和审计在同一状态文件上使用相应子命令，不能重建状态。普通 Sol dispatch 的上限依次为 8 次模型调用、4 个不同假设、1200 秒模型主动时间、2 轮返工和 2 次停滞调用；parent 快速路径为更严格的 4/2/600/1/1，签发方只能收紧。每次调用记录角色/阶段、wall/主动时间、上游尝试、各类 token、假设、命令/错误及进展/证据。同一失败没有进展立即停止；达到适用的停滞上限触发 `spinning`。只有 revision、契约版本或证据改变才能解锁；任何耗尽都回 Sol，父会话不得代写。
 
 宿主能提供时间戳时，记录组件就绪与下一阶段启动时间。有空闲容量时应在 60 秒内启动；否则记录排队状态与原因，并在第一个符合条件的槽位释放时启动。把编译、CI、网络等外部等待与可控 handoff 延迟分开报告，parent 执行长命令时仍应及时消费完成事件。Terra 接收普通只读任务指令；`STATUS: DISPATCH` 只用于 Luna 写授权，不能套用为 Terra 的出站式封装。
+
+## 集成收敛与最终门
+
+组件成功不具传递性。两个或更多写批次形成一个交付物时，Sol 必须定义共享契约、依赖顺序、`integration_worktree`、`integration_owner`、`integration_baseline`、`integration_paths_allow` 与 `integration_acceptance`。授权的 Luna integration owner 按依赖顺序组合已接受的提交；冲突或兼容性编辑必须回 Sol 取得新的 Luna 写批授权。整体 PASS 前必须在干净 integration worktree 上核验组合提交、三类路径范围和完整验收，并分别记录 `N/A (scope-check)` 与 `N/A (integration-check)` 证据，最后由独立 Terra 审计组合态。
+
+## 安全、执行与用户决策边界
+
+`DISPATCH` 是协议授权，不是密码学签名；`PATHS_ALLOW`、scope helper 和 runtime guard 是协调与漂移检测机制，不是操作系统 sandbox。Terra 的只读性依赖宿主 sandbox，文件权限和隔离 worktree 才是最终执行边界。本路由不授权生产部署、破坏性操作、外部承诺或业务/产品政策变化。
+
+Sol 可决定不改变固定目标、范围、验收与用户政策的可逆技术权衡。目标、方向、产品优先级、明确用户意图或不可逆/重大承诺必须返回：
+
+```text
+STATUS: BLOCKED
+FAILURE: major-decision
+REQUEST: human_authority
+NEXT: parent
+```
+
+Sol 最多给三个可行选项、关键权衡、受影响路径、一个建议和一个问题；路径始终是 `sol_planner → parent → user`，协议不定义 `NEXT: user`。
 
 ## 安装
 
@@ -134,7 +238,7 @@ python $guard schema
 Get-Content dispatch.json -Raw | python $guard preflight
 ```
 
-完整契约返回 exit 0 与 `allowed: true`；非法契约返回 exit 2 和稳定 JSON 错误。生产调度仍只调用一次 `start --state ...`，由它执行相同验证并初始化状态。
+parent 快速路径 packet 的 `preflight` 与 `start` 还要追加 `--trusted-parent-instance-id <host-parent-id> --trusted-parent-model gpt-5.6-terra --trusted-parent-reasoning-effort high`；普通 Sol packet 不使用这些参数。完整契约和可信 Terra High 绑定返回 exit 0 与 `allowed: true`；非法契约返回 exit 2 和稳定 JSON 错误。生产调度仍只调用一次 `start --state ...`，由它执行相同验证并初始化状态。
 该命令验证协议字段、ID、仓库相对 allow 路径、预算上限、baseline 哈希和可选具体 revision 语法；它不检查目标 worktree、不替代独立 scope 枚举，也不执行操作系统 sandbox。
 
 `skill-variants/en-optimized/SKILL.md`（E1）和 `skill-variants/zhcn-optimized/SKILL.md`（C1）是结构对齐的去重实验版本，不是发布默认。只在新的基准任务中替换已安装根 Skill，测试后恢复英文默认。
