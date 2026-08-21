@@ -433,7 +433,7 @@ def validate_agents() -> None:
                 "PLAN_MANIFEST", "DISPATCH_WAVE", "EXPANSION_GATE",
                 "PLANNER_CAPABILITY", "bounded_l1_l2_dispatch", "human_authority",
                 "Declare every dependency-preparation command", "BLOCKED/execution",
-                "parent must not install tools",
+                "parent must not install tools", "routing-memory output", "ELIGIBLE_ACTIONS",
             )
         else:
             required = (
@@ -568,6 +568,7 @@ def validate_skill() -> None:
         "integration_acceptance", "python scripts/check_scope.py", "worktree-sha256:<64 lowercase hex>",
         "runtime_guard.py start", "runtime_guard.py audit", "CONTRACT_EFFECT: unchanged",
         "PRODUCT_COUNT", "parent:pause", "REQUEST: execution", "technical_resolution",
+        "routing_memory.py decide", "ELIGIBLE_ACTIONS",
     )
     titles = {"Lean Dev Router", "Authority and entry", "Protocol", "Fast path eligibility", "Scope, artifacts, and revision", "Risk fuse and replay", "Terra causal audit and repair", "Integration", "Execution and human gate"}
     for relative in (root, english):
@@ -579,6 +580,7 @@ def validate_skill() -> None:
         PARENT_FAST_PATH_CAPABILITY, "PLAN_MANIFEST", "DISPATCH_WAVE",
         "EXPANSION_GATE", "PRODUCT_COUNT", "parent:pause",
         "REQUEST: execution", "technical_resolution", "runtime_guard.py start",
+        "routing_memory.py decide", "ELIGIBLE_ACTIONS",
     )
     for relative in (optimized_english, optimized_chinese):
         validate_skill_document(relative, optimized_common, {"Lean Dev Router", "Protocol", "Fast path eligibility", "Integration"} if "en-optimized" in relative else {"Lean Dev Router", "协议", "快速路径资格", "集成"})
@@ -646,6 +648,40 @@ def validate_runtime_guard() -> None:
     for command in ("preflight", "start", "event", "repair", "audit", "schema"):
         if f'add_parser("{command}"' not in source:
             error(f"{relative}: missing runtime gate subcommand {command!r}")
+
+
+def validate_routing_memory() -> None:
+    relative = ".agents/skills/lean-dev-router/scripts/routing_memory.py"
+    try:
+        source = read(relative)
+        tree = ast.parse(source)
+    except OSError as exc:
+        error(f"{relative}: cannot read routing memory: {exc}")
+        return
+    except SyntaxError as exc:
+        error(f"{relative}: invalid Python: {exc.msg}")
+        return
+    allowed = {"__future__", "argparse", "hashlib", "json", "math", "sys", "pathlib", "typing"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = {alias.name.split(".", 1)[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            names = {str(node.module).split(".", 1)[0]}
+        else:
+            continue
+        for name in names - allowed:
+            error(f"{relative}: non-standard or undeclared import {name!r}")
+    for term in (
+        "lean-dev-router/routing-memory/v1", "ELIGIBLE_ACTIONS", "DEFAULT_ACTION",
+        "POLICY_VERSION", "VERIFIED", "EVIDENCE_FINGERPRINT", "memory_capacity_pending",
+        "eligible_actions_only", "insufficient_default_evidence", ".tmp", "replace(path)",
+        "MAX_CAPACITY", "MAX_PACKET_BYTES", "must not repeat completed feedback",
+    ):
+        if term not in source:
+            error(f"{relative}: missing adaptive-routing contract {term!r}")
+    for command in ("decide", "feedback", "snapshot", "schema"):
+        if f'add_parser("{command}"' not in source:
+            error(f"{relative}: missing adaptive-routing subcommand {command!r}")
 
 
 def parse_manifest(text: str) -> dict[str, dict[str, str]]:
@@ -828,6 +864,7 @@ def main() -> int:
     validate_agents()
     validate_skill()
     validate_runtime_guard()
+    validate_routing_memory()
     validate_manifest()
     validate_runtime_language()
     validate_markdown()

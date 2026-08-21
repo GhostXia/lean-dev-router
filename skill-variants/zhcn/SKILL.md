@@ -125,6 +125,10 @@ AGENT_INSTANCE_ID: 实际执行的 terra_auditor 身份
 
 依赖准备只能由 Luna 执行，且 DISPATCH 必须精确声明命令或工具。未声明、缺失或契约外依赖必须返回 `ESCALATE`/`technical_resolution`，不得把执行请求藏在 `BLOCKED`/`none` 中。`parent:pause` 是零执行状态：parent 不得安装工具、修改环境、清除 latch 或自行恢复 Luna。Terra 只读诊断；只有契约不变的有界建议才返回 `ESCALATE`/`implementation`，依赖声明或其他契约变化返回 `ESCALATE`/`planning_resolution` 给 Sol。初始执行和有界的零产物重试使用 `REQUEST: execution`；缺少已登记执行、权威产物状态、匹配的 Luna PASS 或完整匹配 telemetry 时不得启动最终审计。
 
+## 自适应路由记忆
+
+确定性门禁先固定 `ELIGIBLE_ACTIONS`，随后宿主可把任务维度、语言、等级与标签交给 `routing_memory.py decide`。它原子记录 action、检索有界相似历史，并且只有默认与替代选择都具备足够的已验证证据时才改变默认值。宿主通过 `feedback` 提交执行分数、结果、成本、token、时间与证据；未验证或重复反馈被拒绝。Memory 按策略版本隔离、存放于仓库外，仅提供建议，绝不扩大资格或越过 Sol、风险、审计与写权限。
+
 ## 集成
 
 两个或更多写入批次必须声明 `integration_owner`、`integration_baseline`、`integration_paths_allow`、`integration_acceptance`、依赖顺序、干净 integration worktree 和最终组合态 Terra 审计。组件 PASS 不等于整体 PASS。冲突或兼容性改动需要新的 Sol 授权写批次；组合态使用 `N/A (integration-check)` 与 `N/A (scope-check)` 证据。
@@ -132,16 +136,6 @@ AGENT_INSTANCE_ID: 实际执行的 terra_auditor 身份
 ## 执行与用户门禁
 
 并行 Luna 写入使用隔离 worktree；只读 Terra 可以共享 checkout。只有 EXPANSION_GATE、例外、谓词失败或用户决策才召回 Sol。目标、产品、政策、架构、安全、兼容性、许可、迁移、成本或不可逆选择通过 parent 返回 human_authority。
-
-## 内容
-
-| 路径 | 说明 |
-|:---|:---|
-| `.agents/skills/lean-dev-router/` | 路由 Skill 与确定性 runtime guard |
-| `skill-variants/` | 英文主版本、中文版本与优化变体 |
-| `agents/` | 三个子配置：`luna_worker`、`sol_planner`、`terra_auditor` |
-| `scripts/validate_repo.py` | 无依赖仓库一致性检查 |
-| `lean-dev-router-self-test-guide.md` | 路由与范围证据测试指南 |
 
 ## 角色
 

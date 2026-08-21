@@ -237,6 +237,25 @@ class ValidatorContractTests(unittest.TestCase):
                 validate_repo.validate_skill()
                 self.assertTrue(any(anchor in item for item in validate_repo.ERRORS))
 
+    def test_validate_routing_memory_rejects_authority_anchor_removal(self) -> None:
+        relative = ".agents/skills/lean-dev-router/scripts/routing_memory.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.copy_fixture(directory, relative)
+            validate_repo.validate_routing_memory()
+            self.assertEqual(validate_repo.ERRORS, [])
+
+            path = root / relative
+            source = path.read_text(encoding="utf-8")
+            path.write_text(
+                source.replace("eligible_actions_only", "removed", 1),
+                encoding="utf-8",
+            )
+            validate_repo.ERRORS.clear()
+            validate_repo.validate_routing_memory()
+            self.assertTrue(
+                any("eligible_actions_only" in item for item in validate_repo.ERRORS)
+            )
+
     def test_validate_handoff_table_rejects_missing_routes(self) -> None:
         validate_repo.validate_handoff_table(
             "fixture.md",

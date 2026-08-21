@@ -46,6 +46,33 @@ Terra High parent 的自主权仍然很窄：它可以在协议已经定义的�
 
 runtime guard 在启动 Luna 前拒绝缺失或不合格证据，并路由 `parent:sol`。L3、风险、冲突/集成、多组件、多 dispatch、多写批、歧义、契约扩张或其他 change flag，以及预算耗尽都回 Sol。B/D 是 **Terra 审计后的 finding 分类**，不是 Luna 前的 eligibility 输入；审计发现 B 或 D 时回 Sol，绝不能直接进入 Luna 修复。
 
+## 基于执行反馈的路由记忆
+
+可选 routing memory 把论文 [Agent-as-a-Router](https://arxiv.org/abs/2606.22902v3) 的核心结论移植到 LDR：路由瓶颈往往是信息缺口，而不只是路由模型推理能力；论文中加入维度级已验证表现统计后，vanilla router 相对提升 15.3%。其 Context → Action → Feedback → Context 循环在 LDR 中对应为：
+
+| 论文概念 | LDR 实现 |
+|:---|:---|
+| Context | 任务维度、语言、等级、标签、策略版本与 guard 已批准的候选 action |
+| Action | `routing_memory.py decide` 选择的建议路径，并在执行前持久记录为 pending |
+| Feedback | 宿主验证的结果、分数、货币成本、token、主动时间与证据指纹 |
+| Updated context | 后续任务按加权相似度查询的有界 FIFO memory |
+
+该层采取保守策略。现有确定性规则先固定 `ELIGIBLE_ACTIONS` 与 `DEFAULT_ACTION`；memory 不能增加 action、把不合格 fast path 变合法、削弱 Sol/风险/审计门禁、授权写入或替换已配置的 Luna/Terra/Sol 模型。冷启动保持默认值。只有默认和替代 action 都至少有三条相似且已验证的样本时才允许改选；失败、阻塞或升级的尝试即使携带非零分数，也按零有效表现计算。
+
+工具与 runtime guard 一起安装：
+
+```powershell
+$memoryTool = "$env:USERPROFILE/.codex/skills/lean-dev-router/scripts/routing_memory.py"
+$routeMemory = Join-Path $env:TEMP "ldr-routing-memory.json"
+python $memoryTool schema
+Get-Content routing-context.json -Raw | python $memoryTool decide --memory $routeMemory
+Get-Content verified-feedback.json -Raw | python $memoryTool feedback --memory $routeMemory
+```
+
+`decide` 为每个 action 最多读取 20 条最相似的已完成记录，按调用方给出的表现权重与归一化美元成本（`COST_USD` 除以 `COST_SCALE_USD`）计算，原子记录 action，并返回稳定 decision ID 和各 action 统计。`feedback` 只接受与已记录 action 匹配、`VERIFIED: true`、分数位于 `[0,1]`、美元成本/token/时间非负且证据非空的反馈；未知或重复 decision fail-closed。记录按 `POLICY_VERSION` 隔离，默认最多 2,000 条，只淘汰 completed，不为腾出空间而丢弃 pending。
+
+可变 memory 必须放在仓库外，并由一个 parent 串行写入。原子替换只能防止半写文件，不等于多写者数据库。Memory 保存显式任务元数据和标签，不保存原始 prompt 或源码。仓库测试使用合成反馈，只证明选择与持久化规则，不证明真实宿主集成。由于没有每个候选 action 的反事实结果矩阵，LDR 只报告已观察 reward 与路由结果，不冒充论文的 cumulative regret。
+
 ## 交接协议怎么读
 
 协议把“入站执行授权”和“出站结果”分开。Luna 写入前必须收到父会话原样转发的完整契约：
